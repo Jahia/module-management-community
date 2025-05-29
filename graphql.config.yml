@@ -1,0 +1,10 @@
+schema: jahia-schema.graphql
+extensions:
+  endpoints:
+    Default GraphQL Endpoint:
+      url: http://localhost:8080/modules/graphql
+      headers:
+        user-agent: JS GraphQL
+        origin: http://localhost:8080
+        Authorization: Basic cm9vdDpyb290MTIzNA==
+      introspect: true

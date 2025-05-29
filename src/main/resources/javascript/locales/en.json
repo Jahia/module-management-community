@@ -1,0 +1,13 @@
+{
+  "label": {
+    "settings": {
+      "title": "systemInformation setting"
+    },
+    "action": {
+      "title": "systemInformation - How to extend the ui ?"
+    },
+    "appsAccordion": {
+      "title": "systemInformation"
+    }
+  }
+}

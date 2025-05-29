@@ -1,0 +1,22 @@
+# Eclipse
+/.classpath
+/.project
+/.settings
+
+# Intellij
+.idea
+*.iml
+*.ipr
+
+# Maven
+target
+
+# Javascript
+node_modules
+node
+/src/main/resources/javascript/apps/
+
+# Jahia DX Studio
+repository.xml.generated
+
+
