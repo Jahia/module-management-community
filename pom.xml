@@ -62,7 +62,8 @@
     <properties>
         <jahia.plugin.version>6.12</jahia.plugin.version>
         <jahia.depends>graphql-dxm-provider</jahia.depends>
-        <yarn.arguments>build:production</yarn.arguments>
+        <yarn.arguments>build:simple</yarn.arguments>
+        <export-package>org.jahia.support.modulemanagement.services</export-package>
     </properties>
 
     <scm>
@@ -175,6 +176,12 @@
             <version>8.2.1.0</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.karaf.shell</groupId>
+            <artifactId>org.apache.karaf.shell.console</artifactId>
+            <version>${karaf.version}</version>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -228,25 +235,36 @@
                             <arguments>${yarn.arguments}</arguments>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>sync-pom</id>
+                        <phase>none</phase>
+                        <goals>
+                            <goal>yarn</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>sync-pom</arguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>9</source>
-                    <target>9</target>
+                    <source>11</source>
+                    <target>11</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <extensions>true</extensions>
+                <configuration>
+                    <instructions>
+                        <Karaf-Commands>org.jahia.support.modulemanagement.cli</Karaf-Commands>
+                    </instructions>
                 </configuration>
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <profile>
-            <id>dev</id>
-            <properties>
-                <yarn.arguments>webpack</yarn.arguments>
-            </properties>
-        </profile>
-    </profiles>
 </project>

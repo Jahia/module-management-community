@@ -1,13 +1,18 @@
 {
   "label": {
-    "settings": {
-      "title": "systemInformation setting"
-    },
-    "action": {
-      "title": "systemInformation - How to extend the ui ?"
-    },
-    "appsAccordion": {
-      "title": "systemInformation"
+    "loading": "Loading...",
+    "moduleVersion": "Current version of the module: {{version}}",
+    "moduleAvailableVersion": "A new version of the module is available: {{version}}",
+    "title": "Modules available for upgrade",
+    "noUpdatesAvailable": "No updates available",
+    "table" : {
+      "title": "Installed modules",
+      "actions": "Actions",
+      "cells" : {
+        "name": "Module name",
+        "version": "Installed version",
+        "available": "Available version"
+      }
     }
   }
 }

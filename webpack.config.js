@@ -2,24 +2,44 @@ const path = require('path');
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 const {CleanWebpackPlugin} = require('clean-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
-const ModuleFederationPlugin = require('webpack/lib/container/ModuleFederationPlugin');
-const shared = require('./webpack.shared');
+const CaseSensitivePathsPlugin = require('case-sensitive-paths-webpack-plugin');
+const ModuleFederationPlugin = require("webpack/lib/container/ModuleFederationPlugin");
 const moonstone = require("@jahia/moonstone/dist/rulesconfig-wp");
+const getModuleFederationConfig = require('@jahia/webpack-config/getModuleFederationConfig');
+const packageJson = require('./package.json');
+const {CycloneDxWebpackPlugin} = require('@cyclonedx/webpack-plugin');
+
+/** @type {import('@cyclonedx/webpack-plugin').CycloneDxWebpackPluginOptions} */
+const cycloneDxWebpackPluginOptions = {
+    specVersion: '1.4',
+    rootComponentType: 'library',
+    outputLocation: './bom',
+    validateResults: false
+};
 
 module.exports = (env, argv) => {
+    const buildTimeStamp = new Date().toISOString()
+        .replace(/\..+$/, '')
+        .replace(/[:\sT]/g, '-');
+
+    const bundleName = 'moduleManagementCommunity.bundle';
+    const fileName = `${bundleName}.${buildTimeStamp}.js`;
     let config = {
         entry: {
             main: path.resolve(__dirname, 'src/javascript/index')
         },
         output: {
             path: path.resolve(__dirname, 'src/main/resources/javascript/apps/'),
-            filename: 'module-management-community.bundle.js',
-            chunkFilename: '[name].jahia.[chunkhash:6].js'
+            filename: fileName,
+            chunkFilename: '[name].moduleManagementCommunity.[chunkhash:6].js'
         },
         resolve: {
             mainFields: ['module', 'main'],
-            extensions: ['.mjs', '.js', '.jsx', 'json', '.scss'],
-            fallback: { "url": false }
+            extensions: ['.mjs', '.js', '.jsx', '.json', '.scss'],
+            alias: {
+                '~': path.resolve(__dirname, './src/javascript'),
+            },
+            fallback: {"url": false}
         },
         module: {
             rules: [
@@ -42,7 +62,10 @@ module.exports = (env, argv) => {
                                 '@babel/preset-react'
                             ],
                             plugins: [
-                                '@babel/plugin-syntax-dynamic-import'
+                                'lodash',
+                                '@babel/plugin-syntax-dynamic-import',
+                                '@babel/plugin-proposal-export-default-from',
+                                '@babel/plugin-proposal-class-properties'
                             ]
                         }
                     }
@@ -52,13 +75,22 @@ module.exports = (env, argv) => {
                     include: [path.join(__dirname, 'src')],
                     sideEffects: true,
                     use: [
-                        'style-loader',
+                        {
+                            loader: 'style-loader',
+                            options: {
+                                insert: "body",
+                                attributes: {
+                                    styleloader: true
+                                }
+                            }
+                        },
                         // Translates CSS into CommonJS
                         {
                             loader: 'css-loader',
                             options: {
                                 modules: {
-                                    mode: 'local'
+                                    mode: 'local',
+                                    localIdentName: "[path][name]__[local]--[hash:base64:5]",
                                 }
                             }
                         },
@@ -68,32 +100,22 @@ module.exports = (env, argv) => {
                 },
                 {
                     test: /\.(woff(2)?|ttf|eot|svg)(\?v=\d+\.\d+\.\d+)?$/,
-                    use: [{
-                        loader: 'file-loader',
-                        options: {
-                            name: '[name].[ext]',
-                            outputPath: 'fonts/'
-                        }
-                    }]
+                    type: 'asset/resource',
+                    dependency: {not: ['url']}
                 }
             ]
         },
         plugins: [
-            new ModuleFederationPlugin({
-                name: "forcePublishAll",
-                library: { type: "assign", name: "appShell.remotes.forcePublishAll" },
-                filename: "remoteEntry.js",
-                exposes: {
-                    './init': './src/javascript/init'
-                },
+            new ModuleFederationPlugin(getModuleFederationConfig(packageJson, {
                 remotes: {
-                    '@jahia/app-shell': 'appShellRemote',
-                    '@jahia/content-editor': 'appShell.remotes.contentEditor'
+                    '@jahia/jcontent': 'appShell.remotes.jcontent'
                 },
-                shared
-            }),
-            new CleanWebpackPlugin({verbose: false}),
-            new CopyWebpackPlugin({patterns: [{from: './package.json', to: ''}]}),        ],
+            })),
+            new CleanWebpackPlugin({verbose: true}),
+            new CopyWebpackPlugin({patterns: [{from: './package.json', to: ''}]}),
+            new CaseSensitivePathsPlugin(),
+            new CycloneDxWebpackPlugin(cycloneDxWebpackPluginOptions)
+        ],
         mode: 'development'
     };
 

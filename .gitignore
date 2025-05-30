@@ -14,7 +14,7 @@ target
 # Javascript
 node_modules
 node
-/src/main/resources/javascript/apps/
+/src/main/resources/javascript/apps
 
 # Jahia DX Studio
 repository.xml.generated

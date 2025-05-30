@@ -7,12 +7,13 @@ import graphql.annotations.annotationTypes.GraphQLName;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
+import org.jahia.support.modulemanagement.services.ModuleManagementCommunityServiceImpl;
 
 import javax.inject.Inject;
 import java.io.IOException;
 import java.util.List;
 
-public class ModuleManagementMutationResult {
+public class ModuleManagementQueryResult {
 
     @Inject
     @GraphQLOsgiService(
@@ -21,11 +22,11 @@ public class ModuleManagementMutationResult {
     ModuleManagementCommunityService moduleManagementCommunityService;
 
     @GraphQLField
-    @GraphQLName("updateModules")
-    @GraphQLDescription("Return the list of modules that have been updated")
-    public List<String> updateModules(@GraphQLName("jahiaOnly") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean jahiaOnly,
+    @GraphQLName("availableUpdates")
+    @GraphQLDescription("Return a list of modules that have updates available")
+    public List<String> getAvailableUpdates(@GraphQLName("jahiaOnly") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean jahiaOnly,
                                       @GraphQLName("filters") List<String> filters) throws IOException {
-        return moduleManagementCommunityService.updateModules(jahiaOnly, false, filters);
+        return moduleManagementCommunityService.updateModules(jahiaOnly, true, filters);
     }
 
 }

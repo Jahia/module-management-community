@@ -1,10 +1,14 @@
 import {registry} from '@jahia/ui-extender';
+import i18next from 'i18next';
+import {register} from './register/register';
 
 export default function () {
-    // registry.add('callback', 'forcePublishAll', {
-    //     targets: ['jahiaApp-init:50'],
-    //     callback: register
-    // });
+    registry.add('callback', 'moduleManagementCommunity', {
+        targets: ['jahiaApp-init:99'],
+        callback: async () => {
+            await i18next.loadNamespaces('moduleManagementCommunity');
+            register();
+            console.log('%c moduleManagementCommunity registered routes', 'color: #3c8cba');
+        }
+    });
 }
-
-console.debug('%c Module Management Community is activated', 'color: #3c8cba');
