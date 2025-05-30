@@ -48,7 +48,7 @@ const ModuleManagementCommunityApp = () => {
     const {data, error, loading, refetch} = useQuery(gql`query {
         admin {
             modulesManagement {
-                availableUpdates(filters: ["jcontent"])
+                availableUpdates
             }
         }
     }`, {fetchPolicy: 'network-only'});
