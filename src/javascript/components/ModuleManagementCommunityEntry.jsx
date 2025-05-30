@@ -1,12 +1,11 @@
 import React, {Suspense} from 'react';
-import * as PropTypes from 'prop-types';
 import ModuleManagementCommunityApp from './ModuleManagementCommunityApp';
 import {Button, GlobalStyle, Help, Separator, Typography} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
 import styles from './ModuleManagementCommunityEntry.scss';
 import {capitalize} from '@material-ui/core/utils/helpers';
 
-const ModuleManagementCommunityEntry = ({dxContext}) => {
+const ModuleManagementCommunityEntry = () => {
     const {t} = useTranslation('moduleManagementCommunity');
     return (
         <Suspense fallback="loading ...">
@@ -22,10 +21,10 @@ const ModuleManagementCommunityEntry = ({dxContext}) => {
                             <Button variant="ghost"
                                     size="big"
                                     color="default"
-                                    label={t('augmented-search:help.label')}
+                                    label={t('label.help')}
                                     icon={<Help/>}
                                     onClick={() => {
-                                        window.open(t('augmented-search:help.url'), 'Augmented Search - Help');
+                                        window.open(t('help.url'), 'Module Management Community - Help');
                                     }}/>
                         </div>
                     </header>
@@ -37,10 +36,6 @@ const ModuleManagementCommunityEntry = ({dxContext}) => {
             </div>
         </Suspense>
     );
-};
-
-ModuleManagementCommunityEntry.propTypes = {
-    dxContext: PropTypes.object.isRequired
 };
 
 export default ModuleManagementCommunityEntry;

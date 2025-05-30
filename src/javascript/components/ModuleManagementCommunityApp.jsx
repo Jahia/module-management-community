@@ -3,7 +3,7 @@ import {useMutation, useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
 import {useNotifications} from '@jahia/react-material';
-import {Button, Reload, Typography} from '@jahia/moonstone';
+import {Button, Loader, Reload, Typography} from '@jahia/moonstone';
 import styles from './ModuleManagementCommunityApp.scss';
 import {
     Card,
@@ -80,7 +80,20 @@ const ModuleManagementCommunityApp = () => {
     }
 
     if (loading) {
-        return <div>{t('label.loading')}</div>;
+        return (
+            <Card>
+                <CardHeader title={
+                    <Typography className={styles.title} variant="heading" weight="semiBold">
+                        {t('label.table.title')}
+                    </Typography>
+            }/>
+                <CardContent className={styles.flexCenter}>
+                    <div className={styles.flex}>
+                        <Loader size="big"/>
+                    </div>
+                </CardContent>
+            </Card>
+        );
     }
 
     const handleClick = () => {
@@ -244,7 +257,5 @@ const ModuleManagementCommunityApp = () => {
         </Card>
     );
 };
-
-ModuleManagementCommunityApp.propTypes = {};
 
 export default ModuleManagementCommunityApp;

@@ -1,5 +1,6 @@
 {
   "label": {
+    "help": "Help",
     "loading": "Loading...",
     "moduleVersion": "Current version of the module: {{version}}",
     "moduleAvailableVersion": "A new version of the module is available: {{version}}",
@@ -14,5 +15,8 @@
         "available": "Available version"
       }
     }
+  },
+  "help": {
+    "url": "https://github.com/cedmail/moduleManagementCommunity/blob/main/README.md"
   }
 }
