@@ -53,7 +53,7 @@
         <version>8.2.1.0</version>
     </parent>
     <groupId>org.jahia.support.modules</groupId>
-    <artifactId>moduleManagementCommunity</artifactId>
+    <artifactId>module-management-community</artifactId>
     <name>moduleManagementCommunity</name>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>bundle</packaging>
@@ -181,6 +181,17 @@
             <artifactId>org.apache.karaf.shell.console</artifactId>
             <version>${karaf.version}</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.karaf.features</groupId>
+            <artifactId>org.apache.karaf.features.core</artifactId>
+            <version>${karaf.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>org.apache.felix.utils</artifactId>
+            <version>${felix.utils.version}</version>
         </dependency>
     </dependencies>
 

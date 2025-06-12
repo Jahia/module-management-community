@@ -2,6 +2,8 @@ package org.jahia.support.modulemanagement.services;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.karaf.features.Feature;
+import org.apache.karaf.features.FeaturesService;
 import org.apache.maven.artifact.repository.metadata.Versioning;
 import org.apache.maven.artifact.repository.metadata.io.xpp3.MetadataXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
@@ -35,19 +37,20 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Dictionary;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 
-@Component( service = ModuleManagementCommunityService.class, immediate = true, configurationPid = "org.jahia.support.modulemanagement.services.ModuleManagementCommunityService", configurationPolicy = ConfigurationPolicy.REQUIRE)
+@Component(service = ModuleManagementCommunityService.class, immediate = true, configurationPid = "org.jahia.support.modulemanagement.services.ModuleManagementCommunityService", configurationPolicy = ConfigurationPolicy.REQUIRE)
 @Designate(ocd = ModuleManagementCommunityConfig.class)
 public class ModuleManagementCommunityServiceImpl implements ModuleManagementCommunityService {
     private transient Logger logger = LoggerFactory.getLogger(ModuleManagementCommunityServiceImpl.class);
 
     @Reference
     ProvisioningManager provisioningManager;
+
+    @Reference
+    FeaturesService featuresService;
 
     @Activate
     public void activate(ModuleManagementCommunityConfig config) {
@@ -60,11 +63,17 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         if (settingsBean.isProcessingServer()) {
             if (config.updateOnModuleStartup()) {
                 logger.info("ModuleManagementCommunityService is configured to update modules on startup");
-//                try {
-//                    updateModules(true, false, null);
-//                } catch (IOException e) {
-//                    logger.error("Error updating modules on startup", e);
-//                }
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        updateModules(true, false, null);
+                        logger.info("Modules update upon startup is done successfully");
+                    } catch (IOException e) {
+                        logger.error("Error updating modules on startup", e);
+                    }
+                }).exceptionally(ex -> {;
+                    logger.error("Error during module update on startup", ex);
+                    return null;
+                });
             } else {
                 logger.info("ModuleManagementCommunityService is not configured to update modules on startup");
             }
@@ -136,12 +145,12 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     if (location.startsWith("mvn:")) {
                         String[] parts = StringUtils.substringAfter(location, "mvn:").split("/");
                         logger.debug("Checking for updates for {} : {} : {}", parts[0], parts[1], parts[2]);
-                        artifact = new DefaultArtifact(parts[0], parts[1], "jar", getVersion(bundle));
+                        artifact = new DefaultArtifact(parts[0], parts[1], "jar", getVersion(bundle.getVersion()));
                     } else {
                         Dictionary<String, String> headers = bundle.getHeaders();
                         if (headers.get("Jahia-GroupId") != null) {
                             String groupId = headers.get("Jahia-GroupId");
-                            artifact = new DefaultArtifact(groupId, bundle.getSymbolicName(), "jar", getVersion(bundle));
+                            artifact = new DefaultArtifact(groupId, bundle.getSymbolicName(), "jar", getVersion(bundle.getVersion()));
                         }
                     }
                     if (artifact != null) {
@@ -158,8 +167,84 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             }
         });
         Collections.sort(modulesWithUpdates);
+        updateFeatures(jahiaOnly, filters, resolver);
         updateModulesIfNeeded(dryRun, modulesWithUpdates, modulesWithUpdatesURLs);
         return modulesWithUpdates;
+    }
+
+    public void updateFeatures(boolean jahiaOnly, List<String> filters, MavenResolver resolver) throws IOException {
+        VersionScheme versionScheme = new GenericVersionScheme();
+        getFeatures(jahiaOnly, filters).forEach(feature -> {
+            try {
+                org.osgi.framework.Version featureVersion = new org.osgi.framework.Version(feature.getVersion());
+                String featureURI = feature.getRepositoryUrl();
+                // A feature repositoryURL could contain multiple features
+                //First remove the protocol from the URI
+                if (featureURI != null && featureURI.startsWith("mvn:")) {
+                    featureURI = StringUtils.substringAfter(featureURI, "mvn:");
+                }
+                //Now we split by "/" to get the groupId, artifactId and version, type and classifier
+                String[] parts = featureURI.split("/");
+                if (parts.length < 3) {
+                    logger.warn("Invalid feature repository URL: {}", featureURI);
+                    return;
+                }
+                String groupId = parts[0];
+                String artifactId = parts[1];
+                String featureVersionStr = parts[2];
+                String type = parts.length > 3 ? parts[3] : "xml";
+                String classifier = parts.length > 4 ? parts[4] : "features";
+                VersionConstraint versionConstraint = versionScheme.parseVersionConstraint(getVersion(featureVersion));
+                logger.info("Checking for feature {} updates for {} : {} : {}, {}, {}", feature.getName(), groupId, artifactId, featureVersionStr, type, classifier);
+                File file = resolver.resolveMetadata(groupId, artifactId, "maven-metadata.xml", null);
+                if (file != null && file.exists()) {
+                    List<Version> versions = new ArrayList<>();
+                    try (InputStream in = Files.newInputStream(file.toPath())) {
+                        Versioning versioning = (new MetadataXpp3Reader()).read(in, false).getVersioning();
+                        versioning.getVersions().stream().filter(s -> {
+                            try {
+                                Version version = versionScheme.parseVersion(s);
+                                logger.debug("Checking version: {} for feature {}", version, feature.getName());
+                                if (!(version.toString().contains("SNAPSHOT"))) {
+                                    return versionConstraint.getRange().containsVersion(version) && version.compareTo(versionScheme.parseVersion(featureVersionStr)) > 0;
+                                } else {
+                                    logger.debug("Skipping SNAPSHOT version: {}", version);
+                                    return false;
+                                }
+                            } catch (InvalidVersionSpecificationException e) {
+                                logger.error("Invalid version specification", e);
+                                throw new DataFetchingException(e);
+                            }
+                        }).forEach(version -> {
+                            try {
+                                versions.add(versionScheme.parseVersion(version));
+                            } catch (InvalidVersionSpecificationException e) {
+                                throw new RuntimeException(e);
+                            }
+                        });
+                        logger.info("Found {} versions", versions.size());
+                        if (logger.isInfoEnabled()) {
+                            versions.forEach(version -> {
+                                logger.info("Version : {}", version);
+                            });
+                        }
+                    }
+                }
+            } catch (InvalidVersionSpecificationException | IOException | XmlPullParserException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    @Override
+    public List<Feature> getFeatures(boolean jahiaOnly, List<String> filters) throws IOException {
+        try {
+            Feature[] features = featuresService.listInstalledFeatures();
+            return Arrays.asList(features);
+        } catch (Exception e) {
+            logger.error("Error retrieving installed features", e);
+            throw new DataFetchingException("Error retrieving installed features", e);
+        }
     }
 
     private void updateModulesIfNeeded(boolean dryRun, List<String> modulesWithUpdates, List<String> modulesWithUpdatesURLs) throws IOException {
@@ -209,7 +294,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
         VersionConstraint versionConstraint;
         try {
-            versionConstraint = versionScheme.parseVersionConstraint(getVersion(bundle));
+            versionConstraint = versionScheme.parseVersionConstraint(getVersion(bundle.getVersion()));
             logger.info("Checking for updates for {} : {}", artifact, versionConstraint.getRange());
         } catch (InvalidVersionSpecificationException e) {
             logger.error("Invalid version specification", e);
@@ -227,7 +312,6 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                             Version version = versionScheme.parseVersion(s);
                             logger.debug("Checking version: {} for bundle {}", version, bundle.getSymbolicName());
                             if (!(version.toString().contains("SNAPSHOT"))) {
-
                                 return versionConstraint.getRange().containsVersion(version) && version.compareTo(bundleVersion) > 0;
                             } else {
                                 logger.debug("Skipping SNAPSHOT version: {}", version);
@@ -261,8 +345,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return Collections.emptyList();
     }
 
-    private String getVersion(Bundle bundle) {
-        int major = bundle.getVersion().getMajor();
+    private String getVersion(org.osgi.framework.Version version) {
+        int major = version.getMajor();
         return "[" + major + "," + (major + 1) + ")";
     }
 }
