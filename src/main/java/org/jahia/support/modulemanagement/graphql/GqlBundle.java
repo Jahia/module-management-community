@@ -1,13 +1,16 @@
 package org.jahia.support.modulemanagement.graphql;
 
+import graphql.annotations.annotationTypes.GraphQLDefaultValue;
 import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import org.apache.felix.utils.resource.SimpleFilter;
 import org.osgi.framework.Bundle;
+import org.osgi.framework.ServiceReference;
 import org.osgi.framework.wiring.BundleWire;
 import org.osgi.framework.wiring.BundleWiring;
 
 import java.util.*;
+import java.util.function.Supplier;
 
 
 public class GqlBundle {
@@ -70,6 +73,15 @@ public class GqlBundle {
     }
 
     @GraphQLField
+    @GraphQLName("dependenciesGraph")
+    public String getDependencyGraph(@GraphQLName("depth") @GraphQLDefaultValue(DefaultDepthSupplier.class) int depth) {
+        StringBuilder mermaid = getMermaid();
+        Set<String> visited = new HashSet<>();
+        buildGraph(bundle, mermaid, visited, 0, depth, "osgi.wiring.package");
+        return mermaid.toString();
+    }
+
+    @GraphQLField
     @GraphQLName("moduleDependencies")
     public SortedSet<String> getModuleDependencies() {
         SortedSet<String> wiring = new TreeSet<>();
@@ -80,6 +92,53 @@ public class GqlBundle {
             }
         }
         return wiring;
+    }
+
+    @GraphQLField
+    @GraphQLName("moduleDependenciesGraph")
+    public String getModuleDependencyGraph(@GraphQLName("depth") @GraphQLDefaultValue(DefaultDepthSupplier.class) int depth) {
+        StringBuilder mermaid = getMermaid();
+        Set<String> visited = new HashSet<>();
+        buildGraph(bundle, mermaid, visited, 0, depth, "com.jahia.modules.dependencies");
+        return mermaid.toString();
+    }
+
+    private static StringBuilder getMermaid() {
+        StringBuilder mermaid = new StringBuilder();
+        mermaid.append("---\n").
+                append("config:\n").
+                append("  look: handDrawn\n").
+                append("  theme: neutral\n").
+                append("  layout: elk\n").
+                append("  elk:\n").
+                append("    mergeEdges: true\n").
+                append("    nodePlacementStrategy: LINEAR_SEGMENTS\n")
+                .append("---\n");
+        mermaid.append("flowchart LR\n");
+        return mermaid;
+    }
+
+    private void buildGraph(Bundle bundle, StringBuilder mermaid, Set<String> visited, int level, int maxLevel, String namespace) {
+        if (level >= maxLevel) return;
+        String from = bundle.getSymbolicName();
+        if (!visited.add(from + ":" + level)) return; // Prevent cycles at this level
+        if (bundle.adapt(BundleWiring.class) != null) {
+            BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
+            for (BundleWire revision : bundleWiring.getRequiredWires(namespace)) {
+                Bundle required = revision.getProviderWiring().getBundle();
+                String requiredSymbolicName = required.getSymbolicName();
+                if (visited.add(requiredSymbolicName + ":" + level)) {
+                    mermaid.append("    ")
+                            .append(from)
+                            .append("([").append(from).append("])")
+                            .append(" --> ")
+                            .append(requiredSymbolicName)
+                            .append("([").append(requiredSymbolicName).append("])")
+                            .append("\n");
+                    buildGraph(required, mermaid, visited, level + 1, maxLevel, namespace);
+                }
+            }
+        }
     }
 
     @GraphQLField
@@ -112,7 +171,11 @@ public class GqlBundle {
     @GraphQLName("services")
     public SortedSet<String> getServices() {
         SortedSet<String> services = new TreeSet<>();
-        Arrays.stream(bundle.getRegisteredServices()).map(serviceReference -> ((String[]) serviceReference.getProperties().get("objectClass"))[0]).forEach(services::add);
+        ServiceReference<?>[] registeredServices = bundle.getRegisteredServices();
+        if (registeredServices == null) {
+            return services; // Return empty set if no services are registered
+        }
+        Arrays.stream(registeredServices).map(serviceReference -> ((String[]) serviceReference.getProperties().get("objectClass"))[0]).forEach(services::add);
         return services;
     }
 
@@ -120,7 +183,10 @@ public class GqlBundle {
     @GraphQLName("servicesInUse")
     public SortedSet<String> getServicesInUse() {
         SortedSet<String> services = new TreeSet<>();
-        Arrays.stream(bundle.getServicesInUse()).map(serviceReference -> ((String[]) serviceReference.getProperties().get("objectClass"))[0]).forEach(services::add);
+        ServiceReference<?>[] inUse = bundle.getServicesInUse();
+        if (inUse != null) {
+            Arrays.stream(inUse).map(serviceReference -> ((String[]) serviceReference.getProperties().get("objectClass"))[0]).forEach(services::add);
+        }
         return services;
     }
 
@@ -134,6 +200,14 @@ public class GqlBundle {
         public GqlManifestHeader(String key, String value) {
             this.key = key;
             this.value = value;
+        }
+    }
+
+    public static class DefaultDepthSupplier implements Supplier<Object> {
+
+        @Override
+        public Integer get() {
+            return 3;
         }
     }
 }

@@ -6,7 +6,7 @@ import styles from './ModuleManagementCommunityEntry.scss';
 import {capitalize} from '@material-ui/core/utils/helpers';
 
 const ModuleManagementCommunityEntry = () => {
-    const {t} = useTranslation('moduleManagementCommunity');
+    const {t} = useTranslation('module-management-community');
     return (
         <Suspense fallback="loading ...">
             <GlobalStyle/>

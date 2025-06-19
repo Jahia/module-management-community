@@ -1,21 +1,29 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import {useMutation, useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
 import {useNotifications} from '@jahia/react-material';
-import {Button, Loader, Reload, Typography} from '@jahia/moonstone';
-import styles from './ModuleManagementCommunityApp.scss';
 import {
-    Card,
-    CardContent,
-    CardHeader,
+    Accordion,
+    AccordionItem,
+    Button,
+    Close,
+    Loader,
+    Reload,
     Table,
     TableBody,
-    TableCell,
+    TableBodyCell,
     TableHead,
+    TableHeadCell,
     TableRow,
-    TableSortLabel
-} from '@material-ui/core';
+    Typography
+} from '@jahia/moonstone';
+import styles from './ModuleManagementCommunityApp.scss';
+import {Card, CardContent, CardHeader, Dialog, DialogActions, DialogContent, TableSortLabel} from '@material-ui/core';
+import * as PropTypes from 'prop-types';
+import dayjs from 'dayjs';
+import Mermaid from './Mermaid';
+import BundleDescriptionList from "~/components/BundleDescriptionList";
 
 const descendingComparator = (a, b, orderBy) => {
     if (!a[orderBy] && !b[orderBy]) {
@@ -39,19 +47,155 @@ export const getComparator = (order, orderBy) => {
         (a, b) => -descendingComparator(a, b, orderBy);
 };
 
+function BundleDetails({bundle, t, close}) {
+    return (
+        <>
+            <DialogActions>
+                <Button variant="outlined"
+                        size="big"
+                        color="accent"
+                        label={t('label.close')}
+                        icon={<Close/>}
+                        isDisabled={false}
+                        className={styles.button}
+                        onClick={() => close(false)}/>
+            </DialogActions>
+            <DialogContent className={styles.maxHeight}>
+                <Accordion id="bundle" defaultOpenedItem="details" className={styles.maxHeight}>
+                    <AccordionItem id="details" label="Details">
+                        <div className={styles.maxHeight}>
+                            <BundleDescriptionList bundle={bundle}/>
+                        </div>
+                    </AccordionItem>
+                    <AccordionItem id="bundleDependencies" label="Bundle dependencies">
+                        <div className={styles.maxHeight}>
+                            <Mermaid>
+                                {bundle.dependenciesGraph}
+                            </Mermaid>
+                        </div>
+                    </AccordionItem>
+                    <AccordionItem id="moduleDependencies" label="Module dependencies">
+                        <div className={styles.maxHeight}>
+                            <Mermaid>
+                                {bundle.moduleDependenciesGraph}
+                            </Mermaid>
+                        </div>
+                    </AccordionItem>
+                </Accordion>
+            </DialogContent>
+        </>
+    );
+}
+
+BundleDetails.propTypes = {
+    bundle: PropTypes.object,
+    t: PropTypes.func,
+    close: PropTypes.func
+};
+const ModuleRow = ({module, t}) => {
+    const [open, setOpen] = useState(false);
+    const {data, error, loading} = useQuery(gql`query ($module: String!) {
+        admin {
+            modulesManagement {
+                bundle(name: $module) {
+                    symbolicName
+                    bundleId
+                    state
+                    version
+                    manifest {
+                        key
+                        value
+                    }
+                    dependencies
+                    dependenciesGraph(depth:2)
+                    moduleDependencies
+                    moduleDependenciesGraph
+                    nodeTypesDependencies
+                    license
+                    services
+                    servicesInUse
+                }
+            }
+        }
+    }`, {fetchPolicy: 'network-only', variables: {module: module}});
+
+    if (loading || error) {
+        console.error('Error when fetching module data: ' + error);
+        return <TableRow><TableBodyCell colSpan={4}>{t('label.errors.loadingModuleData')}</TableBodyCell></TableRow>;
+    }
+
+    const bundle = data.admin.modulesManagement.bundle;
+    if (!bundle) {
+        return (
+            <TableRow>
+                <TableBodyCell colSpan={4}>
+                    {t('label.errors.moduleNotFound', {module})}
+                </TableBodyCell>
+            </TableRow>
+        );
+    }
+
+    return (
+        <TableRow>
+            <TableBodyCell>
+                <Typography variant="body" weight="semiBold">
+                    {bundle.symbolicName} [{bundle.bundleId}]
+                </Typography>
+            </TableBodyCell>
+            <TableBodyCell>
+                <Typography variant="body" weight="semiBold">
+                    {bundle.version}
+                </Typography>
+            </TableBodyCell>
+            <TableBodyCell>
+                <Typography variant="body" weight="semiBold">
+                    {bundle.state}
+                </Typography>
+            </TableBodyCell>
+            <TableBodyCell>
+                <Button variant="outlined"
+                        size="big"
+                        color="accent"
+                        label="Show details"
+                        icon={<Reload/>}
+                        isDisabled={false}
+                        className={styles.button}
+                        onClick={() => setOpen(true)}/>
+                <Dialog fullWidth open={open} maxWidth="100vw" maxHeight="100vw" onClose={() => setOpen(false)}>
+                    <BundleDetails bundle={bundle} t={t} close={setOpen}/>
+                </Dialog>
+            </TableBodyCell>
+        </TableRow>
+    );
+};
+
+ModuleRow.propTypes = {
+    module: PropTypes.any,
+    t: PropTypes.func
+};
 const ModuleManagementCommunityApp = () => {
     const notificationContext = useNotifications();
-    const {t} = useTranslation('moduleManagementCommunity');
+    const {t} = useTranslation('module-management-community');
     const [order, setOrder] = React.useState('desc');
     const [orderBy, setOrderBy] = React.useState('name');
+    const [updates, setUpdates] = React.useState([]);
     const [modules, setModules] = React.useState([]);
+    const {data: initialData, error: initialError, loading: initialLoading} = useQuery(gql`query {
+        admin {
+            modulesManagement {
+                installedModules
+            }
+        }
+    }`, {fetchPolicy: 'network-only'});
+
     const {data, error, loading, refetch} = useQuery(gql`query {
         admin {
             modulesManagement {
                 availableUpdates
+                lastUpdateTime
             }
         }
-    }`, {fetchPolicy: 'network-only'});
+    }`, {fetchPolicy: 'cache-and-network', initialFetchPolicy: 'standby'});
 
     const [updateAll] = useMutation(gql`mutation {
         admin {
@@ -69,24 +213,32 @@ const ModuleManagementCommunityApp = () => {
                 available: module.substring(module.indexOf(':') + 1).trim()
             })));
             availableUpdates.sort(getComparator(order, orderBy));
-            setModules(availableUpdates);
+            setUpdates(availableUpdates);
         }
     }, [data, order, orderBy]);
 
-    if (error) {
+    useEffect(() => {
+        if (initialData && initialData.admin && initialData.admin.modulesManagement && initialData.admin.modulesManagement.installedModules) {
+            const installedModules = initialData.admin.modulesManagement.installedModules;
+            installedModules.sort(getComparator(order, orderBy));
+            setModules(initialData.admin.modulesManagement.installedModules);
+        }
+    }, [initialData, order, orderBy]);
+
+    if (error || initialError) {
         console.log('Error when fetching data: ' + error);
         notificationContext.notify(t('label.errors.loadingVanityUrl'), ['closeButton', 'noAutomaticClose']);
         return <>error</>;
     }
 
-    if (loading) {
+    if (initialLoading || loading) {
         return (
             <Card>
                 <CardHeader title={
                     <Typography className={styles.title} variant="heading" weight="semiBold">
                         {t('label.table.title')}
                     </Typography>
-            }/>
+                }/>
                 <CardContent className={styles.flexCenter}>
                     <div className={styles.flex}>
                         <Loader size="big"/>
@@ -96,9 +248,9 @@ const ModuleManagementCommunityApp = () => {
         );
     }
 
-    const handleClick = () => {
+    const handleClick = async () => {
         notificationContext.notify(t('label.buttonClicked'), ['closeButton', 'noAutomaticClose']);
-        refetch();
+        await refetch();
     };
 
     if (modules.length === 0) {
@@ -146,7 +298,7 @@ const ModuleManagementCommunityApp = () => {
         return (
             <TableHead>
                 <TableRow>
-                    <TableCell>
+                    <TableHeadCell>
                         <TableSortLabel
                             active={orderBy === 'name'}
                             classes={{icon: orderBy === 'name' ? styles.iconActive : styles.icon}}
@@ -158,8 +310,8 @@ const ModuleManagementCommunityApp = () => {
                             >{t('label.table.cells.name')}
                             </Typography>
                         </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
+                    </TableHeadCell>
+                    <TableHeadCell>
                         <TableSortLabel
                             active={orderBy === 'version'}
                             classes={{icon: orderBy === 'version' ? styles.iconActive : styles.icon}}
@@ -171,26 +323,26 @@ const ModuleManagementCommunityApp = () => {
                             >{t('label.table.cells.version')}
                             </Typography>
                         </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
+                    </TableHeadCell>
+                    <TableHeadCell>
                         <TableSortLabel
-                            active={orderBy === 'available'}
-                            classes={{icon: orderBy === 'available' ? styles.iconActive : styles.icon}}
-                            direction={orderBy === 'available' ? order : 'asc'}
-                            onClick={() => handleSort('available')}
+                            active={orderBy === 'state'}
+                            classes={{icon: orderBy === 'state' ? styles.iconActive : styles.icon}}
+                            direction={orderBy === 'state' ? order : 'asc'}
+                            onClick={() => handleSort('state')}
                         >
                             <Typography variant="body"
                                         weight="semiBold"
-                            >{t('label.table.cells.available')}
+                            >{t('label.table.cells.state')}
                             </Typography>
                         </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
+                    </TableHeadCell>
+                    <TableHeadCell>
                         <Typography variant="body"
                                     weight="semiBold"
                         >{t('label.table.actions')}
                         </Typography>
-                    </TableCell>
+                    </TableHeadCell>
                 </TableRow>
             </TableHead>
         );
@@ -205,6 +357,10 @@ const ModuleManagementCommunityApp = () => {
             }
                         action={
                             <div className={styles.actionGroup}>
+                                <Typography variant="subheading" weight="bold">
+                                    Latest updates checked
+                                    at {dayjs(data.admin.modulesManagement.lastUpdateTime).format('YYYY-MM-DD HH:mm')}
+                                </Typography>
                                 <Button variant="outlined"
                                         size="big"
                                         color="accent"
@@ -218,7 +374,7 @@ const ModuleManagementCommunityApp = () => {
                                         color="danger"
                                         label="Update all"
                                         icon={<Reload/>}
-                                        isDisabled={false}
+                                        isDisabled={updates.length === 0}
                                         className={styles.button}
                                         onClick={handleUpdateAll}/>
                             </div>
@@ -230,26 +386,7 @@ const ModuleManagementCommunityApp = () => {
                     {tableHead()}
                     <TableBody>
                         {modules.map(module => (
-                            <TableRow key={module.name}>
-                                <TableCell>
-                                    {module.name}
-                                </TableCell>
-                                <TableCell>
-                                    {module.version}
-                                </TableCell>
-                                <TableCell>
-                                    {module.available}
-                                </TableCell>
-                                <TableCell>
-                                    <Button isDisabled
-                                            variant="outlined"
-                                            size="big"
-                                            color="accent"
-                                            label={t('label.button.update')}
-                                            className={styles.button}
-                                            onClick={() => notificationContext.notify(`${module.name} updated to ${module.available}`, ['closeButton', 'noAutomaticClose'])}/>
-                                </TableCell>
-                            </TableRow>
+                            <ModuleRow key={module.name} module={module} t={t}/>
                         ))}
                     </TableBody>
                 </Table>

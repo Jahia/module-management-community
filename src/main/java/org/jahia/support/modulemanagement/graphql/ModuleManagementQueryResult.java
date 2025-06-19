@@ -7,16 +7,17 @@ import graphql.annotations.annotationTypes.GraphQLName;
 import org.apache.karaf.features.Feature;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
-import org.jahia.osgi.BundleUtils;
-import org.jahia.services.modulemanager.ModuleManager;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class ModuleManagementQueryResult {
@@ -26,6 +27,7 @@ public class ModuleManagementQueryResult {
             service = ModuleManagementCommunityService.class
     )
     ModuleManagementCommunityService moduleManagementCommunityService;
+    private static Logger logger = LoggerFactory.getLogger(ModuleManagementQueryResult.class);
 
     @GraphQLField
     @GraphQLName("availableUpdates")
@@ -33,6 +35,13 @@ public class ModuleManagementQueryResult {
     public List<String> getAvailableUpdates(@GraphQLName("jahiaOnly") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean jahiaOnly,
                                       @GraphQLName("filters") List<String> filters) throws IOException {
         return moduleManagementCommunityService.updateModules(jahiaOnly, true, filters);
+    }
+
+    @GraphQLField
+    @GraphQLName("lastUpdateTime")
+    @GraphQLDescription("Return the last time the module updates were checked")
+    public String getLastUpdateTime() {
+        return moduleManagementCommunityService.getLastUpdateTime().toString();
     }
 
 
@@ -50,8 +59,16 @@ public class ModuleManagementQueryResult {
     @GraphQLName("bundle")
     @GraphQLDescription("Return different information about a bundle")
     public GqlBundle getBundle(@GraphQLName("name") String name) throws IOException {
+        logger.info("Fetching bundle information for: {}", name);
         Bundle bundle = Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class).getBundleContext().getBundles()).filter(b -> b.getSymbolicName().equals(name)).findFirst().orElse(null);
         return new GqlBundle(bundle);
+    }
+
+    @GraphQLField
+    @GraphQLName("installedModules")
+    @GraphQLDescription("Return a list of installed modules in the Jahia community edition")
+    public Set<String> getInstalledModules() throws IOException {
+        return moduleManagementCommunityService.getInstalledModules();
     }
 
     public class GqlFeature {

@@ -50,6 +50,9 @@
 .actionGroup {
     display: flex;
     align-content: space-evenly;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--spacing-medium);
 }
 
 .remove {
@@ -65,4 +68,13 @@
 
 .flex {
     flex: 1 1 auto;
+}
+
+.maxHeight {
+    min-height: calc(75vh - 100px);
+}
+
+.padding {
+    flex: 0 0 auto;
+    padding: 0 2% 2% 2%;
 }

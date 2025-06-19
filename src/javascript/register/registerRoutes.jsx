@@ -3,7 +3,7 @@ import React from 'react';
 import ModuleManagementCommunityEntry from '~/components/ModuleManagementCommunityEntry';
 
 export const registerRoutes = () => {
-    const COMP_NAME = 'moduleManagementCommunity';
+    const COMP_NAME = 'module-management-community';
 
 
     registry.add('adminRoute', `${COMP_NAME}`, {

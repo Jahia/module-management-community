@@ -35,13 +35,17 @@
         "@jahia/moonstone": "^2.5.1",
         "@jahia/react-material": "^3.0.6",
         "@jahia/ui-extender": "^1.0.0",
+        "@lightenna/react-mermaid-diagram": "^1.0.21",
         "@material-ui/core": "^3.9.3",
+        "@mermaid-js/layout-elk": "^0.1.7",
         "clsx": "^2.1.1",
+        "dayjs": "^1.11.13",
         "graphql": "^16.10.0",
         "graphql-tag": "^2.12.6",
         "i18next": "^19.0.3",
         "lodash": "^4.17.19",
         "md5": "^2.3.0",
+        "mermaid": "^11.6.0",
         "prop-types": "^15.8.1",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
@@ -84,5 +88,6 @@
         "webpack": "^5.99.9",
         "webpack-bundle-analyzer": "^4.5.0",
         "webpack-cli": "^4.9.2"
-    }
+    },
+    "packageManager": "yarn@1.22.22+sha1.ac34549e6aa8e7ead463a7407e1c7390f61a6610"
 }

@@ -18,6 +18,7 @@ import org.jahia.exceptions.JahiaRuntimeException;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
 import org.jahia.osgi.BundleState;
 import org.jahia.osgi.BundleUtils;
+import org.jahia.osgi.FrameworkService;
 import org.jahia.services.modulemanager.ModuleManager;
 import org.jahia.services.modulemanager.spi.BundleService;
 import org.jahia.services.provisioning.ProvisioningManager;
@@ -37,6 +38,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.TemporalAmount;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
@@ -51,6 +55,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Reference
     FeaturesService featuresService;
+
+    private static Instant lastUpdateTime = null;
+    private List<String> modulesWithUpdates;
+    private List<String> modulesWithUpdatesURLs;
 
     @Activate
     public void activate(ModuleManagementCommunityConfig config) {
@@ -92,6 +100,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public List<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters) throws IOException {
+        if (lastUpdateTime != null && Instant.now().minus(Duration.ofHours(2)).isBefore(lastUpdateTime) && modulesWithUpdates != null) {
+            logger.info("Module updates is cached until {}", lastUpdateTime.plus(Duration.ofHours(2)));
+            return modulesWithUpdates;
+        }
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             logger.warn("ModuleManagementCommunityService is not available in read-only mode");
@@ -101,8 +113,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             logger.warn("ModuleManagementCommunityService is available only on processing servers");
             return Collections.emptyList();
         }
-        List<String> modulesWithUpdates = new ArrayList<>();
-        List<String> modulesWithUpdatesURLs = new ArrayList<>();
+        modulesWithUpdates = new ArrayList<>();
+        modulesWithUpdatesURLs = new ArrayList<>();
         ModuleManager moduleManager = BundleUtils.getOsgiService(ModuleManager.class, null);
         if (moduleManager == null) {
             throw new DataFetchingException("Module manager service is not available");
@@ -169,6 +181,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         Collections.sort(modulesWithUpdates);
         updateFeatures(jahiaOnly, filters, resolver);
         updateModulesIfNeeded(dryRun, modulesWithUpdates, modulesWithUpdatesURLs);
+        lastUpdateTime = Instant.now();
+
         return modulesWithUpdates;
     }
 
@@ -245,6 +259,21 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             logger.error("Error retrieving installed features", e);
             throw new DataFetchingException("Error retrieving installed features", e);
         }
+    }
+
+    @Override
+    public Set<String> getInstalledModules() throws IOException {
+        SortedSet<String> installedModules = new TreeSet<>();
+        for(Bundle bundle : FrameworkService.getBundleContext().getBundles()) {
+                String symbolicName = bundle.getSymbolicName();
+                installedModules.add(symbolicName);
+        }
+        return installedModules;
+    }
+
+    @Override
+    public Instant getLastUpdateTime() {
+        return lastUpdateTime;
     }
 
     private void updateModulesIfNeeded(boolean dryRun, List<String> modulesWithUpdates, List<String> modulesWithUpdatesURLs) throws IOException {

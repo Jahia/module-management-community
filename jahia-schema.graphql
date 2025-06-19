@@ -507,6 +507,8 @@ type AdminMutation {
     personalApiTokens: PersonalApiTokensMutation
     "Augmented Search administrative mutations"
     search: ASAdminMutations
+    "Sitemap API mutations"
+    sitemap: GqlSitemapMutation
 }
 
 "Admin queries root"
@@ -526,6 +528,8 @@ type AdminQuery {
     roles: [AclRole]
     "Augmented Search administrative queries"
     search: ASAdminQueries
+    "Sitemap API queries"
+    sitemap: GqlSitemapQueries
     "Jahia admin tools"
     tools: AdminTools
     "Get user administration endpoint"
@@ -1269,6 +1273,22 @@ type GqlBackgroundJobEdge {
     node: GqlBackgroundJob
 }
 
+type GqlBundle {
+    bundleId: Long
+    dependencies: [String]
+    dependenciesGraph(depth: Int = 3): String
+    license: String
+    manifest(keys: [String]): [GqlManifestHeader]
+    moduleDependencies: [String]
+    moduleDependenciesGraph(depth: Int = 3): String
+    nodeTypesDependencies: [String]
+    services: [String]
+    servicesInUse: [String]
+    state: String
+    symbolicName: String
+    version: String
+}
+
 "Channel information"
 type GqlChannel {
     "Channel label (not localized)"
@@ -1599,6 +1619,21 @@ type GqlExperienceType {
     type: Type
 }
 
+type GqlFeature {
+    "The bundles included in this feature"
+    bundles: [String]
+    "The dependencies of the feature"
+    dependencies: [String]
+    "The description of the feature"
+    description: String
+    "The name of the feature"
+    name: String
+    "The URL of the feature repository"
+    url: String
+    "The version of the feature"
+    version: String
+}
+
 "Server healthCheck"
 type GqlHealthCheck {
     "Probes registered in SAM for the requested severity"
@@ -1681,6 +1716,11 @@ type GqlLockDetail {
     owner: String
     "Lock type"
     type: String
+}
+
+type GqlManifestHeader {
+    key: String
+    value: String
 }
 
 "Override item"
@@ -1991,6 +2031,27 @@ type GqlShardConfiguration {
     primaryCount: Int
     "Number of replicas"
     replicas: Int
+}
+
+type GqlSitemapMutation {
+    "Sending sitemap(s) based on either sitemap index XML or sitemap XML URL to search engine URL(s) specified in CFG"
+    sendSitemapToSearchEngine(
+        "Sitemap index XML or sitemap XML URL"
+        sitemapURL: String!
+    ): Boolean
+    "Trigger the sitemap job execution for the given sitekey"
+    triggerSitemapJob(
+        "Site key"
+        siteKey: String
+    ): Boolean
+}
+
+type GqlSitemapQueries {
+    "Get site URL with only server domain appended from sitemap URL"
+    siteUrl(
+        "Sitemap index XML or sitemap XML URL"
+        siteKey: String!
+    ): String
 }
 
 "Aggregation bucket representation"
@@ -3538,6 +3599,14 @@ type ModuleManagementMutationResult {
 type ModuleManagementQueryResult {
     "Return a list of modules that have updates available"
     availableUpdates(filters: [String], jahiaOnly: Boolean = true): [String]
+    "Return different information about a bundle"
+    bundle(name: String): GqlBundle
+    "Return a list of features available in the Jahia community edition"
+    features(filters: [String], jahiaOnly: Boolean = true): [GqlFeature]
+    "Return a list of installed modules in the Jahia community edition"
+    installedModules: [String]
+    "Return the last time the module updates were checked"
+    lastUpdateTime: String
 }
 
 "Root mutation type"

@@ -22,7 +22,7 @@ module.exports = (env, argv) => {
         .replace(/\..+$/, '')
         .replace(/[:\sT]/g, '-');
 
-    const bundleName = 'moduleManagementCommunity.bundle';
+    const bundleName = 'module-management-community.bundle';
     const fileName = `${bundleName}.${buildTimeStamp}.js`;
     let config = {
         entry: {
@@ -31,7 +31,7 @@ module.exports = (env, argv) => {
         output: {
             path: path.resolve(__dirname, 'src/main/resources/javascript/apps/'),
             filename: fileName,
-            chunkFilename: '[name].moduleManagementCommunity.[chunkhash:6].js'
+            chunkFilename: '[name].module-management-community.[chunkhash:6].js'
         },
         resolve: {
             mainFields: ['module', 'main'],
@@ -39,7 +39,7 @@ module.exports = (env, argv) => {
             alias: {
                 '~': path.resolve(__dirname, './src/javascript'),
             },
-            fallback: {"url": false}
+            fallback: {"url": false, "tty": false, "os": false, "util": false}
         },
         module: {
             rules: [
