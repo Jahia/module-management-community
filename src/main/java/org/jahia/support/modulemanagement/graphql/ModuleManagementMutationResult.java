@@ -7,6 +7,7 @@ import graphql.annotations.annotationTypes.GraphQLName;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
+import org.osgi.framework.FrameworkUtil;
 
 import javax.inject.Inject;
 import java.io.IOException;
@@ -26,6 +27,13 @@ public class ModuleManagementMutationResult {
     public List<String> updateModules(@GraphQLName("jahiaOnly") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean jahiaOnly,
                                       @GraphQLName("filters") List<String> filters) throws IOException {
         return moduleManagementCommunityService.updateModules(jahiaOnly, false, filters);
+    }
+
+    @GraphQLField
+    @GraphQLName("bundle")
+    @GraphQLDescription("Allow developers to perform operations on bundles, such as installing, uninstalling, or updating")
+    public GqlBundleMutation getBundle(@GraphQLName("bundleId") long bundleId) {
+        return new GqlBundleMutation(moduleManagementCommunityService.getBundleById(bundleId));
     }
 
 }

@@ -26,6 +26,7 @@ import org.jahia.settings.SettingsBean;
 import org.jahia.support.modulemanagement.config.ModuleManagementCommunityConfig;
 import org.ops4j.pax.url.mvn.MavenResolver;
 import org.osgi.framework.Bundle;
+import org.osgi.framework.BundleContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
@@ -59,9 +60,11 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     private static Instant lastUpdateTime = null;
     private List<String> modulesWithUpdates;
     private List<String> modulesWithUpdatesURLs;
+    private BundleContext bundleContext;
 
     @Activate
-    public void activate(ModuleManagementCommunityConfig config) {
+    public void activate(ModuleManagementCommunityConfig config, BundleContext bundleContext) {
+        this.bundleContext = bundleContext;
         logger.info("ModuleManagementCommunityService activated");
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
@@ -274,6 +277,11 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Override
     public Instant getLastUpdateTime() {
         return lastUpdateTime;
+    }
+
+    @Override
+    public Bundle getBundleById(long bundleId) {
+        return bundleContext.getBundle(bundleId);
     }
 
     private void updateModulesIfNeeded(boolean dryRun, List<String> modulesWithUpdates, List<String> modulesWithUpdatesURLs) throws IOException {

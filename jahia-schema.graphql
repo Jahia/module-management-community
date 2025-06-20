@@ -1289,6 +1289,11 @@ type GqlBundle {
     version: String
 }
 
+type GqlBundleMutation {
+    start: String
+    stop: String
+}
+
 "Channel information"
 type GqlChannel {
     "Channel label (not localized)"
@@ -3592,6 +3597,8 @@ type Metadata {
 }
 
 type ModuleManagementMutationResult {
+    "Allow developers to perform operations on bundles, such as installing, uninstalling, or updating"
+    bundle(bundleId: Long): GqlBundleMutation
     "Return the list of modules that have been updated"
     updateModules(filters: [String], jahiaOnly: Boolean = true): [String]
 }

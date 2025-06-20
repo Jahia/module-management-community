@@ -7,8 +7,11 @@ import {
     Accordion,
     AccordionItem,
     Button,
+    Cancel,
     Close,
+    Information,
     Loader,
+    Power,
     Reload,
     Table,
     TableBody,
@@ -23,7 +26,7 @@ import {Card, CardContent, CardHeader, Dialog, DialogActions, DialogContent, Tab
 import * as PropTypes from 'prop-types';
 import dayjs from 'dayjs';
 import Mermaid from './Mermaid';
-import BundleDescriptionList from "~/components/BundleDescriptionList";
+import BundleDescriptionList from './BundleDescriptionList';
 
 const descendingComparator = (a, b, orderBy) => {
     if (!a[orderBy] && !b[orderBy]) {
@@ -93,8 +96,9 @@ BundleDetails.propTypes = {
     close: PropTypes.func
 };
 const ModuleRow = ({module, t}) => {
+    const notificationContext = useNotifications();
     const [open, setOpen] = useState(false);
-    const {data, error, loading} = useQuery(gql`query ($module: String!) {
+    const {data, error, loading, refetch} = useQuery(gql`query ($module: String!) {
         admin {
             modulesManagement {
                 bundle(name: $module) {
@@ -118,6 +122,48 @@ const ModuleRow = ({module, t}) => {
             }
         }
     }`, {fetchPolicy: 'network-only', variables: {module: module}});
+
+    const [stopBundle] = useMutation(gql`mutation ($bundleId: Long!) {
+        admin {
+            modulesManagement {
+                bundle(bundleId: $bundleId) {
+                    stop
+                }
+            }
+        }
+    }`, {variables: {bundleId: data?.admin?.modulesManagement?.bundle?.bundleId}});
+
+    const handleStopBundle = async () => {
+        try {
+            await stopBundle();
+            notificationContext.notify(t('label.stopBundleSuccess'), ['closeButton', 'noAutomaticClose']);
+            await refetch();
+        } catch (e) {
+            console.error('Error stopping bundle:', e);
+            notificationContext.notify(t('label.stopBundleError'), ['closeButton', 'noAutomaticClose']);
+        }
+    };
+
+    const [startBundle] = useMutation(gql`mutation ($bundleId: Long!) {
+        admin {
+            modulesManagement {
+                bundle(bundleId: $bundleId) {
+                    start
+                }
+            }
+        }
+    }`, {variables: {bundleId: data?.admin?.modulesManagement?.bundle?.bundleId}});
+
+    const handleStartBundle = async () => {
+        try {
+            await startBundle();
+            notificationContext.notify(t('label.startBundleSuccess'), ['closeButton', 'noAutomaticClose']);
+            await refetch();
+        } catch (e) {
+            console.error('Error starting bundle:', e);
+            notificationContext.notify(t('label.startBundleError'), ['closeButton', 'noAutomaticClose']);
+        }
+    };
 
     if (loading || error) {
         console.error('Error when fetching module data: ' + error);
@@ -153,14 +199,32 @@ const ModuleRow = ({module, t}) => {
                 </Typography>
             </TableBodyCell>
             <TableBodyCell>
-                <Button variant="outlined"
-                        size="big"
-                        color="accent"
-                        label="Show details"
-                        icon={<Reload/>}
-                        isDisabled={false}
-                        className={styles.button}
-                        onClick={() => setOpen(true)}/>
+                <div className={styles.actionGroup} style={{width: 'fit-content'}}>
+                    {bundle.state === 'RESOLVED' && <Button variant="outlined"
+                                                            size="big"
+                                                            color="success"
+                                                            label=""
+                                                            icon={<Power/>}
+                                                            isDisabled={false}
+                                                            className={styles.button}
+                                                            onClick={handleStartBundle}/>}
+                    {bundle.state === 'ACTIVE' && <Button variant="outlined"
+                                                          size="big"
+                                                          color="danger"
+                                                          label=""
+                                                          icon={<Cancel/>}
+                                                          isDisabled={false}
+                                                          className={styles.button}
+                                                          onClick={handleStopBundle}/>}
+                    <Button variant="outlined"
+                            size="big"
+                            color="accent"
+                            label="Show details"
+                            icon={<Information/>}
+                            isDisabled={false}
+                            className={styles.button}
+                            onClick={() => setOpen(true)}/>
+                </div>
                 <Dialog fullWidth open={open} maxWidth="100vw" maxHeight="100vw" onClose={() => setOpen(false)}>
                     <BundleDetails bundle={bundle} t={t} close={setOpen}/>
                 </Dialog>
