@@ -1290,6 +1290,7 @@ type GqlBundle {
 }
 
 type GqlBundleMutation {
+    refresh: String
     start: String
     stop: String
 }

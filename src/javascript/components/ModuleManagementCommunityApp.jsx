@@ -6,13 +6,16 @@ import {useNotifications} from '@jahia/react-material';
 import {
     Accordion,
     AccordionItem,
+    Badge,
     Button,
     Cancel,
+    Chip,
     Close,
     Information,
     Loader,
     Power,
     Reload,
+    Rocket,
     Table,
     TableBody,
     TableBodyCell,
@@ -50,7 +53,7 @@ export const getComparator = (order, orderBy) => {
         (a, b) => -descendingComparator(a, b, orderBy);
 };
 
-function BundleDetails({bundle, t, close}) {
+const BundleDetails = ({bundle, t, close}) => {
     return (
         <>
             <DialogActions>
@@ -88,13 +91,14 @@ function BundleDetails({bundle, t, close}) {
             </DialogContent>
         </>
     );
-}
+};
 
 BundleDetails.propTypes = {
     bundle: PropTypes.object,
     t: PropTypes.func,
     close: PropTypes.func
 };
+
 const ModuleRow = ({module, t}) => {
     const notificationContext = useNotifications();
     const [open, setOpen] = useState(false);
@@ -121,7 +125,7 @@ const ModuleRow = ({module, t}) => {
                 }
             }
         }
-    }`, {fetchPolicy: 'network-only', variables: {module: module}});
+    }`, {fetchPolicy: 'cache-and-network', variables: {module: module.name}});
 
     const [stopBundle] = useMutation(gql`mutation ($bundleId: Long!) {
         admin {
@@ -165,6 +169,27 @@ const ModuleRow = ({module, t}) => {
         }
     };
 
+    const [refreshBundle] = useMutation(gql`mutation ($bundleId: Long!) {
+        admin {
+            modulesManagement {
+                bundle(bundleId: $bundleId) {
+                    refresh
+                }
+            }
+        }
+    }`, {variables: {bundleId: data?.admin?.modulesManagement?.bundle?.bundleId}});
+
+    const handleRefreshBundle = async () => {
+        try {
+            await refreshBundle();
+            notificationContext.notify(t('label.startBundleSuccess'), ['closeButton', 'noAutomaticClose']);
+            await refetch();
+        } catch (e) {
+            console.error('Error starting bundle:', e);
+            notificationContext.notify(t('label.startBundleError'), ['closeButton', 'noAutomaticClose']);
+        }
+    };
+
     if (loading || error) {
         console.error('Error when fetching module data: ' + error);
         return <TableRow><TableBodyCell colSpan={4}>{t('label.errors.loadingModuleData')}</TableBodyCell></TableRow>;
@@ -189,14 +214,13 @@ const ModuleRow = ({module, t}) => {
                 </Typography>
             </TableBodyCell>
             <TableBodyCell>
-                <Typography variant="body" weight="semiBold">
-                    {bundle.version}
-                </Typography>
+                <Badge label={bundle.version} color="accent"/>
             </TableBodyCell>
             <TableBodyCell>
-                <Typography variant="body" weight="semiBold">
-                    {bundle.state}
-                </Typography>
+                <Chip variant="bright"
+                      label={bundle.state}
+                      color={bundle.state === 'ACTIVE' ? 'success' : 'danger'}
+                      icon={<Rocket/>}/>
             </TableBodyCell>
             <TableBodyCell>
                 <div className={styles.actionGroup} style={{width: 'fit-content'}}>
@@ -208,14 +232,26 @@ const ModuleRow = ({module, t}) => {
                                                             isDisabled={false}
                                                             className={styles.button}
                                                             onClick={handleStartBundle}/>}
-                    {bundle.state === 'ACTIVE' && <Button variant="outlined"
-                                                          size="big"
-                                                          color="danger"
-                                                          label=""
-                                                          icon={<Cancel/>}
-                                                          isDisabled={false}
-                                                          className={styles.button}
-                                                          onClick={handleStopBundle}/>}
+                    {bundle.state === 'ACTIVE' && (
+                        <>
+                            <Button variant="outlined"
+                                    size="big"
+                                    color="danger"
+                                    label=""
+                                    icon={<Cancel/>}
+                                    isDisabled={false}
+                                    className={styles.button}
+                                    onClick={handleStopBundle}/>
+                            <Button variant="outlined"
+                                    size="big"
+                                    color="danger"
+                                    label=""
+                                    icon={<Reload/>}
+                                    isDisabled={false}
+                                    className={styles.button}
+                                    onClick={handleRefreshBundle}/>
+                        </>
+                    )}
                     <Button variant="outlined"
                             size="big"
                             color="accent"
@@ -237,6 +273,7 @@ ModuleRow.propTypes = {
     module: PropTypes.any,
     t: PropTypes.func
 };
+
 const ModuleManagementCommunityApp = () => {
     const notificationContext = useNotifications();
     const {t} = useTranslation('module-management-community');
@@ -244,13 +281,14 @@ const ModuleManagementCommunityApp = () => {
     const [orderBy, setOrderBy] = React.useState('name');
     const [updates, setUpdates] = React.useState([]);
     const [modules, setModules] = React.useState([]);
+    const [filter, setFilter] = useState('');
     const {data: initialData, error: initialError, loading: initialLoading} = useQuery(gql`query {
         admin {
             modulesManagement {
                 installedModules
             }
         }
-    }`, {fetchPolicy: 'network-only'});
+    }`, {fetchPolicy: 'cache-and-network'});
 
     const {data, error, loading, refetch} = useQuery(gql`query {
         admin {
@@ -276,16 +314,19 @@ const ModuleManagementCommunityApp = () => {
                 version: module.substring(module.indexOf('/') + 1, module.indexOf(':')).trim(),
                 available: module.substring(module.indexOf(':') + 1).trim()
             })));
-            availableUpdates.sort(getComparator(order, orderBy));
             setUpdates(availableUpdates);
         }
     }, [data, order, orderBy]);
 
     useEffect(() => {
         if (initialData && initialData.admin && initialData.admin.modulesManagement && initialData.admin.modulesManagement.installedModules) {
-            const installedModules = initialData.admin.modulesManagement.installedModules;
+            const installedModules = initialData.admin.modulesManagement.installedModules.map((module => ({
+                name: module.substring(0, module.indexOf('/')).trim(),
+                version: module.substring(module.indexOf('/') + 1, module.indexOf(':')).trim(),
+                state: module.substring(module.indexOf(':') + 1).trim()
+            })));
             installedModules.sort(getComparator(order, orderBy));
-            setModules(initialData.admin.modulesManagement.installedModules);
+            setModules(installedModules);
         }
     }, [initialData, order, orderBy]);
 
@@ -313,7 +354,7 @@ const ModuleManagementCommunityApp = () => {
     }
 
     const handleClick = async () => {
-        notificationContext.notify(t('label.buttonClicked'), ['closeButton', 'noAutomaticClose']);
+        notificationContext.notify(t('label.fetchUpdates'), ['closeButton', 'noAutomaticClose']);
         await refetch();
     };
 
@@ -357,6 +398,11 @@ const ModuleManagementCommunityApp = () => {
             notificationContext.notify(t('label.updateAllError'), ['closeButton', 'noAutomaticClose']);
         }
     };
+
+    // Filter modules by symbolicName (case-insensitive)
+    const filteredModules = modules.filter(
+        m => filter.trim() === '' ? true : m.name.toLowerCase().includes(filter.trim().toLowerCase())
+    );
 
     const tableHead = () => {
         return (
@@ -421,14 +467,20 @@ const ModuleManagementCommunityApp = () => {
             }
                         action={
                             <div className={styles.actionGroup}>
+                                <input
+                                    type="text"
+                                    placeholder="Filter by symbolic name"
+                                    value={filter}
+                                    style={{marginRight: 16}}
+                                    onChange={e => setFilter(e.target.value)}
+                                />
                                 <Typography variant="subheading" weight="bold">
-                                    Latest updates checked
-                                    at {dayjs(data.admin.modulesManagement.lastUpdateTime).format('YYYY-MM-DD HH:mm')}
+                                    {t('label.lastUpdate', {date: dayjs(data.admin.modulesManagement.lastUpdateTime).format('DD/MM/YYYY HH:mm')})}
                                 </Typography>
                                 <Button variant="outlined"
                                         size="big"
                                         color="accent"
-                                        label="Refresh"
+                                        label={t('label.refresh')}
                                         icon={<Reload/>}
                                         isDisabled={false}
                                         className={styles.button}
@@ -436,7 +488,7 @@ const ModuleManagementCommunityApp = () => {
                                 <Button variant="outlined"
                                         size="big"
                                         color="danger"
-                                        label="Update all"
+                                        label={t('label.updateAll')}
                                         icon={<Reload/>}
                                         isDisabled={updates.length === 0}
                                         className={styles.button}
@@ -449,7 +501,7 @@ const ModuleManagementCommunityApp = () => {
                 <Table>
                     {tableHead()}
                     <TableBody>
-                        {modules.map(module => (
+                        {filteredModules.map(module => (
                             <ModuleRow key={module.name} module={module} t={t}/>
                         ))}
                     </TableBody>

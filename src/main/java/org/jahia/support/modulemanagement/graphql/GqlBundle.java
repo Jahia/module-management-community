@@ -41,7 +41,20 @@ public class GqlBundle {
     @GraphQLField
     @GraphQLName("state")
     public String getState() {
-        return bundle.getState() == Bundle.ACTIVE ? "ACTIVE" : bundle.getState() == Bundle.INSTALLED ? "INSTALLED" : bundle.getState() == Bundle.RESOLVED ? "RESOLVED" : bundle.getState() == Bundle.STARTING ? "STARTING" : bundle.getState() == Bundle.STOPPING ? "STOPPING" : "UNKNOWN";
+        switch (bundle.getState()) {
+            case Bundle.ACTIVE:
+                return "ACTIVE";
+            case Bundle.INSTALLED:
+                return "INSTALLED";
+            case Bundle.RESOLVED:
+                return "RESOLVED";
+            case Bundle.STARTING:
+                return "STARTING";
+            case Bundle.STOPPING:
+                return "STOPPING";
+            default:
+                return "UNKNOWN";
+        }
     }
 
     @GraphQLField

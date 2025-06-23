@@ -269,7 +269,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         SortedSet<String> installedModules = new TreeSet<>();
         for(Bundle bundle : FrameworkService.getBundleContext().getBundles()) {
                 String symbolicName = bundle.getSymbolicName();
-                installedModules.add(symbolicName);
+                installedModules.add(symbolicName+"/" + bundle.getVersion().toString()+":" + bundle.getState());
         }
         return installedModules;
     }

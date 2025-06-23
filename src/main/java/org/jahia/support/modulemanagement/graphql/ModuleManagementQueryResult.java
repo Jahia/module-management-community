@@ -59,7 +59,6 @@ public class ModuleManagementQueryResult {
     @GraphQLName("bundle")
     @GraphQLDescription("Return different information about a bundle")
     public GqlBundle getBundle(@GraphQLName("name") String name) throws IOException {
-        logger.info("Fetching bundle information for: {}", name);
         Bundle bundle = Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class).getBundleContext().getBundles()).filter(b -> b.getSymbolicName().equals(name)).findFirst().orElse(null);
         return new GqlBundle(bundle);
     }

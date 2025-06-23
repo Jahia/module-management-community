@@ -3,6 +3,9 @@ package org.jahia.support.modulemanagement.graphql;
 import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
+import org.jahia.osgi.BundleLifecycleUtils;
+import org.jahia.osgi.BundleUtils;
+import org.jahia.services.modulemanager.spi.BundleService;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleException;
 
@@ -35,5 +38,12 @@ public class GqlBundleMutation {
             throw new DataFetchingException(
                     "Failed to stop bundle " + bundle.getSymbolicName() + ": " + e.getMessage(), e);
         }
+    }
+
+    @GraphQLField
+    @GraphQLName("refresh")
+    public String refresh() {
+            BundleLifecycleUtils.refreshBundle(bundle);
+            return "Bundle " + bundle.getSymbolicName() + " refreshed successfully.";
     }
 }
