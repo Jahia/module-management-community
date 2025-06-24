@@ -1284,6 +1284,7 @@ type GqlBundle {
     nodeTypesDependencies: [String]
     services: [String]
     servicesInUse: [String]
+    sitesDeployment: [String]
     state: String
     symbolicName: String
     version: String
@@ -3600,6 +3601,8 @@ type Metadata {
 type ModuleManagementMutationResult {
     "Allow developers to perform operations on bundles, such as installing, uninstalling, or updating"
     bundle(bundleId: Long): GqlBundleMutation
+    "Import a module from the file system into the OSGi framework"
+    importModule(bundleId: Long, force: Boolean = false): String
     "Return the list of modules that have been updated"
     updateModules(filters: [String], jahiaOnly: Boolean = true): [String]
 }

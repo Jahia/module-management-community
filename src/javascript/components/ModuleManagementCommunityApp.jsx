@@ -73,20 +73,35 @@ const BundleDetails = ({bundle, t, close}) => {
                             <BundleDescriptionList bundle={bundle}/>
                         </div>
                     </AccordionItem>
-                    <AccordionItem id="bundleDependencies" label="Bundle dependencies">
-                        <div className={styles.maxHeight}>
-                            <Mermaid>
-                                {bundle.dependenciesGraph}
-                            </Mermaid>
-                        </div>
-                    </AccordionItem>
-                    <AccordionItem id="moduleDependencies" label="Module dependencies">
-                        <div className={styles.maxHeight}>
-                            <Mermaid>
-                                {bundle.moduleDependenciesGraph}
-                            </Mermaid>
-                        </div>
-                    </AccordionItem>
+                    {bundle.sitesDeployment.length > 0 && (
+                        <AccordionItem id="sitesDeployment" label="Deployed on sites">
+                            <div className={styles.maxHeight}>
+                                <ul>
+                                    {bundle.sitesDeployment.map(site => (
+                                        <Typography key={site} variant="body" weight="semiBold">
+                                            {site}
+                                        </Typography>
+                                    ))}
+                                </ul>
+                            </div>
+                        </AccordionItem>)}
+                    {bundle.dependenciesGraph && bundle.dependenciesGraph.length > 0 && (
+                        <AccordionItem id="bundleDependencies" label="Bundle dependencies">
+                            <div className={styles.maxHeight}>
+                                <Mermaid>
+                                    {bundle.dependenciesGraph}
+                                </Mermaid>
+                            </div>
+                        </AccordionItem>)}
+                    {bundle.moduleDependencies && bundle.moduleDependencies.length > 0 && (
+                        <AccordionItem id="moduleDependencies" label="Module dependencies">
+                            <div className={styles.maxHeight}>
+                                <Mermaid>
+                                    {bundle.moduleDependenciesGraph}
+                                </Mermaid>
+                            </div>
+                        </AccordionItem>
+                    )}
                 </Accordion>
             </DialogContent>
         </>
@@ -122,6 +137,7 @@ const ModuleRow = ({module, t}) => {
                     license
                     services
                     servicesInUse
+                    sitesDeployment
                 }
             }
         }
@@ -277,7 +293,7 @@ ModuleRow.propTypes = {
 const ModuleManagementCommunityApp = () => {
     const notificationContext = useNotifications();
     const {t} = useTranslation('module-management-community');
-    const [order, setOrder] = React.useState('desc');
+    const [order, setOrder] = React.useState('asc');
     const [orderBy, setOrderBy] = React.useState('name');
     const [updates, setUpdates] = React.useState([]);
     const [modules, setModules] = React.useState([]);
