@@ -4,11 +4,16 @@ import graphql.annotations.annotationTypes.GraphQLDefaultValue;
 import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import org.apache.felix.utils.resource.SimpleFilter;
+import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
+import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
+import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.wiring.BundleWire;
 import org.osgi.framework.wiring.BundleWiring;
 
+import javax.inject.Inject;
+import javax.jcr.RepositoryException;
 import java.util.*;
 import java.util.function.Supplier;
 
@@ -19,6 +24,12 @@ public class GqlBundle {
     public GqlBundle(Bundle bundle) {
         this.bundle = bundle;
     }
+
+    @Inject
+    @GraphQLOsgiService(
+            service = ModuleManagementCommunityService.class
+    )
+    ModuleManagementCommunityService moduleManagementCommunityService;
 
     @GraphQLField
     @GraphQLName("symbolicName")
@@ -201,6 +212,18 @@ public class GqlBundle {
             Arrays.stream(inUse).map(serviceReference -> ((String[]) serviceReference.getProperties().get("objectClass"))[0]).forEach(services::add);
         }
         return services;
+    }
+
+    @GraphQLField
+    @GraphQLName("sitesDeployment")
+    public SortedSet<String> getSitesDeployment() {
+        SortedSet<String> sites = new TreeSet<>();
+        try {
+            moduleManagementCommunityService.getSitesDeployment(bundle).forEach(sites::add);
+        } catch (RepositoryException e) {
+            throw new DataFetchingException(e);
+        }
+        return sites;
     }
 
 

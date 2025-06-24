@@ -3,6 +3,7 @@ package org.jahia.support.modulemanagement.services;
 import org.apache.karaf.features.Feature;
 import org.osgi.framework.Bundle;
 
+import javax.jcr.RepositoryException;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
@@ -19,4 +20,8 @@ public interface ModuleManagementCommunityService {
     Instant getLastUpdateTime();
 
     Bundle getBundleById(long bundleId);
+
+    List<String> getSitesDeployment(Bundle bundle) throws RepositoryException;
+
+    boolean importModule(Bundle bundle, boolean force) throws IOException;
 }

@@ -7,7 +7,6 @@ import graphql.annotations.annotationTypes.GraphQLName;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
-import org.osgi.framework.FrameworkUtil;
 
 import javax.inject.Inject;
 import java.io.IOException;
@@ -36,4 +35,14 @@ public class ModuleManagementMutationResult {
         return new GqlBundleMutation(moduleManagementCommunityService.getBundleById(bundleId));
     }
 
+    @GraphQLField
+    @GraphQLName("importModule")
+    @GraphQLDescription("Import a module from the file system into the OSGi framework")
+    public String importModule(@GraphQLName("bundleId") long bundleId,
+                               @GraphQLName("force") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean force) throws IOException {
+        if (moduleManagementCommunityService.importModule(moduleManagementCommunityService.getBundleById(bundleId), force))
+            return "Module imported successfully.";
+        else
+            return "Failed to import module.";
+    }
 }

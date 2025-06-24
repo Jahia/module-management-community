@@ -14,14 +14,24 @@ import org.eclipse.aether.version.InvalidVersionSpecificationException;
 import org.eclipse.aether.version.Version;
 import org.eclipse.aether.version.VersionConstraint;
 import org.eclipse.aether.version.VersionScheme;
+import org.jahia.api.Constants;
+import org.jahia.data.templates.JahiaTemplatesPackage;
 import org.jahia.exceptions.JahiaRuntimeException;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
+import org.jahia.osgi.BundleResource;
 import org.jahia.osgi.BundleState;
 import org.jahia.osgi.BundleUtils;
 import org.jahia.osgi.FrameworkService;
+import org.jahia.services.content.*;
+import org.jahia.services.content.decorator.JCRSiteNode;
 import org.jahia.services.modulemanager.ModuleManager;
 import org.jahia.services.modulemanager.spi.BundleService;
 import org.jahia.services.provisioning.ProvisioningManager;
+import org.jahia.services.query.QueryResultWrapper;
+import org.jahia.services.sites.JahiaSite;
+import org.jahia.services.templates.JahiaTemplateManagerService;
+import org.jahia.services.usermanager.JahiaUser;
+import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.jahia.settings.SettingsBean;
 import org.jahia.support.modulemanagement.config.ModuleManagementCommunityConfig;
 import org.ops4j.pax.url.mvn.MavenResolver;
@@ -34,14 +44,17 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.metatype.annotations.Designate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.Resource;
 
+import javax.jcr.RepositoryException;
+import javax.jcr.query.Query;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.TemporalAmount;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
@@ -56,6 +69,15 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Reference
     FeaturesService featuresService;
+
+    @Reference
+    JCRTemplate jcrTemplate;
+
+    @Reference
+    JahiaUserManagerService jahiaUserManagerService;
+
+    @Reference
+    JahiaTemplateManagerService jahiaTemplateManagerService;
 
     private static Instant lastUpdateTime = null;
     private List<String> modulesWithUpdates;
@@ -282,6 +304,111 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Override
     public Bundle getBundleById(long bundleId) {
         return bundleContext.getBundle(bundleId);
+    }
+
+    @Override
+    public List<String> getSitesDeployment(Bundle bundle) throws RepositoryException {
+        return jcrTemplate.doExecuteWithSystemSessionAsUser(jahiaUserManagerService.lookupRootUser().getJahiaUser(), Constants.EDIT_WORKSPACE, Locale.getDefault(), session -> {
+            try {
+                String query = String.format("select * from [jnt:virtualsite] as sites where ['j:installedModules'] = '%s'", bundle.getSymbolicName());
+                QueryResultWrapper resultWrapper = session.getWorkspace().getQueryManager().createQuery(query, Query.JCR_SQL2).execute();
+                JCRNodeIteratorWrapper nodes = resultWrapper.getNodes();
+                if (nodes.hasNext()) {
+                    List<String> sites = new ArrayList<>();
+                    nodes.forEachRemaining(node -> {
+                        JahiaSite site = (JCRSiteNode) node;
+                        if (site != null) {
+                            sites.add(site.getJCRLocalPath());
+                        }
+                    });
+                    return sites;
+                }
+            } catch (Exception e) {
+                logger.error("Error retrieving sites deployment for bundle {}", bundle.getSymbolicName(), e);
+                throw new JahiaRuntimeException("Error retrieving sites deployment for bundle " + bundle.getSymbolicName(), e);
+            }
+            return List.of();
+        });
+    }
+
+    @Override
+    public boolean importModule(Bundle bundle, boolean force) {
+        if (bundle == null) {
+            logger.warn("Bundle is null, cannot reimport");
+            return false;
+        }
+        JahiaTemplatesPackage templatePackage = jahiaTemplateManagerService.getTemplatePackageById(bundle.getSymbolicName());
+        if (templatePackage == null) {
+            logger.warn("Template package not found for bundle {}", bundle.getBundleId());
+            return false;
+        }
+        if (!force && checkImported(templatePackage)) {
+            logger.info("Module {} is already imported, skipping reimport", templatePackage.getId());
+            return true;
+        }
+        scanForImportFiles(bundle, templatePackage);
+
+        if (SettingsBean.getInstance().isProcessingServer()) {
+            try {
+                logger.info("--- Deploying content for DX OSGi bundle {} v{} --", templatePackage.getId(), templatePackage.getVersion());
+                JahiaUser user = JCRSessionFactory.getInstance().getCurrentUser() != null ? JCRSessionFactory.getInstance().getCurrentUser() : jahiaUserManagerService.lookupRootUser().getJahiaUser();
+
+                JCRTemplate.getInstance().doExecuteWithSystemSessionAsUser(user, null, null, session -> {
+                    jahiaTemplateManagerService.getTemplatePackageDeployer().initializeModuleContent(templatePackage, session);
+                    return null;
+                });
+                logger.info("--- Done deploying content for DX OSGi bundle {} v{} --", templatePackage.getId(), templatePackage.getVersion());
+                return true;
+            } catch (RepositoryException e) {
+                logger.error("Error while initializing module content for module " + templatePackage, e);
+            }
+        }
+        return false;
+    }
+
+    private boolean checkImported(final JahiaTemplatesPackage jahiaTemplatesPackage) {
+
+        try {
+
+            boolean imported = jcrTemplate.doExecuteWithSystemSessionAsUser(null, null, null, new JCRCallback<Boolean>() {
+
+                @Override
+                public Boolean doInJCR(JCRSessionWrapper session) throws RepositoryException {
+                    String path = "/modules/" + jahiaTemplatesPackage.getId() + "/" + jahiaTemplatesPackage.getVersion();
+                    return session.itemExists(path);
+                }
+            });
+            if (!imported) {
+                return false;
+            }
+        } catch (RepositoryException e) {
+            logger.error("Error while reading module jcr content" + jahiaTemplatesPackage, e);
+        }
+        return true;
+    }
+
+    private void scanForImportFiles(Bundle bundle, JahiaTemplatesPackage jahiaTemplatesPackage) {
+        List<Resource> importFiles = new ArrayList<>();
+        Enumeration<URL> importXMLEntryEnum = bundle.findEntries("META-INF", "import*.xml", false);
+        if (importXMLEntryEnum != null) {
+            while (importXMLEntryEnum.hasMoreElements()) {
+                importFiles.add(new BundleResource(importXMLEntryEnum.nextElement(), bundle));
+            }
+        }
+        Enumeration<URL> importZIPEntryEnum = bundle.findEntries("META-INF", "import*.zip", false);
+        if (importZIPEntryEnum != null) {
+            while (importZIPEntryEnum.hasMoreElements()) {
+                importFiles.add(new BundleResource(importZIPEntryEnum.nextElement(), bundle));
+            }
+        }
+        importFiles.sort(Comparator.comparing(o -> org.apache.commons.lang.StringUtils.substringBeforeLast(o.getFilename(), ".")));
+        for (Resource importFile : importFiles) {
+            try {
+                jahiaTemplatesPackage.addInitialImport(importFile.getURL().getPath());
+            } catch (IOException e) {
+                logger.error("Error retrieving URL for resource " + importFile, e);
+            }
+        }
     }
 
     private void updateModulesIfNeeded(boolean dryRun, List<String> modulesWithUpdates, List<String> modulesWithUpdatesURLs) throws IOException {

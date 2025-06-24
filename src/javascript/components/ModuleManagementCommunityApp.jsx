@@ -209,7 +209,7 @@ const ModuleRow = ({module, t}) => {
     return (
         <TableRow>
             <TableBodyCell>
-                <Typography variant="body" weight="semiBold">
+                <Typography variant="subheading" weight="semiBold">
                     {bundle.symbolicName} [{bundle.bundleId}]
                 </Typography>
             </TableBodyCell>
