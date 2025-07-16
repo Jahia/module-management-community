@@ -11,6 +11,7 @@ import org.jahia.support.modulemanagement.services.ModuleManagementCommunityServ
 import javax.inject.Inject;
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 public class ModuleManagementMutationResult {
 
@@ -23,9 +24,10 @@ public class ModuleManagementMutationResult {
     @GraphQLField
     @GraphQLName("updateModules")
     @GraphQLDescription("Return the list of modules that have been updated")
-    public List<String> updateModules(@GraphQLName("jahiaOnly") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean jahiaOnly,
-                                      @GraphQLName("filters") List<String> filters) throws IOException {
-        return moduleManagementCommunityService.updateModules(jahiaOnly, false, filters);
+    public Set<String> updateModules(@GraphQLName("jahiaOnly") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean jahiaOnly,
+                                     @GraphQLName("dryRun") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean dryRun,
+                                     @GraphQLName("filters") List<String> filters) throws IOException {
+        return moduleManagementCommunityService.updateModules(jahiaOnly, dryRun, filters);
     }
 
     @GraphQLField

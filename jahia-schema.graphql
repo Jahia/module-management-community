@@ -3604,12 +3604,12 @@ type ModuleManagementMutationResult {
     "Import a module from the file system into the OSGi framework"
     importModule(bundleId: Long, force: Boolean = false): String
     "Return the list of modules that have been updated"
-    updateModules(filters: [String], jahiaOnly: Boolean = true): [String]
+    updateModules(dryRun: Boolean = false, filters: [String], jahiaOnly: Boolean = true): [String]
 }
 
 type ModuleManagementQueryResult {
     "Return a list of modules that have updates available"
-    availableUpdates(filters: [String], jahiaOnly: Boolean = true): [String]
+    availableUpdates(filters: [String]): [String]
     "Return different information about a bundle"
     bundle(name: String): GqlBundle
     "Return a list of features available in the Jahia community edition"

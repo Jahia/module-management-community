@@ -11,7 +11,9 @@ import java.util.Set;
 
 public interface ModuleManagementCommunityService {
 
-    List<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters) throws IOException;
+    Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters) throws IOException;
+
+    Set<String> listAvailableUpdates(List<String> filters) throws IOException;
 
     List<Feature> getFeatures(boolean jahiaOnly, List<String> filters) throws IOException;
 

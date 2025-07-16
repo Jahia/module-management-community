@@ -32,9 +32,8 @@ public class ModuleManagementQueryResult {
     @GraphQLField
     @GraphQLName("availableUpdates")
     @GraphQLDescription("Return a list of modules that have updates available")
-    public List<String> getAvailableUpdates(@GraphQLName("jahiaOnly") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean jahiaOnly,
-                                      @GraphQLName("filters") List<String> filters) throws IOException {
-        return moduleManagementCommunityService.updateModules(jahiaOnly, true, filters);
+    public Set<String> getAvailableUpdates(@GraphQLName("filters") List<String> filters) throws IOException {
+        return moduleManagementCommunityService.listAvailableUpdates(filters);
     }
 
     @GraphQLField

@@ -18,11 +18,17 @@
     },
     "close": "Close",
     "refresh": "Refresh",
-    "updateAll": "Update all",
+    "updateAll": "Update all Jahia modules",
     "updateAllSuccess": "All modules have been updated successfully",
+    "updateAllSuccessWithFilter": "Modules {{modules}} have been updated successfully",
     "updateAllError": "An error occurred while updating all modules",
     "lastUpdate": "Latest updates checked at {{date}}",
-    "fetchUpdates": "Fetching updates"
+    "fetchUpdates": "Fetching updates",
+    "input": {
+      "filterBySymbolicName": "Filter by bundle symbolic name",
+      "dryRun": "Dry run",
+      "jahiaOnly": "Jahia modules only"
+    }
   },
   "help": {
     "url": "https://github.com/cedmail/moduleManagementCommunity/blob/main/README.md"

@@ -25,7 +25,6 @@ import org.jahia.osgi.FrameworkService;
 import org.jahia.services.content.*;
 import org.jahia.services.content.decorator.JCRSiteNode;
 import org.jahia.services.modulemanager.ModuleManager;
-import org.jahia.services.modulemanager.spi.BundleService;
 import org.jahia.services.provisioning.ProvisioningManager;
 import org.jahia.services.query.QueryResultWrapper;
 import org.jahia.services.sites.JahiaSite;
@@ -79,9 +78,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Reference
     JahiaTemplateManagerService jahiaTemplateManagerService;
 
-    private static Instant lastUpdateTime = null;
-    private List<String> modulesWithUpdates;
-    private List<String> modulesWithUpdatesURLs;
+    private Instant lastUpdateTime = null;
+    private Map<String, String> modulesWithUpdates;
     private BundleContext bundleContext;
 
     @Activate
@@ -103,7 +101,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     } catch (IOException e) {
                         logger.error("Error updating modules on startup", e);
                     }
-                }).exceptionally(ex -> {;
+                }).exceptionally(ex -> {
+                    ;
                     logger.error("Error during module update on startup", ex);
                     return null;
                 });
@@ -124,22 +123,100 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      */
 
     @Override
-    public List<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters) throws IOException {
-        if (lastUpdateTime != null && Instant.now().minus(Duration.ofHours(2)).isBefore(lastUpdateTime) && modulesWithUpdates != null) {
-            logger.info("Module updates is cached until {}", lastUpdateTime.plus(Duration.ofHours(2)));
-            return modulesWithUpdates;
-        }
+    public Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters) throws IOException {
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             logger.warn("ModuleManagementCommunityService is not available in read-only mode");
-            return Collections.emptyList();
+            return Collections.emptySet();
         }
         if (!settingsBean.isProcessingServer()) {
             logger.warn("ModuleManagementCommunityService is available only on processing servers");
-            return Collections.emptyList();
+            return Collections.emptySet();
         }
-        modulesWithUpdates = new ArrayList<>();
-        modulesWithUpdatesURLs = new ArrayList<>();
+
+        if (!dryRun && !jahiaOnly && CollectionUtils.isEmpty(filters)) {
+            throw new DataFetchingException("Updating all available bundles not permitted");
+        }
+
+        // Get or refresh the list of available updates
+        Set<String> updates = listAvailableUpdates(filters);
+        if (updates.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        // If jahiaOnly is true, filter the updates to only include Jahia modules
+        if (jahiaOnly) {
+            updates.removeIf(update -> {
+                String bundleKey = StringUtils.substringBeforeLast(update, " : ");
+                Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(bundleKey, "/"), StringUtils.substringAfterLast(bundleKey, "/"));
+                logger.debug("Bundle: {}", bundle);
+                if (bundle != null) {
+                    return !BundleUtils.isJahiaModuleBundle(bundle);
+                }
+                return true;
+            });
+        }
+
+        // Only perform update if not in dry run mode
+        if (updates.size() >= 10) {
+            logger.warn("Found {} modules with updates, consider reviewing the list before proceeding", updates.size());
+            throw new DataFetchingException("Found " + updates.size() +
+                    " modules with updates, please refine filters or run in dryRun mode");
+        }
+
+        if (logger.isInfoEnabled()) {
+            logger.info("Updating modules: {}", String.join(", ", updates));
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("- installBundle:\n");
+        for (String bundle : updates) {
+            sb.append("  - '").append(modulesWithUpdates.get(bundle)).append("'\n");
+        }
+        sb.append("  autoStart: true\n");
+        sb.append("  uninstallPreviousVersion: true\n");
+        sb.append("- karafCommand: \"log:log 'Bundles ").append(String.join(", ", updates)).append(" installed'\"\n");
+
+        String yamlScript = sb.toString();
+        if (!dryRun) {
+            provisioningManager.executeScript(yamlScript, "yaml");
+            modulesWithUpdates = null; // Clear the cache after execution
+        } else {
+            logger.info("Dry run mode enabled, not executing provisioning script:\n{}", yamlScript);
+        }
+
+        return updates;
+    }
+
+    /**
+     * Lists available updates for modules based on the provided filters.
+     *
+     * @param filters List of regex patterns to filter modules by their names, if empty or null, all modules will be considered.
+     * @return List of module names that have updates available.
+     * @throws IOException If an error occurs during the update check.
+     */
+    @Override
+    public Set<String> listAvailableUpdates(List<String> filters) throws IOException {
+        List<Pattern> patterns = getPatternList(filters);
+        if (lastUpdateTime != null && Instant.now().minus(Duration.ofHours(2)).isBefore(lastUpdateTime) && modulesWithUpdates != null) {
+            logger.info("Module updates is cached until {}", lastUpdateTime.plus(Duration.ofHours(2)));
+            Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
+            return filteredUpdates != null ? filteredUpdates : modulesWithUpdates.keySet();
+        }
+
+        SettingsBean settingsBean = SettingsBean.getInstance();
+        if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
+            logger.warn("ModuleManagementCommunityService is not available in read-only mode");
+            return Collections.emptySet();
+        }
+        if (!settingsBean.isProcessingServer()) {
+            logger.warn("ModuleManagementCommunityService is available only on processing servers");
+            return Collections.emptySet();
+        }
+
+        modulesWithUpdates = new HashMap<>();
+
+        // Rest of the existing code to find updates
         ModuleManager moduleManager = BundleUtils.getOsgiService(ModuleManager.class, null);
         if (moduleManager == null) {
             throw new DataFetchingException("Module manager service is not available");
@@ -148,23 +225,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         if (resolver == null) {
             throw new DataFetchingException("Maven resolver service is not available");
         }
-        if (!dryRun && !jahiaOnly && CollectionUtils.isEmpty(filters)) {
-            throw new DataFetchingException("Updating all available bundles not permitted");
-        }
-        if (CollectionUtils.isNotEmpty(filters)) {
-            if (filters.stream().anyMatch(filter -> filter.equals(".*") || filter.equals("^.*$"))) {
-                throw new DataFetchingException("Updating all available bundles not permitted, please specify a valid filter");
-            }
-        }
-        List<Pattern> patterns = new ArrayList<>();
-        if (CollectionUtils.isNotEmpty(filters)) {
-            filters.forEach(f -> patterns.add(Pattern.compile(f)));
-        }
-        moduleManager.getAllLocalInfos().entrySet().forEach(entry -> {
-            BundleService.BundleInformation bundleInfo = entry.getValue();
+
+        moduleManager.getAllLocalInfos().forEach((key1, bundleInfo) -> {
             if (bundleInfo.getOsgiState() == BundleState.ACTIVE) {
-                String key = getKeyIfBundleNameIsValid(jahiaOnly, filters, entry.getKey(), patterns);
-                if (key == null) return;
+                String key = getBundleKey(key1);
                 logger.info("Checking for updates for {}", key);
                 Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(key, "/"), StringUtils.substringAfterLast(key, "/"));
                 logger.debug("Bundle: {}", bundle);
@@ -195,20 +259,41 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                         if (!versions.isEmpty()) {
                             Version latestVersion = versions.get(versions.size() - 1);
                             if (!(latestVersion.toString().contains("SNAPSHOT")) && latestVersion.compareTo(bundleVersion) > 0) {
-                                modulesWithUpdates.add(key + " : " + latestVersion);
-                                modulesWithUpdatesURLs.add("mvn:" + artifact.getGroupId() + "/" + artifact.getArtifactId() + "/" + latestVersion);
+                                modulesWithUpdates.put(key + " : " + latestVersion, "mvn:" + artifact.getGroupId() + "/" + artifact.getArtifactId() + "/" + latestVersion);
                             }
                         }
                     }
                 }
             }
         });
-        Collections.sort(modulesWithUpdates);
-        updateFeatures(jahiaOnly, filters, resolver);
-        updateModulesIfNeeded(dryRun, modulesWithUpdates, modulesWithUpdatesURLs);
         lastUpdateTime = Instant.now();
+        Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
+        return filteredUpdates != null ? filteredUpdates : modulesWithUpdates.keySet();
+    }
 
-        return modulesWithUpdates;
+    private Set<String> getFilteredUpdates(List<String> filters, List<Pattern> patterns) {
+        if (CollectionUtils.isNotEmpty(filters)) {
+            Set<String> filteredUpdates = new HashSet<>();
+            modulesWithUpdates.keySet().stream().filter(key -> {
+                String finalKey = StringUtils.substringBefore(key, " : ");
+                return patterns.stream().anyMatch(pattern -> pattern.matcher(finalKey).matches());
+            }).forEach(filteredUpdates::add);
+            return filteredUpdates;
+        }
+        return null;
+    }
+
+    private static List<Pattern> getPatternList(List<String> filters) {
+        if (CollectionUtils.isNotEmpty(filters)) {
+            if (filters.stream().anyMatch(filter -> filter.equals(".*") || filter.equals("^.*$"))) {
+                throw new DataFetchingException("Updating all available bundles not permitted, please specify a valid filter");
+            }
+        }
+        List<Pattern> patterns = new ArrayList<>();
+        if (CollectionUtils.isNotEmpty(filters)) {
+            filters.forEach(f -> patterns.add(Pattern.compile(!f.endsWith("/.*") ? f + "/.*" : f)));
+        }
+        return patterns;
     }
 
     public void updateFeatures(boolean jahiaOnly, List<String> filters, MavenResolver resolver) throws IOException {
@@ -289,9 +374,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Override
     public Set<String> getInstalledModules() throws IOException {
         SortedSet<String> installedModules = new TreeSet<>();
-        for(Bundle bundle : FrameworkService.getBundleContext().getBundles()) {
-                String symbolicName = bundle.getSymbolicName();
-                installedModules.add(symbolicName+"/" + bundle.getVersion().toString()+":" + bundle.getState());
+        for (Bundle bundle : FrameworkService.getBundleContext().getBundles()) {
+            String symbolicName = bundle.getSymbolicName();
+            installedModules.add(symbolicName + "/" + bundle.getVersion().toString() + ":" + bundle.getState());
         }
         return installedModules;
     }
@@ -411,44 +496,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
     }
 
-    private void updateModulesIfNeeded(boolean dryRun, List<String> modulesWithUpdates, List<String> modulesWithUpdatesURLs) throws IOException {
-        if (!dryRun && !modulesWithUpdates.isEmpty()) {
-            if (modulesWithUpdates.size() >= 10) {
-                logger.warn("Found {} modules with updates, consider reviewing the list before proceeding with updates", modulesWithUpdates.size());
-                throw new DataFetchingException("Found " + modulesWithUpdates.size() + " modules with updates, please refine filters or run in dryRun mode to review the list before proceeding with updates");
-            }
-            logger.info("Updating modules: {}", String.join(", ", modulesWithUpdatesURLs));
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("- installBundle:\n");
-            for (String bundle : modulesWithUpdatesURLs) {
-                sb.append("  - '").append(bundle).append("'\n");
-            }
-            sb.append("  autoStart: true\n");
-            sb.append("  uninstallPreviousVersion: true\n");
-            sb.append("- karafCommand: \"log:log 'Bundles ").append(String.join(", ", modulesWithUpdates)).append(" installed'\"\n");
-
-            String yamlScript = sb.toString();
-            provisioningManager.executeScript(yamlScript, "yaml");
-        }
-    }
-
-    private static String getKeyIfBundleNameIsValid(boolean jahiaOnly, List<String> filters, String key, List<Pattern> patterns) {
-        if (CollectionUtils.isEmpty(filters) && jahiaOnly && !key.startsWith("org.jahia")) {
-            return null;
-        }
+    private static String getBundleKey(String key) {
         if (key.startsWith("org.jahia.modules/")) {
             key = key.substring("org.jahia.modules/".length());
-        }
-        boolean found = true;
-        if (!CollectionUtils.isEmpty(filters)) {
-            String finalKey = StringUtils.substringBefore(key, "/");
-            found = patterns.stream().anyMatch(filter -> {
-                return filter.matcher(finalKey).matches();
-            });
-        }
-        if (!found) {
-            return null;
         }
         return key;
     }
