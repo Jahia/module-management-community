@@ -57,6 +57,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Component(service = ModuleManagementCommunityService.class, immediate = true, configurationPid = "org.jahia.support.modulemanagement.services.ModuleManagementCommunityService", configurationPolicy = ConfigurationPolicy.REQUIRE)
 @Designate(ocd = ModuleManagementCommunityConfig.class)
@@ -81,6 +82,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     private Instant lastUpdateTime = null;
     private Map<String, String> modulesWithUpdates;
     private BundleContext bundleContext;
+    private Set<Pattern> excludeModules;
 
     @Activate
     public void activate(ModuleManagementCommunityConfig config, BundleContext bundleContext) {
@@ -90,6 +92,18 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             logger.warn("ModuleManagementCommunityService is not available in read-only mode");
             return;
+        }
+        if(StringUtils.isEmpty(config.excludedModules())) {
+            logger.info("No excluded modules configured for ModuleManagementCommunityService");
+            excludeModules = Collections.emptySet();
+        } else {
+            logger.info("Excluded modules: {}", config.excludedModules());
+            excludeModules = Arrays.stream(config.excludedModules().split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::isNotEmpty)
+                    .map(excludedModule -> excludedModule + "\\..*")
+                    .map(Pattern::compile)
+                    .collect(Collectors.toSet());
         }
         if (settingsBean.isProcessingServer()) {
             if (config.updateOnModuleStartup()) {
@@ -139,22 +153,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
 
         // Get or refresh the list of available updates
-        Set<String> updates = listAvailableUpdates(filters);
+        Set<String> updates = listAvailableUpdates(jahiaOnly, filters);
         if (updates.isEmpty()) {
             return Collections.emptySet();
-        }
-
-        // If jahiaOnly is true, filter the updates to only include Jahia modules
-        if (jahiaOnly) {
-            updates.removeIf(update -> {
-                String bundleKey = StringUtils.substringBeforeLast(update, " : ");
-                Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(bundleKey, "/"), StringUtils.substringAfterLast(bundleKey, "/"));
-                logger.debug("Bundle: {}", bundle);
-                if (bundle != null) {
-                    return !BundleUtils.isJahiaModuleBundle(bundle);
-                }
-                return true;
-            });
         }
 
         // Only perform update if not in dry run mode
@@ -191,12 +192,13 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     /**
      * Lists available updates for modules based on the provided filters.
      *
+     * @param jahiaOnly If true, only Jahia modules will be considered.
      * @param filters List of regex patterns to filter modules by their names, if empty or null, all modules will be considered.
      * @return List of module names that have updates available.
      * @throws IOException If an error occurs during the update check.
      */
     @Override
-    public Set<String> listAvailableUpdates(List<String> filters) throws IOException {
+    public Set<String> listAvailableUpdates(boolean jahiaOnly, List<String> filters) throws IOException {
         List<Pattern> patterns = getPatternList(filters);
         if (lastUpdateTime != null && Instant.now().minus(Duration.ofHours(2)).isBefore(lastUpdateTime) && modulesWithUpdates != null) {
             logger.info("Module updates is cached until {}", lastUpdateTime.plus(Duration.ofHours(2)));
@@ -229,6 +231,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         moduleManager.getAllLocalInfos().forEach((key1, bundleInfo) -> {
             if (bundleInfo.getOsgiState() == BundleState.ACTIVE) {
                 String key = getBundleKey(key1);
+                if (excludeModules.stream().anyMatch(pattern -> pattern.matcher(key).matches())) {
+                    logger.info("Skipping excluded module: {}", key);
+                    return;
+                }
                 logger.info("Checking for updates for {}", key);
                 Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(key, "/"), StringUtils.substringAfterLast(key, "/"));
                 logger.debug("Bundle: {}", bundle);
@@ -268,7 +274,21 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         });
         lastUpdateTime = Instant.now();
         Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
-        return filteredUpdates != null ? filteredUpdates : modulesWithUpdates.keySet();
+
+        Set<String> stringSet = filteredUpdates != null ? filteredUpdates : modulesWithUpdates.keySet();
+        // If jahiaOnly is true, filter the updates to only include Jahia modules
+        if (jahiaOnly) {
+            stringSet.removeIf(update -> {
+                String bundleKey = StringUtils.substringBeforeLast(update, " : ");
+                Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(bundleKey, "/"), StringUtils.substringAfterLast(bundleKey, "/"));
+                logger.debug("Bundle: {}", bundle);
+                if (bundle != null) {
+                    return !BundleUtils.isJahiaModuleBundle(bundle);
+                }
+                return true;
+            });
+        }
+        return stringSet;
     }
 
     private Set<String> getFilteredUpdates(List<String> filters, List<Pattern> patterns) {

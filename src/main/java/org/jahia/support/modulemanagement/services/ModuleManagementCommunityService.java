@@ -13,7 +13,7 @@ public interface ModuleManagementCommunityService {
 
     Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters) throws IOException;
 
-    Set<String> listAvailableUpdates(List<String> filters) throws IOException;
+    Set<String> listAvailableUpdates(boolean jahiaOnly, List<String> filters) throws IOException;
 
     List<Feature> getFeatures(boolean jahiaOnly, List<String> filters) throws IOException;
 

@@ -55,6 +55,55 @@ export const getComparator = (order, orderBy) => {
         (a, b) => -descendingComparator(a, b, orderBy);
 };
 
+// Add this utility function at the top of your component
+const resolveAllDependentModules = (targetModule, dependencyStructure, updatesAvailable) => {
+    // Build reverse dependency map (which modules depend on a given module)
+    const reverseDependencyMap = {};
+
+    Object.entries(dependencyStructure).forEach(([module, dependencies]) => {
+        dependencies.forEach(dependency => {
+            if (!reverseDependencyMap[dependency]) {
+                reverseDependencyMap[dependency] = new Set();
+            }
+
+            reverseDependencyMap[dependency].add(module);
+        });
+    });
+
+    console.log('Reverse dependency map', reverseDependencyMap);
+    console.log('Dependent updates for module', targetModule, 'are:', dependencyStructure[targetModule], 'from the dependency structure:', dependencyStructure);
+    // Start with the target module
+    const result = new Set([targetModule]);
+
+    // Function to recursively find all dependent modules
+    const findDependentModules = module => {
+        const dependentModules = reverseDependencyMap[module] || new Set();
+
+        dependentModules.forEach(dependentModule => {
+            // If this dependent module hasn't been processed yet
+            if (!result.has(dependentModule) && updatesAvailable.some(update => update.name === dependentModule)) {
+                result.add(dependentModule);
+            }
+
+            // Recursively find dependent modules for this dependent module
+            findDependentModules(dependentModule);
+        });
+    };
+
+    // Add dependent module from dependencyStructure if they have an update pending
+    if (dependencyStructure[targetModule] && dependencyStructure[targetModule].length > 0) {
+        dependencyStructure[targetModule].forEach(dependency => {
+            if (!result.has(dependency) && updatesAvailable.some(update => update.name === dependency)) {
+                result.add(dependency);
+            }
+        });
+    }
+
+    findDependentModules(targetModule);
+    console.log('All dependent modules for', targetModule, 'are:', Array.from(result));
+    return Array.from(result);
+};
+
 const BundleDetails = ({bundle, t, close}) => {
     return (
         <>
@@ -220,6 +269,14 @@ const ModuleRow = ({module, updates, handleUpdate, dependentUpdates, t}) => {
             if (hasDependencyUpdate) {
                 dependentUpdates(bundle.symbolicName, updates.filter(update => bundle.moduleDependencies.find(dep => dep.split(' [')[0] === update.name)).map(update => update.name));
             }
+
+            // If there is no moduleDependencies, we need to chek the bundle.dependencies
+            const hasDependencyUpdateInDependencies = bundle.dependencies && bundle.dependencies.some(dep => {
+                return updates.some(update => update.name === dep.split(' [')[0]);
+            });
+            if (hasDependencyUpdateInDependencies) {
+                dependentUpdates(bundle.symbolicName, updates.filter(update => bundle.dependencies.find(dep => dep.split(' [')[0] === update.name)).map(update => update.name));
+            }
         }
     }, [data, updates, dependentUpdates]);
 
@@ -255,7 +312,12 @@ const ModuleRow = ({module, updates, handleUpdate, dependentUpdates, t}) => {
     // Check if the module has an update available
     const updateAvailable = updates.some(update => update.name === bundle.symbolicName && update.version === bundle.version);
     // Get the list of dependent updates for this bundle
-    const dependentUpdateList = updates.filter(update => bundle.moduleDependencies && bundle.moduleDependencies.find(dep => dep.split(' [')[0] === update.name)).map(update => update.name);
+    let dependentUpdateList;
+    if (bundle.moduleDependencies === undefined || bundle.moduleDependencies === null || bundle.moduleDependencies.length === 0) {
+        dependentUpdateList = updates.filter(update => bundle.dependencies && bundle.dependencies.find(dep => dep.split(' [')[0] === update.name)).map(update => update.name);
+    } else {
+        dependentUpdateList = updates.filter(update => bundle.moduleDependencies && bundle.moduleDependencies.find(dep => dep.split(' [')[0] === update.name)).map(update => update.name);
+    }
 
     let dependentUpdateLabel = `Dependant updates: ${dependentUpdateList}`;
     return (
@@ -387,13 +449,13 @@ const ModuleManagementCommunityApp = () => {
             }
         }`, {fetchPolicy: 'cache-and-network', initialFetchPolicy: 'standby'});
 
-    const [updateAll] = useMutation(gql`mutation ($filter: [String], $jahiaOnly: Boolean, $dryRun: Boolean) {
+    const [updateAll] = useMutation(gql`mutation ($filter: [String], $dryRun: Boolean) {
             admin {
                 modulesManagement {
-                    updateModules(jahiaOnly: $jahiaOnly, filters: $filter, dryRun: $dryRun)
+                    updateModules(jahiaOnly: true, filters: $filter, dryRun: $dryRun)
                 }
             }
-        }`, {variables: {filter: [], jahiaOnly: preferences.jahiaOnly, dryRun: preferences.dryRun}});
+        }`, {variables: {filter: [], dryRun: preferences.dryRun}});
 
     useEffect(() => {
         if (data && data.admin && data.admin.modulesManagement && data.admin.modulesManagement.availableUpdates) {
@@ -498,31 +560,30 @@ const ModuleManagementCommunityApp = () => {
                     filter = [filter];
                 }
 
-                // Push dependent updates to the filter
-                if (Object.keys(dependentUpdates).length > 0) {
-                    console.log('Dependent updates:', dependentUpdates);
-                    Object.keys(dependentUpdates).forEach(dep => {
-                        if (dependentUpdates[dep].length > 0) {
-                            filter.push(...dependentUpdates[dep]);
-                        }
+                // Expand the filter to include all dependent modules
+                let expandedFilter = [];
+                filter.forEach(module => {
+                    const allDependents = resolveAllDependentModules(module, dependentUpdates, updates);
+                    expandedFilter = [...expandedFilter, ...allDependents];
+                });
 
-                        if (updates.find(update => update.name === dep) !== undefined) {
-                            filter.push(dep);
-                        }
-                    });
-                }
+                // Remove duplicates
+                expandedFilter = Array.from(new Set(expandedFilter)).sort();
 
-                // Sort and remove duplicates from the filter
-                filter = Array.from(new Set(filter)).sort((a, b) => a.localeCompare(b));
+                console.log('Expanded filter with all dependencies:', expandedFilter);
 
-                console.log('Final filter for updateAll:', filter);
+                await updateAll({
+                    variables: {
+                        filter: expandedFilter,
+                        jahiaOnly: preferences.jahiaOnly,
+                        dryRun: preferences.dryRun
+                    }
+                });
 
-                await updateAll({variables: {filter: filter, jahiaOnly: preferences.jahiaOnly, dryRun: preferences.dryRun}});
-                if (filter.length > 0) {
-                    notificationContext.notify(t('label.updateAllSuccessWithFilter', {modules: filter.join(', ')}), ['closeButton', 'closeAfter5s']);
-                } else {
-                    notificationContext.notify(t('label.updateAllSuccess'), ['closeButton', 'closeAfter5s']);
-                }
+                notificationContext.notify(
+                    t('label.updateAllSuccessWithFilter', {modules: expandedFilter.join(', ')}),
+                    ['closeButton', 'closeAfter5s']
+                );
 
                 await refetch();
             }
@@ -631,13 +692,13 @@ const ModuleManagementCommunityApp = () => {
                                         onChange={e => setPreferences({...preferences, dryRun: e.target.checked})}
                                 />
                                 </label>
-                                <label>{t('label.input.jahiaOnly')}
-                                    <input
-                                        type="checkbox"
-                                        checked={preferences.jahiaOnly}
-                                        onChange={e => setPreferences({...preferences, jahiaOnly: e.target.checked})}
-                                    />
-                                </label>
+                                {/* <label>{t('label.input.jahiaOnly')} */}
+                                {/*    <input */}
+                                {/*        type="checkbox" */}
+                                {/*        checked={preferences.jahiaOnly} */}
+                                {/*        onChange={e => setPreferences({...preferences, jahiaOnly: e.target.checked})} */}
+                                {/*    /> */}
+                                {/* </label> */}
                                 <Typography variant="subheading" weight="bold">
                                     {t('label.lastUpdate', {date: dayjs(data.admin.modulesManagement.lastUpdateTime).format('DD/MM/YYYY HH:mm')})}
                                 </Typography>
