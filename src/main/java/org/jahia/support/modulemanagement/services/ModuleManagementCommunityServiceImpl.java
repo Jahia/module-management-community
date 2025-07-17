@@ -25,6 +25,7 @@ import org.jahia.osgi.FrameworkService;
 import org.jahia.services.content.*;
 import org.jahia.services.content.decorator.JCRSiteNode;
 import org.jahia.services.modulemanager.ModuleManager;
+import org.jahia.services.modulemanager.spi.BundleService;
 import org.jahia.services.provisioning.ProvisioningManager;
 import org.jahia.services.query.QueryResultWrapper;
 import org.jahia.services.sites.JahiaSite;
@@ -62,7 +63,10 @@ import java.util.stream.Collectors;
 @Component(service = ModuleManagementCommunityService.class, immediate = true, configurationPid = "org.jahia.support.modulemanagement.services.ModuleManagementCommunityService", configurationPolicy = ConfigurationPolicy.REQUIRE)
 @Designate(ocd = ModuleManagementCommunityConfig.class)
 public class ModuleManagementCommunityServiceImpl implements ModuleManagementCommunityService {
-    private transient Logger logger = LoggerFactory.getLogger(ModuleManagementCommunityServiceImpl.class);
+    public static final String SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE = "ModuleManagementCommunityService is not available in read-only mode";
+    public static final String SNAPSHOT = "SNAPSHOT";
+    public static final String INVALID_VERSION_SPECIFICATION = "Invalid version specification";
+    private final Logger logger = LoggerFactory.getLogger(ModuleManagementCommunityServiceImpl.class);
 
     @Reference
     ProvisioningManager provisioningManager;
@@ -90,10 +94,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         logger.info("ModuleManagementCommunityService activated");
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
-            logger.warn("ModuleManagementCommunityService is not available in read-only mode");
+            logger.warn(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
             return;
         }
-        if(StringUtils.isEmpty(config.excludedModules())) {
+        if (StringUtils.isEmpty(config.excludedModules())) {
             logger.info("No excluded modules configured for ModuleManagementCommunityService");
             excludeModules = Collections.emptySet();
         } else {
@@ -116,7 +120,6 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                         logger.error("Error updating modules on startup", e);
                     }
                 }).exceptionally(ex -> {
-                    ;
                     logger.error("Error during module update on startup", ex);
                     return null;
                 });
@@ -132,7 +135,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * @param jahiaOnly If true, only Jahia modules will be considered.
      * @param dryRun    If true, no actual updates will be performed, just a check for available updates.
      * @param filters   List of regex patterns to filter modules by their names.
-     * @return List of module names that have updates available or have been updated.
+     * @return Set of module names that have updates available or have been updated.
      * @throws IOException If an error occurs during the update process.
      */
 
@@ -140,7 +143,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     public Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters) throws IOException {
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
-            logger.warn("ModuleManagementCommunityService is not available in read-only mode");
+            logger.warn(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
             return Collections.emptySet();
         }
         if (!settingsBean.isProcessingServer()) {
@@ -193,8 +196,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * Lists available updates for modules based on the provided filters.
      *
      * @param jahiaOnly If true, only Jahia modules will be considered.
-     * @param filters List of regex patterns to filter modules by their names, if empty or null, all modules will be considered.
-     * @return List of module names that have updates available.
+     * @param filters   List of regex patterns to filter modules by their names, if empty or null, all modules will be considered.
+     * @return Set of module names that have updates available.
      * @throws IOException If an error occurs during the update check.
      */
     @Override
@@ -208,7 +211,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
-            logger.warn("ModuleManagementCommunityService is not available in read-only mode");
+            logger.warn(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
             return Collections.emptySet();
         }
         if (!settingsBean.isProcessingServer()) {
@@ -228,57 +231,16 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             throw new DataFetchingException("Maven resolver service is not available");
         }
 
-        moduleManager.getAllLocalInfos().forEach((key1, bundleInfo) -> {
-            if (bundleInfo.getOsgiState() == BundleState.ACTIVE) {
-                String key = getBundleKey(key1);
-                if (excludeModules.stream().anyMatch(pattern -> pattern.matcher(key).matches())) {
-                    logger.info("Skipping excluded module: {}", key);
-                    return;
-                }
-                logger.info("Checking for updates for {}", key);
-                Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(key, "/"), StringUtils.substringAfterLast(key, "/"));
-                logger.debug("Bundle: {}", bundle);
-                if (bundle != null) {
-                    String location = bundle.getLocation();
-                    VersionScheme versionScheme = new GenericVersionScheme();
-                    Version bundleVersion;
-                    try {
-                        bundleVersion = versionScheme.parseVersion(bundle.getVersion().toString());
-                    } catch (InvalidVersionSpecificationException e) {
-                        throw new JahiaRuntimeException(e);
-                    }
-                    Artifact artifact = null;
-                    List<Version> versions = null;
-                    if (location.startsWith("mvn:")) {
-                        String[] parts = StringUtils.substringAfter(location, "mvn:").split("/");
-                        logger.debug("Checking for updates for {} : {} : {}", parts[0], parts[1], parts[2]);
-                        artifact = new DefaultArtifact(parts[0], parts[1], "jar", getVersion(bundle.getVersion()));
-                    } else {
-                        Dictionary<String, String> headers = bundle.getHeaders();
-                        if (headers.get("Jahia-GroupId") != null) {
-                            String groupId = headers.get("Jahia-GroupId");
-                            artifact = new DefaultArtifact(groupId, bundle.getSymbolicName(), "jar", getVersion(bundle.getVersion()));
-                        }
-                    }
-                    if (artifact != null) {
-                        versions = getVersions(bundle, resolver, artifact);
-                        if (!versions.isEmpty()) {
-                            Version latestVersion = versions.get(versions.size() - 1);
-                            if (!(latestVersion.toString().contains("SNAPSHOT")) && latestVersion.compareTo(bundleVersion) > 0) {
-                                modulesWithUpdates.put(key + " : " + latestVersion, "mvn:" + artifact.getGroupId() + "/" + artifact.getArtifactId() + "/" + latestVersion);
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        moduleManager.getAllLocalInfos().forEach((key, bundleInfo) ->
+                checkBundleUpdates(key, bundleInfo, resolver)
+        );
         lastUpdateTime = Instant.now();
         Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
 
-        Set<String> stringSet = filteredUpdates != null ? filteredUpdates : modulesWithUpdates.keySet();
+        Set<String> availableUpdates = filteredUpdates != null ? filteredUpdates : modulesWithUpdates.keySet();
         // If jahiaOnly is true, filter the updates to only include Jahia modules
         if (jahiaOnly) {
-            stringSet.removeIf(update -> {
+            availableUpdates.removeIf(update -> {
                 String bundleKey = StringUtils.substringBeforeLast(update, " : ");
                 Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(bundleKey, "/"), StringUtils.substringAfterLast(bundleKey, "/"));
                 logger.debug("Bundle: {}", bundle);
@@ -288,7 +250,56 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 return true;
             });
         }
-        return stringSet;
+        return availableUpdates;
+    }
+
+    private void checkBundleUpdates(String bundleKey, BundleService.BundleInformation bundleInfo, MavenResolver resolver) {
+        if (bundleInfo.getOsgiState() == BundleState.ACTIVE) {
+            String key = getBundleKey(bundleKey);
+            if (excludeModules.stream().anyMatch(pattern -> pattern.matcher(key).matches())) {
+                logger.info("Skipping excluded module: {}", key);
+                return;
+            }
+            logger.info("Checking for updates for {}", key);
+            Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(key, "/"), StringUtils.substringAfterLast(key, "/"));
+            logger.debug("Bundle: {}", bundle);
+            if (bundle != null) {
+                String location = bundle.getLocation();
+                VersionScheme versionScheme = new GenericVersionScheme();
+                Version bundleVersion;
+                try {
+                    bundleVersion = versionScheme.parseVersion(bundle.getVersion().toString());
+                } catch (InvalidVersionSpecificationException e) {
+                    throw new JahiaRuntimeException(e);
+                }
+                resolveAvailableVersions(resolver, location, bundle, bundleVersion, key);
+            }
+        }
+    }
+
+    private void resolveAvailableVersions(MavenResolver resolver, String location, Bundle bundle, Version bundleVersion, String key) {
+        Artifact artifact = null;
+        List<Version> versions = null;
+        if (location.startsWith("mvn:")) {
+            String[] parts = StringUtils.substringAfter(location, "mvn:").split("/");
+            logger.debug("Checking for updates for {} : {} : {}", parts[0], parts[1], parts[2]);
+            artifact = new DefaultArtifact(parts[0], parts[1], "jar", getVersion(bundle.getVersion()));
+        } else {
+            Dictionary<String, String> headers = bundle.getHeaders();
+            if (headers.get("Jahia-GroupId") != null) {
+                String groupId = headers.get("Jahia-GroupId");
+                artifact = new DefaultArtifact(groupId, bundle.getSymbolicName(), "jar", getVersion(bundle.getVersion()));
+            }
+        }
+        if (artifact != null) {
+            versions = getVersions(bundle, resolver, artifact);
+            if (!versions.isEmpty()) {
+                Version latestVersion = versions.get(versions.size() - 1);
+                if (!(latestVersion.toString().contains(SNAPSHOT)) && latestVersion.compareTo(bundleVersion) > 0) {
+                    modulesWithUpdates.put(key + " : " + latestVersion, "mvn:" + artifact.getGroupId() + "/" + artifact.getArtifactId() + "/" + latestVersion);
+                }
+            }
+        }
     }
 
     private Set<String> getFilteredUpdates(List<String> filters, List<Pattern> patterns) {
@@ -304,11 +315,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     }
 
     private static List<Pattern> getPatternList(List<String> filters) {
-        if (CollectionUtils.isNotEmpty(filters)) {
-            if (filters.stream().anyMatch(filter -> filter.equals(".*") || filter.equals("^.*$"))) {
-                throw new DataFetchingException("Updating all available bundles not permitted, please specify a valid filter");
-            }
+        if (CollectionUtils.isNotEmpty(filters) && filters.stream().anyMatch(filter -> filter.equals(".*") || filter.equals("^.*$"))) {
+            throw new DataFetchingException("Updating all available bundles not permitted, please specify a valid filter");
         }
+
         List<Pattern> patterns = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(filters)) {
             filters.forEach(f -> patterns.add(Pattern.compile(!f.endsWith("/.*") ? f + "/.*" : f)));
@@ -342,42 +352,45 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 logger.info("Checking for feature {} updates for {} : {} : {}, {}, {}", feature.getName(), groupId, artifactId, featureVersionStr, type, classifier);
                 File file = resolver.resolveMetadata(groupId, artifactId, "maven-metadata.xml", null);
                 if (file != null && file.exists()) {
-                    List<Version> versions = new ArrayList<>();
-                    try (InputStream in = Files.newInputStream(file.toPath())) {
-                        Versioning versioning = (new MetadataXpp3Reader()).read(in, false).getVersioning();
-                        versioning.getVersions().stream().filter(s -> {
-                            try {
-                                Version version = versionScheme.parseVersion(s);
-                                logger.debug("Checking version: {} for feature {}", version, feature.getName());
-                                if (!(version.toString().contains("SNAPSHOT"))) {
-                                    return versionConstraint.getRange().containsVersion(version) && version.compareTo(versionScheme.parseVersion(featureVersionStr)) > 0;
-                                } else {
-                                    logger.debug("Skipping SNAPSHOT version: {}", version);
-                                    return false;
-                                }
-                            } catch (InvalidVersionSpecificationException e) {
-                                logger.error("Invalid version specification", e);
-                                throw new DataFetchingException(e);
-                            }
-                        }).forEach(version -> {
-                            try {
-                                versions.add(versionScheme.parseVersion(version));
-                            } catch (InvalidVersionSpecificationException e) {
-                                throw new RuntimeException(e);
-                            }
-                        });
-                        logger.info("Found {} versions", versions.size());
-                        if (logger.isInfoEnabled()) {
-                            versions.forEach(version -> {
-                                logger.info("Version : {}", version);
-                            });
-                        }
-                    }
+                    checkFeatureVersions(feature, file, versionScheme, versionConstraint, featureVersionStr);
                 }
             } catch (InvalidVersionSpecificationException | IOException | XmlPullParserException e) {
-                throw new RuntimeException(e);
+                throw new JahiaRuntimeException(e);
             }
         });
+    }
+
+    private void checkFeatureVersions(Feature feature, File file, VersionScheme versionScheme, VersionConstraint versionConstraint, String featureVersionStr) throws IOException, XmlPullParserException {
+        List<Version> versions = new ArrayList<>();
+        try (InputStream in = Files.newInputStream(file.toPath())) {
+            Versioning versioning = (new MetadataXpp3Reader()).read(in, false).getVersioning();
+            versioning.getVersions().stream().filter(s -> {
+                try {
+                    Version version = versionScheme.parseVersion(s);
+                    logger.debug("Checking version: {} for feature {}", version, feature.getName());
+                    if (!(version.toString().contains(SNAPSHOT))) {
+                        return versionConstraint.getRange().containsVersion(version) && version.compareTo(versionScheme.parseVersion(featureVersionStr)) > 0;
+                    } else {
+                        logger.debug("Skipping SNAPSHOT version: {}", version);
+                        return false;
+                    }
+                } catch (InvalidVersionSpecificationException e) {
+                    throw new DataFetchingException(e);
+                }
+            }).forEach(version -> {
+                try {
+                    versions.add(versionScheme.parseVersion(version));
+                } catch (InvalidVersionSpecificationException e) {
+                    throw new JahiaRuntimeException(e);
+                }
+            });
+            logger.info("Found {} versions", versions.size());
+            if (logger.isInfoEnabled()) {
+                versions.forEach(version ->
+                        logger.info("Version : {}", version)
+                );
+            }
+        }
     }
 
     @Override
@@ -386,7 +399,6 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             Feature[] features = featuresService.listInstalledFeatures();
             return Arrays.asList(features);
         } catch (Exception e) {
-            logger.error("Error retrieving installed features", e);
             throw new DataFetchingException("Error retrieving installed features", e);
         }
     }
@@ -430,7 +442,6 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 }
             } catch (Exception e) {
                 logger.error("Error retrieving sites deployment for bundle {}", bundle.getSymbolicName(), e);
-                throw new JahiaRuntimeException("Error retrieving sites deployment for bundle " + bundle.getSymbolicName(), e);
             }
             return List.of();
         });
@@ -531,45 +542,18 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             versionConstraint = versionScheme.parseVersionConstraint(getVersion(bundle.getVersion()));
             logger.info("Checking for updates for {} : {}", artifact, versionConstraint.getRange());
         } catch (InvalidVersionSpecificationException e) {
-            logger.error("Invalid version specification", e);
             throw new DataFetchingException(e);
         }
         try {
             Version bundleVersion = versionScheme.parseVersion(bundle.getVersion().toString());
             File file = resolver.resolveMetadata(artifact.getGroupId(), artifact.getArtifactId(), "maven-metadata.xml", null);
             if (file != null && file.exists()) {
-                List<Version> versions = new ArrayList<>();
-                try (InputStream in = Files.newInputStream(file.toPath())) {
-                    Versioning versioning = (new MetadataXpp3Reader()).read(in, false).getVersioning();
-                    versioning.getVersions().stream().filter(s -> {
-                        try {
-                            Version version = versionScheme.parseVersion(s);
-                            logger.debug("Checking version: {} for bundle {}", version, bundle.getSymbolicName());
-                            if (!(version.toString().contains("SNAPSHOT"))) {
-                                return versionConstraint.getRange().containsVersion(version) && version.compareTo(bundleVersion) > 0;
-                            } else {
-                                logger.debug("Skipping SNAPSHOT version: {}", version);
-                                return false;
-                            }
-                        } catch (InvalidVersionSpecificationException e) {
-                            logger.error("Invalid version specification", e);
-                            throw new DataFetchingException(e);
-                        }
-                    }).forEach(version -> {
-                        try {
-                            versions.add(versionScheme.parseVersion(version));
-                        } catch (InvalidVersionSpecificationException e) {
-                            throw new RuntimeException(e);
-                        }
-                    });
-                } catch (IOException | XmlPullParserException e) {
-                    throw new DataFetchingException(e);
-                }
+                List<Version> versions = getVersions(bundle, file, versionScheme, versionConstraint, bundleVersion);
                 logger.info("Found {} versions", versions.size());
                 if (logger.isDebugEnabled()) {
-                    versions.forEach(version -> {
-                        logger.debug("Version : {}", version);
-                    });
+                    versions.forEach(version ->
+                            logger.debug("Version : {}", version)
+                    );
                 }
                 return versions;
             }
@@ -577,6 +561,36 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             throw new DataFetchingException(e);
         }
         return Collections.emptyList();
+    }
+
+    private List<Version> getVersions(Bundle bundle, File file, VersionScheme versionScheme, VersionConstraint versionConstraint, Version bundleVersion) {
+        List<Version> versions = new ArrayList<>();
+        try (InputStream in = Files.newInputStream(file.toPath())) {
+            Versioning versioning = (new MetadataXpp3Reader()).read(in, false).getVersioning();
+            versioning.getVersions().stream().filter(s -> {
+                try {
+                    Version version = versionScheme.parseVersion(s);
+                    logger.debug("Checking version: {} for bundle {}", version, bundle.getSymbolicName());
+                    if (!(version.toString().contains(SNAPSHOT))) {
+                        return versionConstraint.getRange().containsVersion(version) && version.compareTo(bundleVersion) > 0;
+                    } else {
+                        logger.debug("Skipping SNAPSHOT version: {}", version);
+                        return false;
+                    }
+                } catch (InvalidVersionSpecificationException e) {
+                    throw new DataFetchingException(e);
+                }
+            }).forEach(version -> {
+                try {
+                    versions.add(versionScheme.parseVersion(version));
+                } catch (InvalidVersionSpecificationException e) {
+                    throw new JahiaRuntimeException(e);
+                }
+            });
+        } catch (IOException | XmlPullParserException e) {
+            throw new DataFetchingException(e);
+        }
+        return versions;
     }
 
     private String getVersion(org.osgi.framework.Version version) {
