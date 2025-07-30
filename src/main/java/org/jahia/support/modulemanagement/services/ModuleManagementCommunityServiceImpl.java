@@ -114,7 +114,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 logger.info("ModuleManagementCommunityService is configured to update modules on startup");
                 CompletableFuture.runAsync(() -> {
                     try {
-                        updateModules(true, false, null);
+                        updateModules(true, false, null, true, true);
                         logger.info("Modules update upon startup is done successfully");
                     } catch (IOException e) {
                         logger.error("Error updating modules on startup", e);
@@ -140,7 +140,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      */
 
     @Override
-    public Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters) throws IOException {
+    public Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious) throws IOException {
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             logger.warn(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
@@ -177,8 +177,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         for (String bundle : updates) {
             sb.append("  - '").append(modulesWithUpdates.get(bundle)).append("'\n");
         }
-        sb.append("  autoStart: true\n");
-        sb.append("  uninstallPreviousVersion: true\n");
+        sb.append("  autoStart: ").append(autostart).append("\n");
+        sb.append("  uninstallPreviousVersion: ").append(uninstallPrevious).append("\n");
         sb.append("- karafCommand: \"log:log 'Bundles ").append(String.join(", ", updates)).append(" installed'\"\n");
 
         String yamlScript = sb.toString();

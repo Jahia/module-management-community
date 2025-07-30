@@ -507,8 +507,6 @@ type AdminMutation {
     personalApiTokens: PersonalApiTokensMutation
     "Augmented Search administrative mutations"
     search: ASAdminMutations
-    "Sitemap API mutations"
-    sitemap: GqlSitemapMutation
 }
 
 "Admin queries root"
@@ -528,8 +526,6 @@ type AdminQuery {
     roles: [AclRole]
     "Augmented Search administrative queries"
     search: ASAdminQueries
-    "Sitemap API queries"
-    sitemap: GqlSitemapQueries
     "Jahia admin tools"
     tools: AdminTools
     "Get user administration endpoint"
@@ -2038,27 +2034,6 @@ type GqlShardConfiguration {
     primaryCount: Int
     "Number of replicas"
     replicas: Int
-}
-
-type GqlSitemapMutation {
-    "Sending sitemap(s) based on either sitemap index XML or sitemap XML URL to search engine URL(s) specified in CFG"
-    sendSitemapToSearchEngine(
-        "Sitemap index XML or sitemap XML URL"
-        sitemapURL: String!
-    ): Boolean
-    "Trigger the sitemap job execution for the given sitekey"
-    triggerSitemapJob(
-        "Site key"
-        siteKey: String
-    ): Boolean
-}
-
-type GqlSitemapQueries {
-    "Get site URL with only server domain appended from sitemap URL"
-    siteUrl(
-        "Sitemap index XML or sitemap XML URL"
-        siteKey: String!
-    ): String
 }
 
 "Aggregation bucket representation"
@@ -3604,7 +3579,7 @@ type ModuleManagementMutationResult {
     "Import a module from the file system into the OSGi framework"
     importModule(bundleId: Long, force: Boolean = false): String
     "Return the list of modules that have been updated"
-    updateModules(dryRun: Boolean = false, filters: [String], jahiaOnly: Boolean = true): [String]
+    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], jahiaOnly: Boolean = true, uninstallPrevious: Boolean = false): [String]
 }
 
 type ModuleManagementQueryResult {

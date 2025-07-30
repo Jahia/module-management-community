@@ -55,6 +55,15 @@
     gap: var(--spacing-medium);
 }
 
+.columnMenu {
+    display: flex;
+    flex-direction: column;
+    margin-right: 16px;
+    border: 1px solid #ccc;
+    padding: 8px;
+    border-radius: 4px
+}
+
 .remove {
     color: var(--color-danger);
 }
@@ -77,4 +86,29 @@
 .padding {
     flex: 0 0 auto;
     padding: 0 2% 2% 2%;
+}
+
+.paginationContainer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding: 8px 16px;
+    border-top: 1px solid #ddd;
+}
+
+.paginationControls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.itemsPerPageSelect {
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+}
+
+.paginationInfo {
+    color: #666;
 }

@@ -26,8 +26,10 @@ public class ModuleManagementMutationResult {
     @GraphQLDescription("Return the list of modules that have been updated")
     public Set<String> updateModules(@GraphQLName("jahiaOnly") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean jahiaOnly,
                                      @GraphQLName("dryRun") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean dryRun,
+                                     @GraphQLName("autostart") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean autostart,
+                                     @GraphQLName("uninstallPrevious") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean uninstallPrevious,
                                      @GraphQLName("filters") List<String> filters) throws IOException {
-        return moduleManagementCommunityService.updateModules(jahiaOnly, dryRun, filters);
+        return moduleManagementCommunityService.updateModules(jahiaOnly, dryRun, filters, autostart, uninstallPrevious);
     }
 
     @GraphQLField

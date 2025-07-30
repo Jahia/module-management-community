@@ -27,7 +27,15 @@
     "input": {
       "filterBySymbolicName": "Filter by bundle symbolic name",
       "dryRun": "Dry run",
-      "jahiaOnly": "Jahia modules only"
+      "jahiaOnly": "Jahia modules only",
+      "autostart": "Autostart modules",
+      "uninstallPrevious": "Uninstall previous version",
+      "updatesOnly": "Show updates only"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "showing": "Showing {{from}} to {{to}} of {{total}} modules"
     }
   },
   "help": {

@@ -24,6 +24,6 @@ public class ModuleManagementCommunityUpdateCommand implements Action {
                 throw new IllegalStateException("ModuleManagementCommunityService is not available. Please ensure the module is installed and active.");
             }
         }
-        return communityService.updateModules(true, true, null);
+        return communityService.updateModules(true, true, null, false, false);
     }
 }

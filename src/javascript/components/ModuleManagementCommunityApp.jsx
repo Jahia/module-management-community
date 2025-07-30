@@ -192,7 +192,7 @@ const ModuleRow = ({module, updates, handleUpdate, dependentUpdates, t}) => {
                 }
             }
         }
-    }`, {fetchPolicy: 'cache-and-network', variables: {module: module.name}});
+    }`, {fetchPolicy: 'cache-first', variables: {module: module.name}});
 
     const [stopBundle] = useMutation(gql`mutation ($bundleId: Long!) {
         admin {
@@ -424,7 +424,10 @@ const ModuleManagementCommunityApp = () => {
     const {t} = useTranslation('module-management-community');
     const [preferences, setPreferences] = useState({
         dryRun: true,
-        jahiaOnly: true
+        jahiaOnly: true,
+        autostart: true,
+        uninstallPrevious: true,
+        updatesOnly: false
     });
     const [order, setOrder] = React.useState('asc');
     const [orderBy, setOrderBy] = React.useState('name');
@@ -432,6 +435,8 @@ const ModuleManagementCommunityApp = () => {
     const [modules, setModules] = React.useState([]);
     const [filter, setFilter] = useState('');
     const [dependentUpdates, setDependentUpdates] = useState({});
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(20);
     const {data: initialData, error: initialError, loading: initialLoading} = useQuery(gql`query {
             admin {
                 modulesManagement {
@@ -449,13 +454,13 @@ const ModuleManagementCommunityApp = () => {
             }
         }`, {fetchPolicy: 'cache-and-network', initialFetchPolicy: 'standby'});
 
-    const [updateAll] = useMutation(gql`mutation ($filter: [String], $dryRun: Boolean) {
+    const [updateAll] = useMutation(gql`mutation ($filter: [String], $dryRun: Boolean, $autostart: Boolean, $uninstall: Boolean) {
             admin {
                 modulesManagement {
-                    updateModules(jahiaOnly: true, filters: $filter, dryRun: $dryRun)
+                    updateModules(jahiaOnly: true, filters: $filter, dryRun: $dryRun, autostart: $autostart, uninstallPrevious: $uninstall)
                 }
             }
-        }`, {variables: {filter: [], dryRun: preferences.dryRun}});
+        }`, {variables: {filter: [], dryRun: preferences.dryRun, autostart: preferences.autostart, uninstall: preferences.uninstallPrevious}});
 
     useEffect(() => {
         if (data && data.admin && data.admin.modulesManagement && data.admin.modulesManagement.availableUpdates) {
@@ -469,7 +474,7 @@ const ModuleManagementCommunityApp = () => {
     }, [data, order, orderBy]);
 
     useEffect(() => {
-        if (updates.length > 0 && initialData && initialData.admin && initialData.admin.modulesManagement && initialData.admin.modulesManagement.installedModules) {
+        if (updates.length > 0 && initialData?.admin?.modulesManagement?.installedModules) {
             const installedModules = initialData.admin.modulesManagement.installedModules.map((module => ({
                 name: module.substring(0, module.indexOf('/')).trim(),
                 version: module.substring(module.indexOf('/') + 1, module.indexOf(':')).trim(),
@@ -480,6 +485,11 @@ const ModuleManagementCommunityApp = () => {
             setModules(installedModules);
         }
     }, [initialData, order, orderBy, updates]);
+
+    useEffect(() => {
+        // Reset to page 1 when filter changes
+        setCurrentPage(1);
+    }, [filter, preferences.updatesOnly]);
 
     if (error || initialError) {
         console.log('Error when fetching data: ', error, initialError);
@@ -551,7 +561,7 @@ const ModuleManagementCommunityApp = () => {
         try {
             if (filter === undefined || filter === null || filter.length === 0) {
                 console.log('No filter provided, updating all modules');
-                await updateAll({variables: {filter: [], jahiaOnly: preferences.jahiaOnly, dryRun: preferences.dryRun}});
+                await updateAll({variables: {filter: [], jahiaOnly: preferences.jahiaOnly, dryRun: preferences.dryRun, autostart: preferences.autostart, uninstall: preferences.uninstallPrevious}});
                 notificationContext.notify(t('label.updateAllSuccess'), ['closeButton', 'closeAfter5s']);
                 await refetch();
             } else {
@@ -576,7 +586,9 @@ const ModuleManagementCommunityApp = () => {
                     variables: {
                         filter: expandedFilter,
                         jahiaOnly: preferences.jahiaOnly,
-                        dryRun: preferences.dryRun
+                        dryRun: preferences.dryRun,
+                        autostart: preferences.autostart,
+                        uninstall: preferences.uninstallPrevious
                     }
                 });
 
@@ -596,7 +608,13 @@ const ModuleManagementCommunityApp = () => {
 
     // Filter modules by symbolicName (case-insensitive)
     const filteredModules = modules.filter(
-        m => filter.trim() === '' ? true : m.name.toLowerCase().includes(filter.trim().toLowerCase())
+        m => {
+            if (preferences.updatesOnly && !updates.some(update => update.name === m.name)) {
+                return false;
+            }
+
+            return filter.trim() === '' ? true : m.name.toLowerCase().includes(filter.trim().toLowerCase());
+        }
     );
 
     const tableHead = () => {
@@ -676,7 +694,7 @@ const ModuleManagementCommunityApp = () => {
                 }
                         action={
                             <div className={styles.actionGroup}>
-                                <label>{t('label.input.filterBySymbolicName')}
+                                <label className={styles.columnMenu}>{t('label.input.filterBySymbolicName')}
                                     <input
                                         type="text"
                                         placeholder="Filter by symbolic name"
@@ -685,13 +703,44 @@ const ModuleManagementCommunityApp = () => {
                                         onChange={e => setFilter(e.target.value)}
                                     />
                                 </label>
-                                <label>{t('label.input.dryRun')}
-                                    <input
-                                        type="checkbox"
-                                        checked={preferences.dryRun}
-                                        onChange={e => setPreferences({...preferences, dryRun: e.target.checked})}
-                                />
-                                </label>
+                                <div className={styles.columnMenu}>
+                                    <label style={{marginBottom: '8px'}}>
+                                        <input
+                                            type="checkbox"
+                                            style={{marginRight: '8px'}}
+                                            checked={preferences.dryRun}
+                                            onChange={e => setPreferences({...preferences, dryRun: e.target.checked})}
+                                        />
+                                        {t('label.input.dryRun')}
+                                    </label>
+                                    <label style={{marginBottom: '8px'}}>
+                                        <input
+                                            type="checkbox"
+                                            style={{marginRight: '8px'}}
+                                            checked={preferences.autostart}
+                                            onChange={e => setPreferences({...preferences, autostart: e.target.checked})}
+                                        />
+                                        {t('label.input.autostart')}
+                                    </label>
+                                    <label style={{marginBottom: '8px'}}>
+                                        <input
+                                            type="checkbox"
+                                            style={{marginRight: '8px'}}
+                                            checked={preferences.uninstallPrevious}
+                                            onChange={e => setPreferences({...preferences, uninstallPrevious: e.target.checked})}
+                                        />
+                                        {t('label.input.uninstallPrevious')}
+                                    </label>
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            style={{marginRight: '8px'}}
+                                            checked={preferences.updatesOnly}
+                                            onChange={e => setPreferences({...preferences, updatesOnly: e.target.checked})}
+                                        />
+                                        {t('label.input.updatesOnly')}
+                                    </label>
+                                </div>
                                 {/* <label>{t('label.input.jahiaOnly')} */}
                                 {/*    <input */}
                                 {/*        type="checkbox" */}
@@ -729,7 +778,7 @@ const ModuleManagementCommunityApp = () => {
                 <Table>
                     {tableHead()}
                     <TableBody>
-                        {filteredModules.map(module => (
+                        {filteredModules.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map(module => (
                             <ModuleRow key={module.name}
                                        module={module}
                                        updates={updates}
@@ -739,6 +788,50 @@ const ModuleManagementCommunityApp = () => {
                             ))}
                     </TableBody>
                 </Table>
+                {/* Pagination controls */}
+                <div className={styles.paginationContainer}>
+                    <div className={styles.paginationInfo}>
+                        <Typography variant="body">
+                            {t('label.pagination.showing', {
+                                from: Math.min(((currentPage - 1) * itemsPerPage) + 1, filteredModules.length),
+                                to: Math.min(currentPage * itemsPerPage, filteredModules.length),
+                                total: filteredModules.length
+                            })}
+                        </Typography>
+                    </div>
+                    <div className={styles.paginationControls}>
+                        <Button
+                            variant="ghost"
+                            size="small"
+                            label={t('label.pagination.previous')}
+                            isDisabled={currentPage === 1}
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        />
+
+                        <select
+                            value={itemsPerPage}
+                            className={styles.itemsPerPageSelect}
+                            onChange={e => {
+                                setItemsPerPage(Number(e.target.value));
+                                setCurrentPage(1); // Reset to first page when changing items per page
+                            }}
+                        >
+                            <option value={20}>20</option>
+                            <option value={40}>40</option>
+                            <option value={60}>60</option>
+                        </select>
+
+                        <Button
+                            variant="ghost"
+                            size="small"
+                            label={t('label.pagination.next')}
+                            isDisabled={currentPage >= Math.ceil(filteredModules.length / itemsPerPage)}
+                            onClick={() => setCurrentPage(prev =>
+                                Math.min(prev + 1, Math.ceil(filteredModules.length / itemsPerPage))
+                            )}
+                        />
+                    </div>
+                </div>
             </CardContent>
         </Card>
     );
