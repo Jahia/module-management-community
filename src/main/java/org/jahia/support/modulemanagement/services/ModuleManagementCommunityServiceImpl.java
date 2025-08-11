@@ -29,6 +29,7 @@ import org.jahia.services.modulemanager.spi.BundleService;
 import org.jahia.services.provisioning.ProvisioningManager;
 import org.jahia.services.query.QueryResultWrapper;
 import org.jahia.services.sites.JahiaSite;
+import org.jahia.services.sites.JahiaSitesService;
 import org.jahia.services.templates.JahiaTemplateManagerService;
 import org.jahia.services.usermanager.JahiaUser;
 import org.jahia.services.usermanager.JahiaUserManagerService;
@@ -82,6 +83,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Reference
     JahiaTemplateManagerService jahiaTemplateManagerService;
+
+    @Reference
+    JahiaSitesService jahiaSitesService;
 
     private Instant lastUpdateTime = null;
     private Map<String, String> modulesWithUpdates;
@@ -424,18 +428,18 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     }
 
     @Override
-    public List<String> getSitesDeployment(Bundle bundle) throws RepositoryException {
+    public Map<String, Boolean> getSitesDeployment(Bundle bundle) throws RepositoryException {
         return jcrTemplate.doExecuteWithSystemSessionAsUser(jahiaUserManagerService.lookupRootUser().getJahiaUser(), Constants.EDIT_WORKSPACE, Locale.getDefault(), session -> {
             try {
-                String query = String.format("select * from [jnt:virtualsite] as sites where ['j:installedModules'] = '%s'", bundle.getSymbolicName());
+                String query = "select * from [jnt:virtualsite] as sites WHERE ISDESCENDANTNODE(sites, '/sites')";
                 QueryResultWrapper resultWrapper = session.getWorkspace().getQueryManager().createQuery(query, Query.JCR_SQL2).execute();
                 JCRNodeIteratorWrapper nodes = resultWrapper.getNodes();
                 if (nodes.hasNext()) {
-                    List<String> sites = new ArrayList<>();
+                    Map<String, Boolean> sites = new HashMap<>();
                     nodes.forEachRemaining(node -> {
                         JahiaSite site = (JCRSiteNode) node;
                         if (site != null) {
-                            sites.add(site.getJCRLocalPath());
+                            sites.put(site.getSiteKey(), site.getInstalledModules().contains(bundle.getSymbolicName()));
                         }
                     });
                     return sites;
@@ -443,8 +447,70 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             } catch (Exception e) {
                 logger.error("Error retrieving sites deployment for bundle {}", bundle.getSymbolicName(), e);
             }
-            return List.of();
+            return Map.of();
         });
+    }
+
+    public boolean enableModuleOnSites(Bundle bundle, Set<String> sites) {
+        if (bundle == null || sites == null || sites.isEmpty()) {
+            logger.warn("Bundle or sites are null or empty, cannot enable module on sites");
+            return false;
+        }
+        // Generate a provisioning script to enable the module on the specified sites
+        //# Enable jExperience on digitall,luxe
+        //- enable: "jexperience"
+        //  site: ["digitall", "luxe"]
+        //- karafCommand: "log:log 'jExperience enabled on digitall and luxe'"
+        String yamlScript = "- enable: \"" + bundle.getSymbolicName() + "\"\n" +
+                "  site: [" +
+                sites.stream().map(site -> "\"" + site + "\"").collect(Collectors.joining(", ")) +
+                "]\n" +
+                "- karafCommand: \"log:log '" + bundle.getSymbolicName() + " enabled on " + String.join(", ", sites) + "'\"\n";
+        try {
+            provisioningManager.executeScript(yamlScript, "yaml");
+            logger.info("Module {} enabled on sites {}", bundle.getSymbolicName(), String.join(", ", sites));
+            return true;
+        } catch (Exception e) {
+            logger.error("Error enabling module {} on sites {}", bundle.getSymbolicName(), String.join(", ", sites), e);
+            return false;
+        }
+    }
+
+    public boolean disableModuleOnSites(Bundle bundle, Set<String> sites) {
+        if (bundle == null || sites == null || sites.isEmpty()) {
+            logger.warn("Bundle or sites are null or empty, cannot disable module on sites");
+            return false;
+        }
+        // Call jahia site service to uninstall the module from the specified sites
+        try {
+            jcrTemplate.doExecuteWithSystemSessionAsUser(jahiaUserManagerService.lookupRootUser().getJahiaUser(), Constants.EDIT_WORKSPACE, Locale.getDefault(), session -> {
+                try {
+                    for (String siteKey : sites) {
+                        JahiaSite site = jahiaSitesService.getSiteByKey(siteKey, session);
+                        if (site != null) {
+                            JahiaTemplatesPackage templatePackage = jahiaTemplateManagerService.getTemplatePackageById(bundle.getSymbolicName());
+                            if (templatePackage != null) {
+                                jahiaTemplateManagerService.uninstallModule(templatePackage, site.getJCRLocalPath(), session);
+                                logger.info("Module {} disabled on site {}", bundle.getSymbolicName(), siteKey);
+                            } else {
+                                logger.warn("Module {} not found for site {}", bundle.getSymbolicName(), siteKey);
+                            }
+                        } else {
+                            logger.warn("Site {} not found", siteKey);
+                        }
+                    }
+                    session.save();
+                } catch (RepositoryException e) {
+                    logger.error("Error disabling module {} on sites {}", bundle.getSymbolicName(), String.join(", ", sites), e);
+                }
+                return null;
+            });
+        } catch (RepositoryException e) {
+            logger.error("Error disabling module {} on sites {}", bundle.getSymbolicName(), String.join(", ", sites), e);
+            return false;
+        }
+        logger.info("Module {} disabled on sites {}", bundle.getSymbolicName(), String.join(", ", sites));
+        return true;
     }
 
     @Override

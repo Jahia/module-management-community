@@ -7,6 +7,7 @@ import javax.jcr.RepositoryException;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public interface ModuleManagementCommunityService {
@@ -23,7 +24,10 @@ public interface ModuleManagementCommunityService {
 
     Bundle getBundleById(long bundleId);
 
-    List<String> getSitesDeployment(Bundle bundle) throws RepositoryException;
+    Map<String, Boolean> getSitesDeployment(Bundle bundle) throws RepositoryException;
+
+    boolean enableModuleOnSites(Bundle bundle, Set<String> sites);
+    boolean disableModuleOnSites(Bundle bundle, Set<String> sites);
 
     boolean importModule(Bundle bundle, boolean force) throws IOException;
 }

@@ -112,3 +112,21 @@
 .paginationInfo {
     color: #666;
 }
+
+.siteActionButtons {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #ddd;
+}
+
+.siteActionButton {
+    flex: 1;
+}
+
+.siteItem {
+    display: flex;
+    flex-direction: row;
+    gap: 14px;
+}

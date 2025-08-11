@@ -214,12 +214,16 @@ public class GqlBundle {
         return services;
     }
 
-    @GraphQLField
+    @GraphQLField()
     @GraphQLName("sitesDeployment")
-    public SortedSet<String> getSitesDeployment() {
-        SortedSet<String> sites = new TreeSet<>();
+    public SortedSet<GqlSiteDeployment> getSitesDeployment() {
+        SortedSet<GqlSiteDeployment> sites = new TreeSet<>();
         try {
-            moduleManagementCommunityService.getSitesDeployment(bundle).forEach(sites::add);
+            moduleManagementCommunityService.getSitesDeployment(bundle).entrySet().forEach(stringBooleanEntry -> {
+                String siteKey = stringBooleanEntry.getKey();
+                boolean isDeployed = stringBooleanEntry.getValue();
+                sites.add(new GqlSiteDeployment(siteKey, isDeployed));
+            });
         } catch (RepositoryException e) {
             throw new DataFetchingException(e);
         }
@@ -244,6 +248,23 @@ public class GqlBundle {
         @Override
         public Integer get() {
             return 3;
+        }
+    }
+
+    private class GqlSiteDeployment implements Comparable<GqlSiteDeployment> {
+        @GraphQLField
+        private final String siteKey;
+        @GraphQLField
+        private final boolean isDeployed;
+
+        public GqlSiteDeployment(String siteKey, boolean isDeployed) {
+            this.siteKey = siteKey;
+            this.isDeployed = isDeployed;
+        }
+
+        @Override
+        public int compareTo(GqlSiteDeployment o) {
+            return this.siteKey.compareTo(o.siteKey);
         }
     }
 }

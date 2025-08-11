@@ -1280,13 +1280,15 @@ type GqlBundle {
     nodeTypesDependencies: [String]
     services: [String]
     servicesInUse: [String]
-    sitesDeployment: [String]
+    sitesDeployment: [GqlSiteDeployment]
     state: String
     symbolicName: String
     version: String
 }
 
 type GqlBundleMutation {
+    disableOnSites(siteKeys: [String]): String
+    enableOnSites(siteKeys: [String]): String
     refresh: String
     start: String
     stop: String
@@ -2034,6 +2036,11 @@ type GqlShardConfiguration {
     primaryCount: Int
     "Number of replicas"
     replicas: Int
+}
+
+type GqlSiteDeployment {
+    deployed: Boolean
+    siteKey: String
 }
 
 "Aggregation bucket representation"

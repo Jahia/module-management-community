@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useState, memo, useMemo, useCallback} from 'react';
 import {useMutation, useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -17,6 +17,7 @@ import {
     Power,
     Reload,
     Rocket,
+    Switch,
     Table,
     TableBody,
     TableBodyCell,
@@ -104,10 +105,94 @@ const resolveAllDependentModules = (targetModule, dependencyStructure, updatesAv
     return Array.from(result);
 };
 
-const BundleDetails = ({bundle, t, close}) => {
+const BundleDetails = ({bundle: initialBundle, t, close, refetch}) => {
+    // Create local state to track the bundle data
+    const [bundle, setBundle] = useState(initialBundle);
+
+    // Update local state whenever the prop changes
+    useEffect(() => {
+        setBundle(initialBundle);
+    }, [initialBundle]);
+
+    const [enableOnSite] = useMutation(gql`mutation ($bundleId: Long!, $siteKeys: [String]!) {
+        admin {
+            modulesManagement {
+                bundle(bundleId: $bundleId) {
+                    enableOnSites(siteKeys: $siteKeys)
+                }
+            }
+        }
+    }`, {variables: {bundleId: bundle.bundleId, siteKeys: []}});
+
+    const [disableOnSite] = useMutation(gql`mutation ($bundleId: Long!, $siteKeys: [String]!) {
+        admin {
+            modulesManagement {
+                bundle(bundleId: $bundleId) {
+                    disableOnSites(siteKeys: $siteKeys)
+                }
+            }
+        }
+    }`, {variables: {bundleId: bundle.bundleId, siteKeys: []}});
+    const handleSiteDeployment = async (event, value, checked) => {
+        try {
+            // Call the mutation to update the deployment status
+            if (checked) {
+                await enableOnSite({variables: {bundleId: bundle.bundleId, siteKeys: [value]}});
+            } else {
+                await disableOnSite({variables: {bundleId: bundle.bundleId, siteKeys: [value]}});
+            }
+
+            // Update the local state to reflect the change
+            await refetch();
+        } catch (error) {
+            console.error('Error updating site deployment:', error);
+        }
+    };
+
+    // Add handlers for enabling on all sites or all sites except systemsite
+    const handleEnableDisableOnAllSites = async enable => {
+        try {
+            const allSiteKeys = bundle.sitesDeployment.map(site => site.siteKey);
+            if (enable) {
+                await enableOnSite({variables: {bundleId: bundle.bundleId, siteKeys: allSiteKeys}});
+            } else {
+                await disableOnSite({variables: {bundleId: bundle.bundleId, siteKeys: allSiteKeys}});
+            }
+
+            await refetch();
+        } catch (error) {
+            console.error('Error enabling on all sites:', error);
+        }
+    };
+
+    const handleEnableDisableExceptSystemSite = async enable => {
+        try {
+            const siteKeys = bundle.sitesDeployment
+                .filter(site => site.siteKey !== 'systemsite')
+                .map(site => site.siteKey);
+            if (enable) {
+                await enableOnSite({variables: {bundleId: bundle.bundleId, siteKeys: siteKeys}});
+            } else {
+                await disableOnSite({variables: {bundleId: bundle.bundleId, siteKeys: siteKeys}});
+            }
+
+            await refetch();
+        } catch (error) {
+            console.error('Error enabling on sites except systemsite:', error);
+        }
+    };
+
     return (
         <>
             <DialogActions>
+                <Button variant="outlined"
+                        size="big"
+                        color="accent"
+                        label={t('label.refresh')}
+                        icon={<Reload/>}
+                        isDisabled={false}
+                        className={styles.button}
+                        onClick={() => refetch()}/>
                 <Button variant="outlined"
                         size="big"
                         color="accent"
@@ -127,12 +212,46 @@ const BundleDetails = ({bundle, t, close}) => {
                     {bundle.sitesDeployment.length > 0 && (
                         <AccordionItem id="sitesDeployment" label="Deployed on sites">
                             <div className={styles.maxHeight}>
+                                {/* Add buttons for bulk operations */}
+                                <div className={styles.siteActionButtons}>
+                                    <Button variant="outlined"
+                                            size="normal"
+                                            color="accent"
+                                            label={t('label.bundle.sites.actions.enableAllSites')}
+                                            className={styles.siteActionButton}
+                                            onClick={() => handleEnableDisableOnAllSites(true)}
+                                    />
+                                    <Button variant="outlined"
+                                            size="normal"
+                                            color="accent"
+                                            label={t('label.bundle.sites.actions.enableAllSitesExceptSystem')}
+                                            className={styles.siteActionButton}
+                                            onClick={() => handleEnableDisableExceptSystemSite(true)}
+                                    />
+                                    <Button variant="outlined"
+                                            size="normal"
+                                            color="accent"
+                                            label={t('label.bundle.sites.actions.disableAllSites')}
+                                            className={styles.siteActionButton}
+                                            onClick={() => handleEnableDisableOnAllSites(false)}
+                                    />
+                                    <Button variant="outlined"
+                                            size="normal"
+                                            color="accent"
+                                            label={t('label.bundle.sites.actions.disableAllSitesExceptSystem')}
+                                            className={styles.siteActionButton}
+                                            onClick={() => handleEnableDisableExceptSystemSite(false)}
+                                    />
+                                </div>
                                 <ul>
                                     {bundle.sitesDeployment.map(site => (
-                                        <Typography key={site} variant="body" weight="semiBold">
-                                            {site}
-                                        </Typography>
-                                    ))}
+                                        <li key={site.siteKey} className={styles.siteItem}>
+                                            <Switch checked={site.deployed} value={site.siteKey} onChange={handleSiteDeployment}/>
+                                            { site.deployed ? (
+                                                <Badge label={site.siteKey} color="success"/>) : (
+                                                    <Badge label={site.siteKey} color="danger"/>)}
+                                        </li>
+                                        ))}
                                 </ul>
                             </div>
                         </AccordionItem>)}
@@ -162,10 +281,11 @@ const BundleDetails = ({bundle, t, close}) => {
 BundleDetails.propTypes = {
     bundle: PropTypes.object,
     t: PropTypes.func,
-    close: PropTypes.func
+    close: PropTypes.func,
+    refetch: PropTypes.func
 };
 
-const ModuleRow = ({module, updates, handleUpdate, dependentUpdates, t}) => {
+const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, t}) => {
     const notificationContext = useNotifications();
     const [open, setOpen] = useState(false);
     const {data, error, loading, refetch} = useQuery(gql`query ($module: String!) {
@@ -188,7 +308,10 @@ const ModuleRow = ({module, updates, handleUpdate, dependentUpdates, t}) => {
                     license
                     services
                     servicesInUse
-                    sitesDeployment
+                    sitesDeployment {
+                        siteKey
+                        deployed
+                    }
                 }
             }
         }
@@ -400,12 +523,12 @@ const ModuleRow = ({module, updates, handleUpdate, dependentUpdates, t}) => {
                             onClick={() => setOpen(true)}/>
                 </div>
                 <Dialog fullWidth open={open} maxWidth="100vw" maxHeight="100vw" onClose={() => setOpen(false)}>
-                    <BundleDetails bundle={bundle} t={t} close={setOpen}/>
+                    <BundleDetails bundle={bundle} t={t} close={setOpen} refetch={refetch}/>
                 </Dialog>
             </TableBodyCell>
         </TableRow>
     );
-};
+});
 
 ModuleRow.propTypes = {
     module: PropTypes.any,
@@ -438,29 +561,36 @@ const ModuleManagementCommunityApp = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
     const {data: initialData, error: initialError, loading: initialLoading} = useQuery(gql`query {
-            admin {
-                modulesManagement {
-                    installedModules
-                }
+        admin {
+            modulesManagement {
+                installedModules
             }
-        }`, {fetchPolicy: 'cache-and-network'});
+        }
+    }`, {fetchPolicy: 'cache-and-network'});
 
     const {data, error, loading, refetch} = useQuery(gql`query {
-            admin {
-                modulesManagement {
-                    availableUpdates
-                    lastUpdateTime
-                }
+        admin {
+            modulesManagement {
+                availableUpdates
+                lastUpdateTime
             }
-        }`, {fetchPolicy: 'cache-and-network', initialFetchPolicy: 'standby'});
+        }
+    }`, {fetchPolicy: 'cache-and-network', initialFetchPolicy: 'standby'});
 
     const [updateAll] = useMutation(gql`mutation ($filter: [String], $dryRun: Boolean, $autostart: Boolean, $uninstall: Boolean) {
-            admin {
-                modulesManagement {
-                    updateModules(jahiaOnly: true, filters: $filter, dryRun: $dryRun, autostart: $autostart, uninstallPrevious: $uninstall)
-                }
+        admin {
+            modulesManagement {
+                updateModules(jahiaOnly: true, filters: $filter, dryRun: $dryRun, autostart: $autostart, uninstallPrevious: $uninstall)
             }
-        }`, {variables: {filter: [], dryRun: preferences.dryRun, autostart: preferences.autostart, uninstall: preferences.uninstallPrevious}});
+        }
+    }`, {
+        variables: {
+            filter: [],
+            dryRun: preferences.dryRun,
+            autostart: preferences.autostart,
+            uninstall: preferences.uninstallPrevious
+        }
+    });
 
     useEffect(() => {
         if (data && data.admin && data.admin.modulesManagement && data.admin.modulesManagement.availableUpdates) {
@@ -491,6 +621,17 @@ const ModuleManagementCommunityApp = () => {
         setCurrentPage(1);
     }, [filter, preferences.updatesOnly]);
 
+    const sortedModules = useMemo(() => {
+        return [...modules].sort(getComparator(order, orderBy));
+    }, [modules, order, orderBy]);
+
+    const handleSort = useCallback(property => {
+        const isAsc = orderBy === property && order === 'asc';
+        const sortOrder = isAsc ? 'desc' : 'asc';
+        setOrder(sortOrder);
+        setOrderBy(property);
+    }, [order, orderBy]);
+
     if (error || initialError) {
         console.log('Error when fetching data: ', error, initialError);
         notificationContext.notify(t('label.errors.loadingVanityUrl'), ['closeButton', 'closeAfter5s']);
@@ -504,7 +645,7 @@ const ModuleManagementCommunityApp = () => {
                     <Typography className={styles.title} variant="heading" weight="semiBold">
                         {t('label.table.title')}
                     </Typography>
-                    }/>
+                }/>
                 <CardContent className={styles.flexCenter}>
                     <div className={styles.flex}>
                         <Loader size="big"/>
@@ -526,7 +667,7 @@ const ModuleManagementCommunityApp = () => {
                     <Typography className={styles.title} variant="heading" weight="semiBold">
                         {t('label.table.title')}
                     </Typography>
-                    }/>
+                }/>
                 <CardContent className={styles.flexCenter}>
                     <div className={styles.flex}>
                         <Typography variant="body" weight="semiBold">
@@ -537,17 +678,6 @@ const ModuleManagementCommunityApp = () => {
             </Card>
         );
     }
-
-    const handleSort = property => {
-        const isAsc = orderBy === property && order === 'asc';
-        const sortOrder = isAsc ? 'desc' : 'asc';
-        setOrderBy(property);
-        const siteNodes = [...modules];
-        siteNodes.sort(getComparator(sortOrder, property));
-        setOrder(sortOrder);
-        setOrderBy(property);
-        setModules(siteNodes);
-    };
 
     const handleDependentUpdate = (moduleName, updates) => {
         // Ensure dependent updates are stored as an array of strings
@@ -561,7 +691,15 @@ const ModuleManagementCommunityApp = () => {
         try {
             if (filter === undefined || filter === null || filter.length === 0) {
                 console.log('No filter provided, updating all modules');
-                await updateAll({variables: {filter: [], jahiaOnly: preferences.jahiaOnly, dryRun: preferences.dryRun, autostart: preferences.autostart, uninstall: preferences.uninstallPrevious}});
+                await updateAll({
+                    variables: {
+                        filter: [],
+                        jahiaOnly: preferences.jahiaOnly,
+                        dryRun: preferences.dryRun,
+                        autostart: preferences.autostart,
+                        uninstall: preferences.uninstallPrevious
+                    }
+                });
                 notificationContext.notify(t('label.updateAllSuccess'), ['closeButton', 'closeAfter5s']);
                 await refetch();
             } else {
@@ -607,7 +745,7 @@ const ModuleManagementCommunityApp = () => {
     };
 
     // Filter modules by symbolicName (case-insensitive)
-    const filteredModules = modules.filter(
+    const filteredModules = sortedModules.filter(
         m => {
             if (preferences.updatesOnly && !updates.some(update => update.name === m.name)) {
                 return false;
@@ -623,10 +761,10 @@ const ModuleManagementCommunityApp = () => {
                 <TableRow>
                     <TableHeadCell>
                         <TableSortLabel
-                                active={orderBy === 'name'}
-                                classes={{icon: orderBy === 'name' ? styles.iconActive : styles.icon}}
-                                direction={orderBy === 'name' ? order : 'asc'}
-                                onClick={() => handleSort('name')}
+                            active={orderBy === 'name'}
+                            classes={{icon: orderBy === 'name' ? styles.iconActive : styles.icon}}
+                            direction={orderBy === 'name' ? order : 'asc'}
+                            onClick={() => handleSort('name')}
                         >
                             <Typography variant="body"
                                         weight="semiBold"
@@ -636,10 +774,10 @@ const ModuleManagementCommunityApp = () => {
                     </TableHeadCell>
                     <TableHeadCell>
                         <TableSortLabel
-                                active={orderBy === 'version'}
-                                classes={{icon: orderBy === 'version' ? styles.iconActive : styles.icon}}
-                                direction={orderBy === 'version' ? order : 'asc'}
-                                onClick={() => handleSort('version')}
+                            active={orderBy === 'version'}
+                            classes={{icon: orderBy === 'version' ? styles.iconActive : styles.icon}}
+                            direction={orderBy === 'version' ? order : 'asc'}
+                            onClick={() => handleSort('version')}
                         >
                             <Typography variant="body"
                                         weight="semiBold"
@@ -648,25 +786,25 @@ const ModuleManagementCommunityApp = () => {
                         </TableSortLabel>
                     </TableHeadCell>
                     {updates.length > 0 && (
+                        <TableHeadCell>
+                            <TableSortLabel
+                                active={orderBy === 'available'}
+                                classes={{icon: orderBy === 'available' ? styles.iconActive : styles.icon}}
+                                direction={orderBy === 'available' ? order : 'asc'}
+                                onClick={() => handleSort('available')}
+                            >
+                                <Typography variant="body"
+                                            weight="semiBold"
+                                >{t('label.table.cells.available')}
+                                </Typography>
+                            </TableSortLabel>
+                        </TableHeadCell>)}
                     <TableHeadCell>
                         <TableSortLabel
-                                    active={orderBy === 'available'}
-                                    classes={{icon: orderBy === 'available' ? styles.iconActive : styles.icon}}
-                                    direction={orderBy === 'available' ? order : 'asc'}
-                                    onClick={() => handleSort('available')}
-                        >
-                            <Typography variant="body"
-                                        weight="semiBold"
-                            >{t('label.table.cells.available')}
-                            </Typography>
-                        </TableSortLabel>
-                    </TableHeadCell>)}
-                    <TableHeadCell>
-                        <TableSortLabel
-                                active={orderBy === 'state'}
-                                classes={{icon: orderBy === 'state' ? styles.iconActive : styles.icon}}
-                                direction={orderBy === 'state' ? order : 'asc'}
-                                onClick={() => handleSort('state')}
+                            active={orderBy === 'state'}
+                            classes={{icon: orderBy === 'state' ? styles.iconActive : styles.icon}}
+                            direction={orderBy === 'state' ? order : 'asc'}
+                            onClick={() => handleSort('state')}
                         >
                             <Typography variant="body"
                                         weight="semiBold"
@@ -691,7 +829,7 @@ const ModuleManagementCommunityApp = () => {
                 <Typography className={styles.title} variant="heading" weight="semiBold">
                     {t('label.table.title')}
                 </Typography>
-                }
+            }
                         action={
                             <div className={styles.actionGroup}>
                                 <label className={styles.columnMenu}>{t('label.input.filterBySymbolicName')}
@@ -718,7 +856,10 @@ const ModuleManagementCommunityApp = () => {
                                             type="checkbox"
                                             style={{marginRight: '8px'}}
                                             checked={preferences.autostart}
-                                            onChange={e => setPreferences({...preferences, autostart: e.target.checked})}
+                                            onChange={e => setPreferences({
+                                                ...preferences,
+                                                autostart: e.target.checked
+                                            })}
                                         />
                                         {t('label.input.autostart')}
                                     </label>
@@ -727,7 +868,10 @@ const ModuleManagementCommunityApp = () => {
                                             type="checkbox"
                                             style={{marginRight: '8px'}}
                                             checked={preferences.uninstallPrevious}
-                                            onChange={e => setPreferences({...preferences, uninstallPrevious: e.target.checked})}
+                                            onChange={e => setPreferences({
+                                                ...preferences,
+                                                uninstallPrevious: e.target.checked
+                                            })}
                                         />
                                         {t('label.input.uninstallPrevious')}
                                     </label>
@@ -736,7 +880,10 @@ const ModuleManagementCommunityApp = () => {
                                             type="checkbox"
                                             style={{marginRight: '8px'}}
                                             checked={preferences.updatesOnly}
-                                            onChange={e => setPreferences({...preferences, updatesOnly: e.target.checked})}
+                                            onChange={e => setPreferences({
+                                                ...preferences,
+                                                updatesOnly: e.target.checked
+                                            })}
                                         />
                                         {t('label.input.updatesOnly')}
                                     </label>
@@ -767,13 +914,13 @@ const ModuleManagementCommunityApp = () => {
                                         isDisabled={updates.length === 0}
                                         className={styles.button}
                                         onClick={() => {
-                                                console.log('Updating all modules with no filter:');
-                                                handleUpdateAll();
-                                            }}/>
+                                            console.log('Updating all modules with no filter:');
+                                            handleUpdateAll();
+                                        }}/>
                             </div>
-                            }
+                        }
                         classes={{action: styles.action}}
-                />
+            />
             <CardContent>
                 <Table>
                     {tableHead()}
@@ -785,7 +932,7 @@ const ModuleManagementCommunityApp = () => {
                                        handleUpdate={handleUpdateAll}
                                        dependentUpdates={handleDependentUpdate}
                                        t={t}/>
-                            ))}
+                        ))}
                     </TableBody>
                 </Table>
                 {/* Pagination controls */}

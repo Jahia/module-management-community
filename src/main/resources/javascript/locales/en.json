@@ -36,6 +36,18 @@
       "previous": "Previous",
       "next": "Next",
       "showing": "Showing {{from}} to {{to}} of {{total}} modules"
+    },
+    "bundle" : {
+      "sites": {
+        "actions" : {
+          "enable": "Enable module",
+          "disable": "Disable module",
+          "enableAllSites": "Enable module on all sites",
+          "disableAllSites": "Disable module on all sites",
+          "enableAllSitesExceptSystem": "Enable module on all sites except system",
+          "disableAllSitesExceptSystem": "Disable module on all sites except system"
+        }
+      }
     }
   },
   "help": {
