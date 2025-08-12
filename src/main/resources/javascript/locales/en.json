@@ -48,6 +48,21 @@
           "disableAllSitesExceptSystem": "Disable module on all sites except system"
         }
       }
+    },
+    "sam": {
+      "statusGreen" : "All probes are running",
+      "statusRed" : "Some probes are not running",
+      "statusYellow" : "Some probes are not running, but the server is still functional",
+      "status" : "Server status",
+      "loadingStatus" : "Loading server status",
+      "errorStatus" : "An error occurred while loading the server status",
+        "probes" : {
+            "title": "Probes",
+            "name": "Name",
+          "description": "Description",
+          "severity": "Severity",
+            "status": "Status"
+        }
     }
   },
   "help": {

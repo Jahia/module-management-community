@@ -32,6 +32,14 @@
     align-items: center;
 }
 
+.row {
+    display: flex;
+    flex-grow: 0.05;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
 .content {
     padding: var(--spacing-medium) var(--spacing-large) var(--spacing-medium) var(--spacing-large);
 
@@ -41,4 +49,107 @@
 .spacing {
     width: var(--spacing-big);
     height: var(--spacing-big);
+}
+
+.clickableBadge {
+    cursor: pointer;
+    &:hover {
+        opacity: 0.8;
+    }
+}
+
+.probeDialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.probeDialogContent {
+    background-color: white;
+    border-radius: 4px;
+    max-width: 80%;
+    max-height: 80%;
+    overflow: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.probeDialogHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #ddd;
+}
+
+.probeDialogBody {
+    flex: 1;
+    overflow: auto;
+    padding: 16px 0;
+}
+
+.probeDialogFooter {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 16px;
+    border-top: 1px solid #ddd;
+}
+
+.probeTable {
+    width: 100%;
+    border-collapse: collapse;
+
+    th, td {
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+
+    th {
+        background-color: #f5f5f5;
+        font-weight: 600;
+    }
+}
+
+.statusButton {
+    min-width: 40px;
+    margin-left: 8px;
+
+    &.green {
+        background-color: var(--color-success60) !important;
+        border-color: var(--color-success60) !important;
+        color: var(--color-white) !important;
+
+        &:hover {
+            background-color: var(--color-success) !important;
+        }
+    }
+
+    &.yellow {
+        background-color: var(--color-warning60) !important;
+        border-color: var(--color-warning60) !important;
+        color: var(--color-white) !important;
+
+        &:hover {
+            background-color: var(--color-warning) !important;
+        }
+    }
+
+    &.red {
+        background-color: var(--color-danger60) !important;
+        border-color: var(--color-danger60) !important;
+        color: var(--color-white) !important;
+
+        &:hover {
+            background-color: var(--color-danger) !important;
+        }
+    }
 }
