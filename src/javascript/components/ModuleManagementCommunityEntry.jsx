@@ -8,6 +8,25 @@ import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import * as PropTypes from 'prop-types';
 
+const MessageRenderer = ({ message }) => {
+    // Check if message is JSON
+    try {
+        const jsonData = JSON.parse(message);
+        return (
+            <div className={styles.jsonMessage}>
+                <pre>{JSON.stringify(jsonData, null, 2)}</pre>
+            </div>
+        );
+    } catch (e) {
+        // Not JSON, render as regular text
+        return <Typography variant="caption">{message}</Typography>;
+    }
+};
+
+MessageRenderer.propTypes = {
+    message: PropTypes.string.isRequired
+}
+
 const HealthStatus = ({status, probes}) => {
     const {t} = useTranslation('module-management-community');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -27,7 +46,7 @@ const HealthStatus = ({status, probes}) => {
     }
 
     // Render status badge with click handler if probes exist
-    const renderStatusBadge = () => {
+    const renderStatusBadge = status => {
         let buttonClass = '';
         let buttonIcon = null;
 
@@ -58,7 +77,7 @@ const HealthStatus = ({status, probes}) => {
                 <Typography variant="subheading">
                     {t('label.sam.status')}
                 </Typography>
-                {renderStatusBadge()}
+                {renderStatusBadge(status)}
             </div>
 
             {isDialogOpen && (
@@ -93,21 +112,35 @@ const HealthStatus = ({status, probes}) => {
                                             LOW: 4,
                                             DEBUG: 5
                                         };
+                                        const statusOrder = {
+                                            GREEN: 3,
+                                            YELLOW: 2,
+                                            RED: 1
+                                        };
+                                        if (a.status.health !== b.status.health) {
+                                            return statusOrder[a.status.health] - statusOrder[b.status.health];
+                                        }
+
                                         let order = severityOrder[a.severity] - severityOrder[b.severity];
                                         return order === 0 ? a.name.localeCompare(b.name) : order;
                                     }).map(probe => (
                                         <tr key={probe.name}>
                                             <td>{probe.name}</td>
-                                            <td>{probe.description || '-'}</td>
+                                            <td>
+                                                <div className={styles.probeInfo}>
+                                                    <div className={styles.probeDescription}>
+                                                        {probe.description || t('label.sam.probes.noDescription')}
+                                                    </div>
+                                                    {probe.status.message && (
+                                                    <div className={styles.probeMessage}>
+                                                        <MessageRenderer message={probe.status.message}/>
+                                                    </div>
+                                                )}
+                                                </div>
+                                            </td>
                                             <td>{probe.severity}</td>
                                             <td>
-                                                <Badge
-                                                color={
-                                                    probe.status.health === 'GREEN' ? 'success' :
-                                                        probe.status.health === 'YELLOW' ? 'accent' : 'danger'
-                                                }
-                                                label={probe.status.health}
-                                            />
+                                                {renderStatusBadge(probe.status.health)}
                                             </td>
                                         </tr>
                                 ))}
@@ -138,7 +171,8 @@ HealthStatus.propTypes = {
         description: PropTypes.string,
         severity: PropTypes.string,
         status: PropTypes.shape({
-            health: PropTypes.string.isRequired
+            health: PropTypes.string.isRequired,
+            message: PropTypes.string.isRequired
         }).isRequired
     }))
 };
@@ -158,6 +192,7 @@ const ModuleManagementCommunityEntry = () => {
                             severity
                             status {
                                 health
+                                message
                             }
                         }
                     }

@@ -1,4 +1,4 @@
-import React, {useEffect, useState, memo, useMemo, useCallback} from 'react';
+import React, {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useMutation, useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -11,6 +11,7 @@ import {
     Cancel,
     Chip,
     Close,
+    Download,
     Information,
     Link,
     Loader,
@@ -246,12 +247,13 @@ const BundleDetails = ({bundle: initialBundle, t, close, refetch}) => {
                                 <ul>
                                     {bundle.sitesDeployment.map(site => (
                                         <li key={site.siteKey} className={styles.siteItem}>
-                                            <Switch checked={site.deployed} value={site.siteKey} onChange={handleSiteDeployment}/>
-                                            { site.deployed ? (
+                                            <Switch checked={site.deployed} value={site.siteKey}
+                                                    onChange={handleSiteDeployment}/>
+                                            {site.deployed ? (
                                                 <Badge label={site.siteKey} color="success"/>) : (
-                                                    <Badge label={site.siteKey} color="danger"/>)}
+                                                <Badge label={site.siteKey} color="danger"/>)}
                                         </li>
-                                        ))}
+                                    ))}
                                 </ul>
                             </div>
                         </AccordionItem>)}
@@ -285,7 +287,64 @@ BundleDetails.propTypes = {
     refetch: PropTypes.func
 };
 
-const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, t}) => {
+const ClusterDeploymentStatus = ({clusterDeployment}) => {
+    if (!clusterDeployment || clusterDeployment.length === 0) {
+        return <span className={styles.noClusterData}>No cluster data</span>;
+    }
+
+    // Check if all nodes have the same state
+    const firstNodeState = clusterDeployment[0]?.bundles[0]?.state;
+    const isConsistent = clusterDeployment.every(node =>
+        node.bundles[0]?.state === firstNodeState
+    );
+
+    // Check if all nodes have the same bundle version/key
+    const firstNodeKey = clusterDeployment[0]?.bundles[0]?.key;
+    const isVersionConsistent = clusterDeployment.every(node =>
+        node.bundles[0]?.key === firstNodeKey
+    );
+
+    return (
+        <div className={styles.clusterStatus}>
+            {clusterDeployment.map(node => {
+                const state = node.bundles[0]?.state;
+                let color = state === 'ACTIVE' ? 'success' : 'danger';
+
+                // If there's inconsistency, use warning color for all except ACTIVE nodes
+                if (!isConsistent && state !== 'ACTIVE') {
+                    color = 'warning';
+                }
+
+                // Show different indicator for version inconsistency
+                const hasVersionIssue = !isVersionConsistent;
+
+                return (
+                    <div key={node.nodeId} className={styles.clusterNode}>
+                        <Chip
+                            variant={hasVersionIssue ? 'outlined' : 'bright'}
+                            label={node.nodeId}
+                            color={color}
+                            icon={hasVersionIssue ? <Information/> : null}
+                            title={`${node.bundles[0]?.key} - ${node.bundles[0]?.state}`}
+                        />
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+ClusterDeploymentStatus.propTypes = {
+    clusterDeployment: PropTypes.arrayOf(PropTypes.shape({
+        nodeId: PropTypes.string,
+        bundles: PropTypes.arrayOf(PropTypes.shape({
+            key: PropTypes.string,
+            state: PropTypes.string
+        }))
+    }))
+};
+
+const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClustered, t}) => {
     const notificationContext = useNotifications();
     const [open, setOpen] = useState(false);
     const {data, error, loading, refetch} = useQuery(gql`query ($module: String!) {
@@ -312,10 +371,18 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, t}) =>
                         siteKey
                         deployed
                     }
+                    clusterDeployment {
+                        nodeId
+                        bundles {
+                            key
+                            state
+                        }
+                    }
+                    clusterState
                 }
             }
         }
-    }`, {fetchPolicy: 'cache-first', variables: {module: module.name}});
+    }`, {fetchPolicy: 'cache-and-network', variables: {module: module.name}});
 
     const [stopBundle] = useMutation(gql`mutation ($bundleId: Long!) {
         admin {
@@ -469,7 +536,24 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, t}) =>
                       label={bundle.state}
                       color={bundle.state === 'ACTIVE' ? 'success' : 'danger'}
                       icon={<Rocket/>}/>
+                {isClustered && bundle.clusterState !== 'UNKNOWN' && (
+                    <Chip variant="bright"
+                          label={bundle.clusterState}
+                          color={bundle.clusterState === 'ACTIVE' ? 'success' : 'danger'}
+                          icon={<Rocket/>}/>
+                )}
+                {isClustered && bundle.clusterState === 'UNKNOWN' && (
+                    <Chip variant="default"
+                          label={t('label.cluster.state.not.sync.short')}
+                          color="reassuring"
+                          icon={<Information/>}
+                          title={t('label.cluster.state.not.sync.long')}/>
+                )}
             </TableBodyCell>
+            {isClustered && (
+                <TableBodyCell>
+                    <ClusterDeploymentStatus clusterDeployment={bundle.clusterDeployment}/>
+                </TableBodyCell>)}
             <TableBodyCell>
                 <div className={styles.actionGroup} style={{width: 'fit-content'}}>
                     {bundle.state === 'RESOLVED' && <Button variant="outlined"
@@ -539,6 +623,7 @@ ModuleRow.propTypes = {
     })),
     handleUpdate: PropTypes.func,
     dependentUpdates: PropTypes.func,
+    isClustered: PropTypes.bool,
     t: PropTypes.func
 };
 
@@ -557,6 +642,7 @@ const ModuleManagementCommunityApp = () => {
     const [updates, setUpdates] = React.useState([]);
     const [modules, setModules] = React.useState([]);
     const [filter, setFilter] = useState('');
+    const [debouncedFilter, setDebouncedFilter] = useState('');
     const [dependentUpdates, setDependentUpdates] = useState({});
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -564,9 +650,10 @@ const ModuleManagementCommunityApp = () => {
         admin {
             modulesManagement {
                 installedModules
+                clustered
             }
         }
-    }`, {fetchPolicy: 'cache-and-network'});
+    }`, {fetchPolicy: 'cache-and-network', pollInterval: 30000, initialFetchPolicy: 'network-only'});
 
     const {data, error, loading, refetch} = useQuery(gql`query {
         admin {
@@ -592,6 +679,30 @@ const ModuleManagementCommunityApp = () => {
         }
     });
 
+    const [synchronize] = useMutation(gql`mutation {
+        admin {
+            modulesManagement {
+                synchronizeBundles
+            }
+        }
+    }`);
+
+    const [push] = useMutation(gql`mutation {
+        admin {
+            modulesManagement {
+                pushBundles
+            }
+        }
+    }`);
+
+    const [pull] = useMutation(gql`mutation {
+        admin {
+            modulesManagement {
+                pullBundles
+            }
+        }
+    }`);
+
     useEffect(() => {
         if (data && data.admin && data.admin.modulesManagement && data.admin.modulesManagement.availableUpdates) {
             const availableUpdates = data.admin.modulesManagement.availableUpdates.map((module => ({
@@ -604,7 +715,7 @@ const ModuleManagementCommunityApp = () => {
     }, [data, order, orderBy]);
 
     useEffect(() => {
-        if (updates.length > 0 && initialData?.admin?.modulesManagement?.installedModules) {
+        if (initialData?.admin?.modulesManagement?.installedModules) {
             const installedModules = initialData.admin.modulesManagement.installedModules.map((module => ({
                 name: module.substring(0, module.indexOf('/')).trim(),
                 version: module.substring(module.indexOf('/') + 1, module.indexOf(':')).trim(),
@@ -619,7 +730,18 @@ const ModuleManagementCommunityApp = () => {
     useEffect(() => {
         // Reset to page 1 when filter changes
         setCurrentPage(1);
-    }, [filter, preferences.updatesOnly]);
+    }, [debouncedFilter, preferences.updatesOnly]);
+
+    // Add debounce effect
+    useEffect(() => {
+        const timerId = setTimeout(() => {
+            setDebouncedFilter(filter);
+        }, 300); // 300ms debounce delay
+
+        return () => {
+            clearTimeout(timerId);
+        };
+    }, [filter]);
 
     const sortedModules = useMemo(() => {
         return [...modules].sort(getComparator(order, orderBy));
@@ -659,25 +781,6 @@ const ModuleManagementCommunityApp = () => {
         notificationContext.notify(t('label.fetchUpdates'), ['closeButton', 'closeAfter5s']);
         await refetch();
     };
-
-    if (modules.length === 0) {
-        return (
-            <Card>
-                <CardHeader title={
-                    <Typography className={styles.title} variant="heading" weight="semiBold">
-                        {t('label.table.title')}
-                    </Typography>
-                }/>
-                <CardContent className={styles.flexCenter}>
-                    <div className={styles.flex}>
-                        <Typography variant="body" weight="semiBold">
-                            {t('label.noUpdatesAvailable')}
-                        </Typography>
-                    </div>
-                </CardContent>
-            </Card>
-        );
-    }
 
     const handleDependentUpdate = (moduleName, updates) => {
         // Ensure dependent updates are stored as an array of strings
@@ -738,9 +841,29 @@ const ModuleManagementCommunityApp = () => {
                 await refetch();
             }
         } catch
-        (e) {
+            (e) {
             console.error('Error updating all modules:', e);
             notificationContext.notify(t('label.updateAllError'), ['closeButton', 'closeAfter5s']);
+        }
+    };
+
+    const handleClusterOperation = async operation => {
+        try {
+            if (operation === 'synchronize') {
+                await synchronize();
+                notificationContext.notify(t('label.synchronizeBundlesSuccess'), ['closeButton', 'closeAfter5s']);
+            } else if (operation === 'push') {
+                await push();
+                notificationContext.notify(t('label.pushBundlesSuccess'), ['closeButton', 'closeAfter5s']);
+            } else if (operation === 'pull') {
+                await pull();
+                notificationContext.notify(t('label.pullBundlesSuccess'), ['closeButton', 'closeAfter5s']);
+            }
+
+            await refetch();
+        } catch (e) {
+            console.error(`Error during ${operation} operation:`, e);
+            notificationContext.notify(t(`label.${operation}BundlesError`), ['closeButton', 'closeAfter5s']);
         }
     };
 
@@ -751,7 +874,7 @@ const ModuleManagementCommunityApp = () => {
                 return false;
             }
 
-            return filter.trim() === '' ? true : m.name.toLowerCase().includes(filter.trim().toLowerCase());
+            return debouncedFilter.trim() === '' ? true : m.name.toLowerCase().includes(debouncedFilter.trim().toLowerCase());
         }
     );
 
@@ -808,14 +931,20 @@ const ModuleManagementCommunityApp = () => {
                         >
                             <Typography variant="body"
                                         weight="semiBold"
-                            >{t('label.table.cells.state')}
+                            >{initialData.admin.modulesManagement.clustered ? t('label.table.cells.clusterstate') : t('label.table.cells.state')}
                             </Typography>
                         </TableSortLabel>
                     </TableHeadCell>
+                    {initialData.admin.modulesManagement.clustered && (
+                        <TableHeadCell>
+                            <Typography variant="body" weight="semiBold">
+                                {t('label.table.cells.clusterState')}
+                            </Typography>
+                        </TableHeadCell>)}
                     <TableHeadCell>
                         <Typography variant="body"
                                     weight="semiBold"
-                        >{t('label.table.actions')}
+                        >{t('label.table.actions.title')}
                         </Typography>
                     </TableHeadCell>
                 </TableRow>
@@ -832,6 +961,42 @@ const ModuleManagementCommunityApp = () => {
             }
                         action={
                             <div className={styles.actionGroup}>
+                                {initialData.admin.modulesManagement.clustered && (
+                                    <div className={styles.columnMenu}>
+                                        <Typography variant="subheading" weight="bold">
+                                            {t('label.table.actions.cluster')}
+                                        </Typography>
+                                        <Button variant="outlined"
+                                                size="big"
+                                                color="danger"
+                                                label={t('label.table.actions.sync')}
+                                                icon={<Reload/>}
+                                                className={`${styles.button} ${styles.fixedWidthButton}`}
+                                                onClick={() => {
+                                                    console.log('Synchronizing(pulling) bundles across cluster nodes');
+                                                    handleClusterOperation('synchronize');
+                                                }}/>
+                                        <Button variant="outlined"
+                                                size="big"
+                                                color="danger"
+                                                label={t('label.table.actions.push')}
+                                                icon={<Upload/>}
+                                                className={`${styles.button} ${styles.fixedWidthButton}`}
+                                                onClick={() => {
+                                                    console.log('Pushing local bundles across cluster nodes');
+                                                    handleClusterOperation('push');
+                                                }}/>
+                                        <Button variant="outlined"
+                                                size="big"
+                                                color="danger"
+                                                label={t('label.table.actions.pull')}
+                                                icon={<Download/>}
+                                                className={`${styles.button} ${styles.fixedWidthButton}`}
+                                                onClick={() => {
+                                                    console.log('Pulling bundles across cluster nodes');
+                                                    handleClusterOperation('pull');
+                                                }}/>
+                                    </div>)}
                                 <label className={styles.columnMenu}>{t('label.input.filterBySymbolicName')}
                                     <input
                                         type="text"
@@ -910,7 +1075,7 @@ const ModuleManagementCommunityApp = () => {
                                         size="big"
                                         color="danger"
                                         label={t('label.updateAll')}
-                                        icon={<Reload/>}
+                                        icon={<Upload/>}
                                         isDisabled={updates.length === 0}
                                         className={styles.button}
                                         onClick={() => {
@@ -931,6 +1096,7 @@ const ModuleManagementCommunityApp = () => {
                                        updates={updates}
                                        handleUpdate={handleUpdateAll}
                                        dependentUpdates={handleDependentUpdate}
+                                       isClustered={initialData.admin.modulesManagement.clustered}
                                        t={t}/>
                         ))}
                     </TableBody>

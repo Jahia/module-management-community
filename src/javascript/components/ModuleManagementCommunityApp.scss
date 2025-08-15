@@ -130,3 +130,24 @@
     flex-direction: row;
     gap: 14px;
 }
+
+.clusterStatus {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clusterNode {
+  min-width: 60px;
+}
+
+.noClusterData {
+  font-style: italic;
+  color: var(--color-gray60);
+}
+
+.fixedWidthButton {
+  width: initial;
+  min-width: initial;
+  flex-grow: 2;
+}

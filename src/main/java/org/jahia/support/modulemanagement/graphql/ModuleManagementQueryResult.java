@@ -5,6 +5,7 @@ import graphql.annotations.annotationTypes.GraphQLDescription;
 import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import org.apache.karaf.features.Feature;
+import org.jahia.api.settings.SettingsBean;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
@@ -27,7 +28,10 @@ public class ModuleManagementQueryResult {
             service = ModuleManagementCommunityService.class
     )
     ModuleManagementCommunityService moduleManagementCommunityService;
-    private static Logger logger = LoggerFactory.getLogger(ModuleManagementQueryResult.class);
+
+    @Inject
+    @GraphQLOsgiService(service = SettingsBean.class)
+    SettingsBean settingsBean;
 
     @GraphQLField
     @GraphQLName("availableUpdates")
@@ -59,7 +63,7 @@ public class ModuleManagementQueryResult {
     @GraphQLDescription("Return different information about a bundle")
     public GqlBundle getBundle(@GraphQLName("name") String name) throws IOException {
         Bundle bundle = Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class).getBundleContext().getBundles()).filter(b -> b.getSymbolicName().equals(name)).findFirst().orElse(null);
-        return new GqlBundle(bundle);
+        return settingsBean.isClusterActivated() ? new ClusteredGqlBundle(bundle) : new GqlBundle(bundle);
     }
 
     @GraphQLField
@@ -67,6 +71,13 @@ public class ModuleManagementQueryResult {
     @GraphQLDescription("Return a list of installed modules in the Jahia community edition")
     public Set<String> getInstalledModules() throws IOException {
         return moduleManagementCommunityService.getInstalledModules();
+    }
+
+    @GraphQLField
+    @GraphQLName("clustered")
+    @GraphQLDescription("Return true if the Jahia instance is clustered")
+    public boolean isClustered() {
+        return settingsBean.isClusterActivated();
     }
 
     public class GqlFeature {

@@ -6,7 +6,11 @@ import graphql.annotations.annotationTypes.GraphQLName;
 import org.apache.felix.utils.resource.SimpleFilter;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
+import org.jahia.osgi.BundleUtils;
+import org.jahia.services.modulemanager.BundleBucketInfo;
+import org.jahia.services.modulemanager.spi.BundleService;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
+import org.jahia.utils.ClassLoaderUtils;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.wiring.BundleWire;
@@ -19,16 +23,50 @@ import java.util.function.Supplier;
 
 
 public class GqlBundle {
-    private final Bundle bundle;
+    protected final Bundle bundle;
 
     public GqlBundle(Bundle bundle) {
         this.bundle = bundle;
     }
 
+    public enum BundleState {
+        ACTIVE("ACTIVE"),
+        INSTALLED("INSTALLED"),
+        RESOLVED("RESOLVED"),
+        STARTING("STARTING"),
+        STOPPING("STOPPING"),
+        UNKNOWN("UNKNOWN");
+
+        private final String label;
+
+        BundleState(String label) {
+            this.label = label;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public static BundleState fromBundleState(int state) {
+            switch (state) {
+                case Bundle.ACTIVE:
+                    return ACTIVE;
+                case Bundle.INSTALLED:
+                    return INSTALLED;
+                case Bundle.RESOLVED:
+                    return RESOLVED;
+                case Bundle.STARTING:
+                    return STARTING;
+                case Bundle.STOPPING:
+                    return STOPPING;
+                default:
+                    return UNKNOWN;
+            }
+        }
+    }
+
     @Inject
-    @GraphQLOsgiService(
-            service = ModuleManagementCommunityService.class
-    )
+    @GraphQLOsgiService(service = ModuleManagementCommunityService.class)
     ModuleManagementCommunityService moduleManagementCommunityService;
 
     @GraphQLField
@@ -51,21 +89,8 @@ public class GqlBundle {
 
     @GraphQLField
     @GraphQLName("state")
-    public String getState() {
-        switch (bundle.getState()) {
-            case Bundle.ACTIVE:
-                return "ACTIVE";
-            case Bundle.INSTALLED:
-                return "INSTALLED";
-            case Bundle.RESOLVED:
-                return "RESOLVED";
-            case Bundle.STARTING:
-                return "STARTING";
-            case Bundle.STOPPING:
-                return "STOPPING";
-            default:
-                return "UNKNOWN";
-        }
+    public BundleState getState() {
+        return BundleState.fromBundleState(bundle.getState());
     }
 
     @GraphQLField
@@ -129,15 +154,7 @@ public class GqlBundle {
 
     private static StringBuilder getMermaid() {
         StringBuilder mermaid = new StringBuilder();
-        mermaid.append("---\n").
-                append("config:\n").
-                append("  look: handDrawn\n").
-                append("  theme: neutral\n").
-                append("  layout: elk\n").
-                append("  elk:\n").
-                append("    mergeEdges: true\n").
-                append("    nodePlacementStrategy: LINEAR_SEGMENTS\n")
-                .append("---\n");
+        mermaid.append("---\n").append("config:\n").append("  look: handDrawn\n").append("  theme: neutral\n").append("  layout: elk\n").append("  elk:\n").append("    mergeEdges: true\n").append("    nodePlacementStrategy: LINEAR_SEGMENTS\n").append("---\n");
         mermaid.append("flowchart LR\n");
         return mermaid;
     }
@@ -152,13 +169,7 @@ public class GqlBundle {
                 Bundle required = revision.getProviderWiring().getBundle();
                 String requiredSymbolicName = required.getSymbolicName();
                 if (visited.add(requiredSymbolicName + ":" + level)) {
-                    mermaid.append("    ")
-                            .append(from)
-                            .append("([").append(from).append("])")
-                            .append(" --> ")
-                            .append(requiredSymbolicName)
-                            .append("([").append(requiredSymbolicName).append("])")
-                            .append("\n");
+                    mermaid.append("    ").append(from).append("([").append(from).append("])").append(" --> ").append(requiredSymbolicName).append("([").append(requiredSymbolicName).append("])").append("\n");
                     buildGraph(required, mermaid, visited, level + 1, maxLevel, namespace);
                 }
             }
@@ -228,6 +239,72 @@ public class GqlBundle {
             throw new DataFetchingException(e);
         }
         return sites;
+    }
+
+    @GraphQLField
+    @GraphQLName("clusterDeployment")
+    public List<GqlClusterNode> getClusterDeployment() {
+        List<GqlClusterNode> result = new ArrayList<>();
+
+        org.jahia.services.modulemanager.spi.BundleService bundleService = (org.jahia.services.modulemanager.spi.BundleService) BundleUtils.getOsgiService("org.jahia.services.modulemanager.spi.BundleService", "(clustered=true)");
+
+        if (bundleService != null) {
+            Map<String, Map<String, BundleService.BundleInformation>> infos = bundleService.getInfos(new BundleBucketInfo(BundleUtils.getModuleGroupId(bundle), bundle.getSymbolicName()), null);
+
+            for (Map.Entry<String, Map<String, BundleService.BundleInformation>> nodeEntry : infos.entrySet()) {
+                String nodeId = nodeEntry.getKey();
+                List<GqlBundleInfo> bundleInfos = new ArrayList<>();
+
+                for (Map.Entry<String, BundleService.BundleInformation> bundleEntry : nodeEntry.getValue().entrySet()) {
+                    String bundleKey = bundleEntry.getKey();
+                    BundleService.BundleInformation bundleInfo = bundleEntry.getValue();
+
+                    bundleInfos.add(new GqlBundleInfo(bundleKey, bundleInfo));
+                }
+
+                result.add(new GqlClusterNode(nodeId, bundleInfos));
+            }
+        }
+
+        return result;
+    }
+
+    @GraphQLField
+    @GraphQLName("clusterState")
+    public BundleState getClusterState() {
+        return BundleState.UNKNOWN;
+    }
+
+    @GraphQLName("GqlClusterNode")
+    private class GqlClusterNode {
+        @GraphQLField
+        @GraphQLName("nodeId")
+        private final String nodeId;
+
+        @GraphQLField
+        @GraphQLName("bundles")
+        private final List<GqlBundleInfo> bundles;
+
+        public GqlClusterNode(String nodeId, List<GqlBundleInfo> bundles) {
+            this.nodeId = nodeId;
+            this.bundles = bundles;
+        }
+    }
+
+    @GraphQLName("GqlBundleInfo")
+    private class GqlBundleInfo {
+        @GraphQLField
+        @GraphQLName("key")
+        private final String key;
+
+        @GraphQLField
+        @GraphQLName("state")
+        private final String state;
+
+        public GqlBundleInfo(String key, BundleService.BundleInformation info) {
+            this.key = key;
+            this.state = info.getOsgiState() != null ? info.getOsgiState().name() : "UNKNOWN";
+        }
     }
 
 

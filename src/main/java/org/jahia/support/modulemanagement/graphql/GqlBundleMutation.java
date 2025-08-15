@@ -3,18 +3,13 @@ package org.jahia.support.modulemanagement.graphql;
 import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
-import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
-import org.jahia.osgi.BundleLifecycleUtils;
 import org.jahia.osgi.BundleUtils;
-import org.jahia.services.modulemanager.spi.BundleService;
+import org.jahia.services.modulemanager.ModuleManager;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleException;
 
-import javax.inject.Inject;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class GqlBundleMutation {
 
@@ -27,32 +22,31 @@ public class GqlBundleMutation {
     @GraphQLField
     @GraphQLName("stop")
     public String stop() {
-        try {
-            bundle.stop();
-            return "Bundle " + bundle.getSymbolicName() + " stopped successfully.";
-        } catch (BundleException e) {
-            throw new DataFetchingException(
-                    "Failed to stop bundle " + bundle.getSymbolicName() + ": " + e.getMessage(), e);
+        ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
+        if (moduleManager != null) {
+            moduleManager.stop(bundle.getSymbolicName(), null);
         }
+        return "Bundle " + bundle.getSymbolicName() + " stopped successfully.";
     }
 
     @GraphQLField
     @GraphQLName("start")
     public String start() {
-        try {
-            bundle.start();
-            return "Bundle " + bundle.getSymbolicName() + " stopped successfully.";
-        } catch (BundleException e) {
-            throw new DataFetchingException(
-                    "Failed to stop bundle " + bundle.getSymbolicName() + ": " + e.getMessage(), e);
+        ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
+        if (moduleManager != null) {
+            moduleManager.start(bundle.getSymbolicName(), null);
         }
+        return "Bundle " + bundle.getSymbolicName() + " stopped successfully.";
     }
 
     @GraphQLField
     @GraphQLName("refresh")
     public String refresh() {
-            BundleLifecycleUtils.refreshBundle(bundle);
-            return "Bundle " + bundle.getSymbolicName() + " refreshed successfully.";
+        ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
+        if (moduleManager != null) {
+            moduleManager.refresh(bundle.getSymbolicName(), null);
+        }
+        return "Bundle " + bundle.getSymbolicName() + " refreshed successfully.";
     }
 
     @GraphQLField

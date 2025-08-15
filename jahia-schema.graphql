@@ -500,7 +500,7 @@ type AclRole {
 type AdminMutation {
     "Get Jahia admin mutation"
     jahia: JahiaAdminMutation!
-    modulesManagement: ModuleManagementMutationResult
+    modulesManagement: ClusteredModuleManagementMutationResult
     "Mount point mutation extension API"
     mountPoint: GqlMountPointMutation
     "Personal API tokens mutations"
@@ -684,6 +684,18 @@ type Cluster {
     isActivated: Boolean
     "Query operation on Jahia's journal across all nodes of a cluster"
     journal: Journal
+}
+
+type ClusteredModuleManagementMutationResult {
+    "Allow developers to perform operations on bundles, such as installing, uninstalling, or updating"
+    bundle(bundleId: Long): GqlBundleMutation
+    "Import a module from the file system into the OSGi framework"
+    importModule(bundleId: Long, force: Boolean = false): String
+    pullBundles: String
+    pushBundles: String
+    synchronizeBundles: String
+    "Return the list of modules that have been updated"
+    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], jahiaOnly: Boolean = true, uninstallPrevious: Boolean = false): [String]
 }
 
 "Mutation for configuration value object"
@@ -1271,6 +1283,8 @@ type GqlBackgroundJobEdge {
 
 type GqlBundle {
     bundleId: Long
+    clusterDeployment: [GqlClusterNode]
+    clusterState: BundleState
     dependencies: [String]
     dependenciesGraph(depth: Int = 3): String
     license: String
@@ -1281,9 +1295,14 @@ type GqlBundle {
     services: [String]
     servicesInUse: [String]
     sitesDeployment: [GqlSiteDeployment]
-    state: String
+    state: BundleState
     symbolicName: String
     version: String
+}
+
+type GqlBundleInfo {
+    key: String
+    state: String
 }
 
 type GqlBundleMutation {
@@ -1304,6 +1323,11 @@ type GqlChannel {
     name: String
     "Return variants for this channel, if available"
     variants: [GqlVariant]
+}
+
+type GqlClusterNode {
+    bundles: [GqlBundleInfo]
+    nodeId: String
 }
 
 "Condition for override item"
@@ -3580,20 +3604,13 @@ type Metadata {
     lastPublishedBy: String
 }
 
-type ModuleManagementMutationResult {
-    "Allow developers to perform operations on bundles, such as installing, uninstalling, or updating"
-    bundle(bundleId: Long): GqlBundleMutation
-    "Import a module from the file system into the OSGi framework"
-    importModule(bundleId: Long, force: Boolean = false): String
-    "Return the list of modules that have been updated"
-    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], jahiaOnly: Boolean = true, uninstallPrevious: Boolean = false): [String]
-}
-
 type ModuleManagementQueryResult {
     "Return a list of modules that have updates available"
     availableUpdates(filters: [String]): [String]
     "Return different information about a bundle"
     bundle(name: String): GqlBundle
+    "Return true if the Jahia instance is clustered"
+    clustered: Boolean
     "Return a list of features available in the Jahia community edition"
     features(filters: [String], jahiaOnly: Boolean = true): [GqlFeature]
     "Return a list of installed modules in the Jahia community edition"
@@ -4715,6 +4732,21 @@ type wipInfo {
     languages: [String]
     "Get WIP status"
     status: WipStatus
+}
+
+enum BundleState {
+    "ACTIVE"
+    ACTIVE
+    "INSTALLED"
+    INSTALLED
+    "RESOLVED"
+    RESOLVED
+    "STARTING"
+    STARTING
+    "STOPPING"
+    STOPPING
+    "UNKNOWN"
+    UNKNOWN
 }
 
 enum FieldEvaluation {
