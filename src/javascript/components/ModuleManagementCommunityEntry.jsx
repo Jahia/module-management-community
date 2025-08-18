@@ -8,7 +8,7 @@ import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import * as PropTypes from 'prop-types';
 
-const MessageRenderer = ({ message }) => {
+const MessageRenderer = ({message}) => {
     // Check if message is JSON
     try {
         const jsonData = JSON.parse(message);
@@ -25,7 +25,7 @@ const MessageRenderer = ({ message }) => {
 
 MessageRenderer.propTypes = {
     message: PropTypes.string.isRequired
-}
+};
 
 const HealthStatus = ({status, probes}) => {
     const {t} = useTranslation('module-management-community');
@@ -208,10 +208,14 @@ const ModuleManagementCommunityEntry = () => {
             <div className={styles.root}>
                 <div className={styles.headerRoot}>
                     <header className={styles.header}>
+                        <div className={styles.titles}>
                         <Typography variant="title"
-                                    weight="semiBold"
                         >{capitalize(t('label.title'))}
                         </Typography>
+                        <Typography variant="subheading"
+                        >{t('label.subtitle')}
+                        </Typography>
+                        </div>
                         <div className={styles.actionBar}>
                             <Button variant="ghost"
                                     size="big"

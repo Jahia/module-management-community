@@ -4,7 +4,8 @@
     "loading": "Loading...",
     "moduleVersion": "Current version of the module: {{version}}",
     "moduleAvailableVersion": "A new version of the module is available: {{version}}",
-    "title": "Modules available for upgrade",
+    "title": "Modules management",
+    "subtitle": " Allows to install, update, and manage Jahia modules and if in cluster have an overview of the cluster state",
     "noUpdatesAvailable": "No updates available",
     "table": {
       "title": "Installed modules",

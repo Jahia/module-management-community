@@ -9,6 +9,8 @@ Jahia modules.
 - UI extension for Jahia administration (TODO)
 - Integration with Maven for module metadata resolution
 
+![UI-overview.png](docs/UI-overview.png)
+
 ## Technologies
 
 - Java
@@ -56,6 +58,69 @@ mutation {
   }
 }
 ```
+
+### Available Queries and Mutations
+- **availableUpdates**(filters: [String]): [String]
+  - Return a list of modules that have updates available
+
+- **bundle**(name: String) : GqlBundle 
+  - Return different information about a bundle
+
+- **clustered**: Boolean
+  - Return true if the Jahia instance is clustered
+
+- **installedModules**: [String]
+  - Return a list of installed modules in the Jahia community edition
+
+- **lastUpdateTime**: String
+  - Return the last time the module updates were checked
+#### example
+```graphql
+query bundleInformation {
+  admin {
+    modulesManagement {
+      bundle(name: "augmented-search") {
+        symbolicName
+        bundleId
+        state
+        version
+        dependencies
+        dependenciesGraph
+        manifest {
+            key
+            value
+        }
+        moduleDependencies
+        moduleDependenciesGraph
+        services
+        servicesInUse
+        sitesDeployment {
+            siteKey
+            deployed
+        }				
+        clusterState
+        clusterDeployment {
+            nodeId
+            bundles {
+                key
+                state
+            }
+        }
+        clusterState
+      }
+    }
+  }
+}
+query listModules {
+  admin {
+    modulesManagement {
+      installedModules
+    }
+  }
+}
+```
+moduleDependenciesGraph and dependenciesGraph fields return a JSON string representing the graph of dependencies as a MermaidJS.
+
 
 ## Documentation
 updateModules: Update the modules in the Jahia instance.
