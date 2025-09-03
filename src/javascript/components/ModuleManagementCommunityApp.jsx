@@ -247,11 +247,12 @@ const BundleDetails = ({bundle: initialBundle, t, close, refetch}) => {
                                 <ul>
                                     {bundle.sitesDeployment.map(site => (
                                         <li key={site.siteKey} className={styles.siteItem}>
-                                            <Switch checked={site.deployed} value={site.siteKey}
+                                            <Switch checked={site.deployed}
+                                                    value={site.siteKey}
                                                     onChange={handleSiteDeployment}/>
                                             {site.deployed ? (
                                                 <Badge label={site.siteKey} color="success"/>) : (
-                                                <Badge label={site.siteKey} color="danger"/>)}
+                                                    <Badge label={site.siteKey} color="danger"/>)}
                                         </li>
                                     ))}
                                 </ul>
@@ -287,27 +288,27 @@ BundleDetails.propTypes = {
     refetch: PropTypes.func
 };
 
-const ClusterDeploymentStatus = ({clusterDeployment}) => {
+const ClusterDeploymentStatus = ({clusterDeployment, bundleKey}) => {
     if (!clusterDeployment || clusterDeployment.length === 0) {
         return <span className={styles.noClusterData}>No cluster data</span>;
     }
 
     // Check if all nodes have the same state
-    const firstNodeState = clusterDeployment[0]?.bundles[0]?.state;
+    const firstNodeState = clusterDeployment[0]?.bundles.find(bundle => bundle.key === bundleKey)?.state;
     const isConsistent = clusterDeployment.every(node =>
-        node.bundles[0]?.state === firstNodeState
+        node.bundles.find(bundle => bundle.key === bundleKey)?.state === firstNodeState
     );
 
     // Check if all nodes have the same bundle version/key
-    const firstNodeKey = clusterDeployment[0]?.bundles[0]?.key;
+    const firstNodeKey = clusterDeployment[0]?.bundles.find(bundle => bundle.key === bundleKey)?.key;
     const isVersionConsistent = clusterDeployment.every(node =>
-        node.bundles[0]?.key === firstNodeKey
+        node.bundles.find(bundle => bundle.key === bundleKey)?.key === firstNodeKey
     );
 
     return (
         <div className={styles.clusterStatus}>
             {clusterDeployment.map(node => {
-                const state = node.bundles[0]?.state;
+                const state = node.bundles.find(bundle => bundle.key === bundleKey)?.state;
                 let color = state === 'ACTIVE' ? 'success' : 'danger';
 
                 // If there's inconsistency, use warning color for all except ACTIVE nodes
@@ -325,7 +326,7 @@ const ClusterDeploymentStatus = ({clusterDeployment}) => {
                             label={node.nodeId}
                             color={color}
                             icon={hasVersionIssue ? <Information/> : null}
-                            title={`${node.bundles[0]?.key} - ${node.bundles[0]?.state}`}
+                            title={`${node.bundles.find(bundle => bundle.key === bundleKey)?.key} - ${node.bundles.find(bundle => bundle.key === bundleKey)?.state}`}
                         />
                     </div>
                 );
@@ -341,16 +342,17 @@ ClusterDeploymentStatus.propTypes = {
             key: PropTypes.string,
             state: PropTypes.string
         }))
-    }))
+    })),
+    bundleKey: PropTypes.string
 };
 
-const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClustered, t}) => {
+const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClustered, refreshAllModules, t}) => {
     const notificationContext = useNotifications();
     const [open, setOpen] = useState(false);
-    const {data, error, loading, refetch} = useQuery(gql`query ($module: String!) {
+    const {data, error, loading, refetch} = useQuery(gql`query ($module: String!, $version: String!) {
         admin {
             modulesManagement {
-                bundle(name: $module) {
+                bundle(name: $module, version: $version) {
                     symbolicName
                     bundleId
                     state
@@ -382,7 +384,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
                 }
             }
         }
-    }`, {fetchPolicy: 'cache-and-network', variables: {module: module.name}});
+    }`, {fetchPolicy: 'cache-and-network', variables: {module: module.name, version: module.version}});
 
     const [stopBundle] = useMutation(gql`mutation ($bundleId: Long!) {
         admin {
@@ -399,6 +401,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
             await stopBundle();
             notificationContext.notify(t('label.stopBundleSuccess'), ['closeButton', 'closeAfter5s']);
             await refetch();
+            await refreshAllModules();
         } catch (e) {
             console.error('Error stopping bundle:', e);
             notificationContext.notify(t('label.stopBundleError'), ['closeButton', 'closeAfter5s']);
@@ -420,6 +423,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
             await startBundle();
             notificationContext.notify(t('label.startBundleSuccess'), ['closeButton', 'closeAfter5s']);
             await refetch();
+            await refreshAllModules();
         } catch (e) {
             console.error('Error starting bundle:', e);
             notificationContext.notify(t('label.startBundleError'), ['closeButton', 'closeAfter5s']);
@@ -441,6 +445,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
             await refreshBundle();
             notificationContext.notify(t('label.startBundleSuccess'), ['closeButton', 'closeAfter5s']);
             await refetch();
+            await refreshAllModules();
         } catch (e) {
             console.error('Error starting bundle:', e);
             notificationContext.notify(t('label.startBundleError'), ['closeButton', 'closeAfter5s']);
@@ -552,18 +557,18 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
             </TableBodyCell>
             {isClustered && (
                 <TableBodyCell>
-                    <ClusterDeploymentStatus clusterDeployment={bundle.clusterDeployment}/>
+                    <ClusterDeploymentStatus clusterDeployment={bundle.clusterDeployment} bundleKey={`${bundle.symbolicName}/${bundle.version}`}/>
                 </TableBodyCell>)}
             <TableBodyCell>
                 <div className={styles.actionGroup} style={{width: 'fit-content'}}>
-                    {bundle.state === 'RESOLVED' && <Button variant="outlined"
-                                                            size="big"
-                                                            color="success"
-                                                            label=""
-                                                            icon={<Power/>}
-                                                            isDisabled={false}
-                                                            className={styles.button}
-                                                            onClick={handleStartBundle}/>}
+                    {(bundle.state === 'INSTALLED' || bundle.state === 'RESOLVED') && <Button variant="outlined"
+                                                                                              size="big"
+                                                                                              color="success"
+                                                                                              label=""
+                                                                                              icon={<Power/>}
+                                                                                              isDisabled={false}
+                                                                                              className={styles.button}
+                                                                                              onClick={handleStartBundle}/>}
                     {bundle.state === 'ACTIVE' && (
                         <>
                             <Button variant="outlined"
@@ -624,6 +629,7 @@ ModuleRow.propTypes = {
     handleUpdate: PropTypes.func,
     dependentUpdates: PropTypes.func,
     isClustered: PropTypes.bool,
+    refreshAllModules: PropTypes.func,
     t: PropTypes.func
 };
 
@@ -646,7 +652,7 @@ const ModuleManagementCommunityApp = () => {
     const [dependentUpdates, setDependentUpdates] = useState({});
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
-    const {data: initialData, error: initialError, loading: initialLoading} = useQuery(gql`query {
+    const {data: initialData, error: initialError, loading: initialLoading, refetch: refreshAllModules} = useQuery(gql`query {
         admin {
             modulesManagement {
                 installedModules
@@ -841,7 +847,7 @@ const ModuleManagementCommunityApp = () => {
                 await refetch();
             }
         } catch
-            (e) {
+        (e) {
             console.error('Error updating all modules:', e);
             notificationContext.notify(t('label.updateAllError'), ['closeButton', 'closeAfter5s']);
         }
@@ -1091,12 +1097,13 @@ const ModuleManagementCommunityApp = () => {
                     {tableHead()}
                     <TableBody>
                         {filteredModules.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map(module => (
-                            <ModuleRow key={module.name}
+                            <ModuleRow key={`${module.name}-${module.version}-${module.state}`}
                                        module={module}
                                        updates={updates}
                                        handleUpdate={handleUpdateAll}
                                        dependentUpdates={handleDependentUpdate}
                                        isClustered={initialData.admin.modulesManagement.clustered}
+                                       refreshAllModules={refreshAllModules}
                                        t={t}/>
                         ))}
                     </TableBody>

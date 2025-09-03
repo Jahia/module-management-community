@@ -257,6 +257,9 @@ public class GqlBundle {
 
                 for (Map.Entry<String, BundleService.BundleInformation> bundleEntry : nodeEntry.getValue().entrySet()) {
                     String bundleKey = bundleEntry.getKey();
+                    if (bundleKey.startsWith("org.jahia.modules/")) {
+                        bundleKey = bundleKey.substring("org.jahia.modules/".length());
+                    }
                     BundleService.BundleInformation bundleInfo = bundleEntry.getValue();
 
                     bundleInfos.add(new GqlBundleInfo(bundleKey, bundleInfo));

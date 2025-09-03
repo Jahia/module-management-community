@@ -4,6 +4,7 @@ import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
 import org.jahia.osgi.BundleUtils;
+import org.jahia.services.modulemanager.BundleInfo;
 import org.jahia.services.modulemanager.ModuleManager;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
@@ -24,9 +25,9 @@ public class GqlBundleMutation {
     public String stop() {
         ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
         if (moduleManager != null) {
-            moduleManager.stop(bundle.getSymbolicName(), null);
+            moduleManager.stop(BundleInfo.fromBundle(bundle).getKey(), null);
         }
-        return "Bundle " + bundle.getSymbolicName() + " stopped successfully.";
+        return "Bundle " + BundleInfo.fromBundle(bundle).getKey() + " stopped successfully.";
     }
 
     @GraphQLField
@@ -34,9 +35,9 @@ public class GqlBundleMutation {
     public String start() {
         ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
         if (moduleManager != null) {
-            moduleManager.start(bundle.getSymbolicName(), null);
+            moduleManager.start(BundleInfo.fromBundle(bundle).getKey(), null);
         }
-        return "Bundle " + bundle.getSymbolicName() + " stopped successfully.";
+        return "Bundle " + BundleInfo.fromBundle(bundle).getKey() + " stopped successfully.";
     }
 
     @GraphQLField
@@ -44,9 +45,9 @@ public class GqlBundleMutation {
     public String refresh() {
         ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
         if (moduleManager != null) {
-            moduleManager.refresh(bundle.getSymbolicName(), null);
+            moduleManager.refresh(BundleInfo.fromBundle(bundle).getKey(), null);
         }
-        return "Bundle " + bundle.getSymbolicName() + " refreshed successfully.";
+        return "Bundle " + BundleInfo.fromBundle(bundle).getKey() + " refreshed successfully.";
     }
 
     @GraphQLField

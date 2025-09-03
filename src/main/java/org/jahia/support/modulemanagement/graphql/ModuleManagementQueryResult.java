@@ -61,8 +61,13 @@ public class ModuleManagementQueryResult {
     @GraphQLField
     @GraphQLName("bundle")
     @GraphQLDescription("Return different information about a bundle")
-    public GqlBundle getBundle(@GraphQLName("name") String name) throws IOException {
-        Bundle bundle = Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class).getBundleContext().getBundles()).filter(b -> b.getSymbolicName().equals(name)).findFirst().orElse(null);
+    public GqlBundle getBundle(@GraphQLName("name") String name, @GraphQLName("version") String version) throws IOException {
+        Bundle bundle = null;
+        if(version == null) {
+            bundle = Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class).getBundleContext().getBundles()).filter(b -> b.getSymbolicName().equals(name)).findFirst().orElse(null);
+        } else {
+            bundle = Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class).getBundleContext().getBundles()).filter(b -> b.getSymbolicName().equals(name) && version.equals(b.getVersion().toString())).findFirst().orElse(null);
+        }
         return settingsBean.isClusterActivated() ? new ClusteredGqlBundle(bundle) : new GqlBundle(bundle);
     }
 

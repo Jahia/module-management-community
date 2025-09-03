@@ -695,7 +695,7 @@ type ClusteredModuleManagementMutationResult {
     pushBundles: String
     synchronizeBundles: String
     "Return the list of modules that have been updated"
-    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], jahiaOnly: Boolean = true, uninstallPrevious: Boolean = false): [String]
+    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], forceUpdateAll: Boolean = false, jahiaOnly: Boolean = true, uninstallPrevious: Boolean = false): [String]
 }
 
 "Mutation for configuration value object"
@@ -3608,7 +3608,7 @@ type ModuleManagementQueryResult {
     "Return a list of modules that have updates available"
     availableUpdates(filters: [String]): [String]
     "Return different information about a bundle"
-    bundle(name: String): GqlBundle
+    bundle(name: String, version: String): GqlBundle
     "Return true if the Jahia instance is clustered"
     clustered: Boolean
     "Return a list of features available in the Jahia community edition"
@@ -3718,7 +3718,7 @@ type PersonalApiTokenEdge {
 
 "Mutations for Personal Api Tokens"
 type PersonalApiTokensMutation {
-    "Create a new token"
+    "Create a new token for connected user"
     createToken(
         "Expiration date of the token"
         expireAt: String,
@@ -3726,8 +3726,6 @@ type PersonalApiTokensMutation {
         name: String!,
         "Scopes attached to this token"
         scopes: [String],
-        "The site the user belongs to, null if global user"
-        site: String,
         "State to give the newly created token"
         state: TokenState
     ): String
@@ -3889,6 +3887,8 @@ type Query {
         filters: Inputfilter,
         "Function score id"
         functionScoreId: String,
+        "Fuzziness controls"
+        fuzzy: Inputfuzzy,
         "Language to search in"
         language: String = "en",
         "Search query"
@@ -5085,6 +5085,20 @@ enum Workspace {
     LIVE
 }
 
+"Controls the fuzziness level for fuzzy search queries. Fuzziness means the number of character changes (insertions, deletions, substitutions) needed to transform one word into another."
+enum fuzzyLevel {
+    "Automatically selects fuzziness based on term length: 0 for 1-2 characters, 1 for 3-5 characters, 2 for >5 characters"
+    AUTO
+    "No fuzziness is applied. Note that all other parameters will be disregarded if sent."
+    NONE
+    "Maximum of 1 character change"
+    ONE
+    "Maximum of 2 character changes"
+    TWO
+    "Maximum of 0 character changes"
+    ZERO
+}
+
 "Status of indexation"
 enum indexationStatus {
     "Indexation has completed"
@@ -5499,6 +5513,18 @@ input InputfilterTermGroup {
     operation: Operation
     "Terms to filter by"
     terms: [InputfilterCustomTerm]!
+}
+
+"Controls fuzzy search behavior, allowing matches with slight differences from the search terms"
+input Inputfuzzy {
+    "The maximum number of terms that the fuzzy query will expand to. Higher values increase memory consumption and query time."
+    expansions: Int
+    "The configured fuzzy matching level that determines how many character changes are allowed"
+    fuzzyLevel: fuzzyLevel
+    "The number of initial characters which will not be \"fuzzified\". This helps to reduce the number of fuzzy terms and increase performance."
+    prefix: Int
+    "Controls whether fuzzy matches include transpositions of adjacent characters (ab → ba). Enabling this generally produces better results."
+    transpositions: Boolean
 }
 
 "Filter for filtering on node type"
