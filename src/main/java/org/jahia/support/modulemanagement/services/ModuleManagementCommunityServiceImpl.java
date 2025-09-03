@@ -91,6 +91,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     private Map<String, String> modulesWithUpdates;
     private BundleContext bundleContext;
     private Set<Pattern> excludeModules;
+    private int maxModulesToUpdate;
 
     @Activate
     public void activate(ModuleManagementCommunityConfig config, BundleContext bundleContext) {
@@ -113,12 +114,13 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     .map(Pattern::compile)
                     .collect(Collectors.toSet());
         }
+        maxModulesToUpdate = config.maxModulesToUpdate();
         if (settingsBean.isProcessingServer()) {
             if (config.updateOnModuleStartup()) {
                 logger.info("ModuleManagementCommunityService is configured to update modules on startup");
                 CompletableFuture.runAsync(() -> {
                     try {
-                        updateModules(true, false, null, true, true);
+                        updateModules(true, false, null, true, true, true);
                         logger.info("Modules update upon startup is done successfully");
                     } catch (IOException e) {
                         logger.error("Error updating modules on startup", e);
@@ -144,7 +146,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      */
 
     @Override
-    public Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious) throws IOException {
+    public Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious, boolean forceUpdateAll) throws IOException {
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             logger.warn(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
@@ -160,13 +162,12 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
 
         // Get or refresh the list of available updates
-        Set<String> updates = listAvailableUpdates(jahiaOnly, filters);
+        Set<String> updates = listAvailableUpdates(jahiaOnly, filters, false);
         if (updates.isEmpty()) {
             return Collections.emptySet();
         }
 
-        // Only perform update if not in dry run mode
-        if (updates.size() >= 10) {
+        if (!forceUpdateAll && (maxModulesToUpdate > 0 && updates.size() >= maxModulesToUpdate)) {
             logger.warn("Found {} modules with updates, consider reviewing the list before proceeding", updates.size());
             throw new DataFetchingException("Found " + updates.size() +
                     " modules with updates, please refine filters or run in dryRun mode");
@@ -205,9 +206,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * @throws IOException If an error occurs during the update check.
      */
     @Override
-    public Set<String> listAvailableUpdates(boolean jahiaOnly, List<String> filters) throws IOException {
+    public Set<String> listAvailableUpdates(boolean jahiaOnly, List<String> filters, boolean forceUpdate) throws IOException {
         List<Pattern> patterns = getPatternList(filters);
-        if (lastUpdateTime != null && Instant.now().minus(Duration.ofHours(2)).isBefore(lastUpdateTime) && modulesWithUpdates != null) {
+        if (!forceUpdate && (lastUpdateTime != null && Instant.now().minus(Duration.ofHours(2)).isBefore(lastUpdateTime) && modulesWithUpdates != null)) {
             logger.info("Module updates is cached until {}", lastUpdateTime.plus(Duration.ofHours(2)));
             Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
             return filteredUpdates != null ? filteredUpdates : modulesWithUpdates.keySet();

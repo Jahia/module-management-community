@@ -21,7 +21,12 @@
         "version": "Installed version",
         "available": "Available version",
         "state": "State",
-        "clusterstate": "State / Cluster state"
+        "clustertate": "State / Cluster state",
+        "cluster": {
+          "nodes": {
+            "state": "Cluster state by nodes"
+          }
+        }
       }
     },
     "close": "Close",

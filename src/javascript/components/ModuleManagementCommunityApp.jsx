@@ -938,7 +938,7 @@ const ModuleManagementCommunityApp = () => {
                     {initialData.admin.modulesManagement.clustered && (
                         <TableHeadCell>
                             <Typography variant="body" weight="semiBold">
-                                {t('label.table.cells.clusterState')}
+                                {t('label.table.cells.cluster.nodes.state')}
                             </Typography>
                         </TableHeadCell>)}
                     <TableHeadCell>

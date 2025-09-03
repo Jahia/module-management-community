@@ -23,4 +23,12 @@ public @interface ModuleManagementCommunityConfig {
                     "Modules listed here will not be updated even if updates are available."
     )
     String excludedModules() default "";
+
+    @AttributeDefinition(
+            name = "Limit number of modules to update",
+            description = "Limit the number of modules to update during a single update check. " +
+                    "This helps to control the update process and avoid overwhelming the system with too many updates at once. 0 means no limit."
+    )
+    int maxModulesToUpdate() default 10;
+
 }

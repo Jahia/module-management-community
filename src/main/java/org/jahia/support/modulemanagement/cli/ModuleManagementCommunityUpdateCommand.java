@@ -3,6 +3,7 @@ package org.jahia.support.modulemanagement.cli;
 
 import org.apache.karaf.shell.api.action.Action;
 import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.Option;
 import org.apache.karaf.shell.api.action.lifecycle.Reference;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.jahia.osgi.BundleUtils;
@@ -16,6 +17,18 @@ public class ModuleManagementCommunityUpdateCommand implements Action {
     @Reference(optional = true)
     private ModuleManagementCommunityService communityService;
 
+    @Option(name = "--dryRun", description = "Perform a dry run without making any changes", required = false, multiValued = false)
+    private boolean dryRun = false;
+
+    @Option(name = "--force", description = "Force update all modules, even if they are up to date", required = false, multiValued = false)
+    private boolean force = false;
+
+    @Option(name = "--clean", description = "Clean up old module versions after update and autostart new version", required = false, multiValued = false)
+    private boolean clean = false;
+
+    @Option(name = "--refresh", description = "Refresh the module list before checking for updates", required = false, multiValued = false)
+    private boolean refresh = false;
+
     @Override
     public Object execute() throws Exception {
         if (communityService == null) {
@@ -24,6 +37,9 @@ public class ModuleManagementCommunityUpdateCommand implements Action {
                 throw new IllegalStateException("ModuleManagementCommunityService is not available. Please ensure the module is installed and active.");
             }
         }
-        return communityService.updateModules(true, true, null, false, false);
+        if (refresh) {
+            return ((ModuleManagementCommunityServiceImpl) communityService).listAvailableUpdates(true, null, true);
+        }
+        return communityService.updateModules(true, dryRun, null, clean, clean, force);
     }
 }
