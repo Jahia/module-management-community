@@ -40,6 +40,6 @@ public class ModuleManagementCommunityUpdateCommand implements Action {
         if (refresh) {
             return ((ModuleManagementCommunityServiceImpl) communityService).listAvailableUpdates(true, null, true);
         }
-        return communityService.updateModules(true, dryRun, null, clean, clean, force);
+        return communityService.updateModules(true, dryRun, null, clean, clean, force, false);
     }
 }

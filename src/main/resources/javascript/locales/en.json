@@ -21,7 +21,7 @@
         "version": "Installed version",
         "available": "Available version",
         "state": "State",
-        "clustertate": "State / Cluster state",
+        "clusterstate": "State / Cluster state",
         "cluster": {
           "nodes": {
             "state": "Cluster state by nodes"
@@ -43,7 +43,8 @@
       "jahiaOnly": "Jahia modules only",
       "autostart": "Autostart modules",
       "uninstallPrevious": "Uninstall previous version",
-      "updatesOnly": "Show updates only"
+      "updatesOnly": "Show updates only",
+      "onStartup": "Update on next startup"
     },
     "pagination": {
       "previous": "Previous",
@@ -75,7 +76,10 @@
         "description": "Description",
         "severity": "Severity",
         "status": "Status"
-      }
+      },
+      "version": "Jahia Version: {{version}}",
+      "buildDate": "Build Date: {{date}}",
+      "buildNumber": "Build Number: {{number}}"
     },
     "cluster": {
       "state": {

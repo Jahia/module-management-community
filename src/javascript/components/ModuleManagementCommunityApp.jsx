@@ -641,7 +641,8 @@ const ModuleManagementCommunityApp = () => {
         jahiaOnly: true,
         autostart: true,
         uninstallPrevious: true,
-        updatesOnly: false
+        updatesOnly: false,
+        onStartup: false
     });
     const [order, setOrder] = React.useState('asc');
     const [orderBy, setOrderBy] = React.useState('name');
@@ -670,10 +671,10 @@ const ModuleManagementCommunityApp = () => {
         }
     }`, {fetchPolicy: 'cache-and-network', initialFetchPolicy: 'standby'});
 
-    const [updateAll] = useMutation(gql`mutation ($filter: [String], $dryRun: Boolean, $autostart: Boolean, $uninstall: Boolean) {
+    const [updateAll] = useMutation(gql`mutation ($filter: [String], $dryRun: Boolean, $autostart: Boolean, $uninstall: Boolean, $onStartup: Boolean) {
         admin {
             modulesManagement {
-                updateModules(jahiaOnly: true, filters: $filter, dryRun: $dryRun, autostart: $autostart, uninstallPrevious: $uninstall)
+                updateModules(jahiaOnly: true, filters: $filter, dryRun: $dryRun, autostart: $autostart, uninstallPrevious: $uninstall, onStartup: $onStartup)
             }
         }
     }`, {
@@ -681,7 +682,8 @@ const ModuleManagementCommunityApp = () => {
             filter: [],
             dryRun: preferences.dryRun,
             autostart: preferences.autostart,
-            uninstall: preferences.uninstallPrevious
+            uninstall: preferences.uninstallPrevious,
+            onStartup: preferences.onStartup
         }
     });
 
@@ -806,7 +808,8 @@ const ModuleManagementCommunityApp = () => {
                         jahiaOnly: preferences.jahiaOnly,
                         dryRun: preferences.dryRun,
                         autostart: preferences.autostart,
-                        uninstall: preferences.uninstallPrevious
+                        uninstall: preferences.uninstallPrevious,
+                        onStartup: preferences.onStartup
                     }
                 });
                 notificationContext.notify(t('label.updateAllSuccess'), ['closeButton', 'closeAfter5s']);
@@ -835,7 +838,8 @@ const ModuleManagementCommunityApp = () => {
                         jahiaOnly: preferences.jahiaOnly,
                         dryRun: preferences.dryRun,
                         autostart: preferences.autostart,
-                        uninstall: preferences.uninstallPrevious
+                        uninstall: preferences.uninstallPrevious,
+                        onStartup: preferences.onStartup
                     }
                 });
 
@@ -1057,6 +1061,18 @@ const ModuleManagementCommunityApp = () => {
                                             })}
                                         />
                                         {t('label.input.updatesOnly')}
+                                    </label>
+                                    <label>
+                                        <input
+                                            type="checkbox"
+                                            style={{marginRight: '8px'}}
+                                            checked={preferences.onStartup}
+                                            onChange={e => setPreferences({
+                                                ...preferences,
+                                                onStartup: e.target.checked
+                                            })}
+                                        />
+                                        {t('label.input.onStartup')}
                                     </label>
                                 </div>
                                 {/* <label>{t('label.input.jahiaOnly')} */}

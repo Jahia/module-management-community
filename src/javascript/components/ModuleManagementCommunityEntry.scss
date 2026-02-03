@@ -40,6 +40,14 @@
     align-items: center;
 }
 
+.column {
+  display: flex;
+  flex-grow: 0.05;
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: flex-start;
+}
+
 .content {
     padding: var(--spacing-medium) var(--spacing-large) var(--spacing-medium) var(--spacing-large);
 
@@ -135,6 +143,9 @@
   margin-top: 4px;
   max-width: 400px;
   word-break: break-word;
+  line-height: 1.2em; /* Set a specific line-height */
+  height: calc(1.2em * 2); /* Calculate height for 3 lines */
+  overflow: hidden;
 }
 
 .jsonMessage {

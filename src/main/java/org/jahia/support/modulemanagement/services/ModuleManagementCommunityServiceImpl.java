@@ -1,6 +1,7 @@
 package org.jahia.support.modulemanagement.services;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.karaf.features.Feature;
 import org.apache.karaf.features.FeaturesService;
@@ -38,6 +39,8 @@ import org.jahia.support.modulemanagement.config.ModuleManagementCommunityConfig
 import org.ops4j.pax.url.mvn.MavenResolver;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.startlevel.BundleStartLevel;
+import org.osgi.framework.wiring.BundleWiring;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
@@ -53,7 +56,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -67,6 +72,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     public static final String SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE = "ModuleManagementCommunityService is not available in read-only mode";
     public static final String SNAPSHOT = "SNAPSHOT";
     public static final String INVALID_VERSION_SPECIFICATION = "Invalid version specification";
+    public static final String CLUSTER_SYNCHRONIZED_YAML_SKIPPED = "module-management-community.clusterSynchronized.yaml.skipped"; // We need to use skipped suffix to avoid execution on startup before cluster is ready
+    public static final String CLUSTER_SYNCHRONIZED_YAML = "module-management-community.clusterSynchronized.yaml";
     private final Logger logger = LoggerFactory.getLogger(ModuleManagementCommunityServiceImpl.class);
 
     @Reference
@@ -120,7 +127,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 logger.info("ModuleManagementCommunityService is configured to update modules on startup");
                 CompletableFuture.runAsync(() -> {
                     try {
-                        updateModules(true, false, null, true, true, true);
+                        updateModules(true, false, null, true, true, true, false);
                         logger.info("Modules update upon startup is done successfully");
                     } catch (IOException e) {
                         logger.error("Error updating modules on startup", e);
@@ -130,6 +137,17 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     return null;
                 });
             } else {
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        listAvailableUpdates(true, null, true);
+                        logger.info("Modules list refresh upon startup is done successfully");
+                    } catch (IOException e) {
+                        logger.error("Error updating modules on startup", e);
+                    }
+                }).exceptionally(ex -> {
+                    logger.error("Error during module update on startup", ex);
+                    return null;
+                });
                 logger.info("ModuleManagementCommunityService is not configured to update modules on startup");
             }
         }
@@ -146,7 +164,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      */
 
     @Override
-    public Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious, boolean forceUpdateAll) throws IOException {
+    public Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious, boolean forceUpdateAll, boolean onStartup) throws IOException {
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             logger.warn(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
@@ -178,19 +196,32 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("- installBundle:\n");
-        for (String bundle : updates) {
-            sb.append("  - '").append(modulesWithUpdates.get(bundle)).append("'\n");
+        sb.append("- installOrUpgradeBundle:\n");
+        for (String bundleKey : updates) {
+            sb.append("  - url: '").append(modulesWithUpdates.get(bundleKey)).append("'\n");
+            Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(bundleKey, "/"), StringUtils.substringAfterLast(bundleKey, "/").split(":")[0].trim());
+            BundleStartLevel bundleStartLevel = bundle.adapt(BundleStartLevel.class);
+            int moduleStartLevel = SettingsBean.getInstance().getModuleStartLevel();
+            if (bundleStartLevel.getStartLevel() != moduleStartLevel) {
+                sb.append("    startLevel: ").append(bundleStartLevel.getStartLevel()).append("\n");
+            }
         }
         sb.append("  autoStart: ").append(autostart).append("\n");
         sb.append("  uninstallPreviousVersion: ").append(uninstallPrevious).append("\n");
+        sb.append("  ignoreChecks: true").append("\n");
         sb.append("- karafCommand: \"log:log 'Bundles ").append(String.join(", ", updates)).append(" installed'\"\n");
 
         String yamlScript = sb.toString();
         if (!dryRun) {
-            provisioningManager.executeScript(yamlScript, "yaml");
-            modulesWithUpdates = null; // Clear the cache after execution
+            if (onStartup) {
+                // Save script in SettingsBean.var path /patches on disk for running upon startup
+                FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(),"patches","provisioning", CLUSTER_SYNCHRONIZED_YAML_SKIPPED).toFile(), yamlScript, StandardCharsets.UTF_8, true);
+            } else {
+                FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(),"patches","provisioning","module-management-community.yaml").toFile(), yamlScript, StandardCharsets.UTF_8, true);
+                modulesWithUpdates = null; // Clear the cache after execution
+            }
         } else {
+            FileUtils.write(File.createTempFile("module-management-community",".yaml"), yamlScript, "UTF-8", true);
             logger.info("Dry run mode enabled, not executing provisioning script:\n{}", yamlScript);
         }
 

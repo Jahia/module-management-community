@@ -29,8 +29,9 @@ public class ModuleManagementMutationResult {
                                      @GraphQLName("autostart") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean autostart,
                                      @GraphQLName("uninstallPrevious") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean uninstallPrevious,
                                      @GraphQLName("forceUpdateAll") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean forceUpdateAll,
+                                     @GraphQLName("onStartup") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean onStartup,
                                      @GraphQLName("filters") List<String> filters) throws IOException {
-        return moduleManagementCommunityService.updateModules(jahiaOnly, dryRun, filters, autostart, uninstallPrevious, forceUpdateAll);
+        return moduleManagementCommunityService.updateModules(jahiaOnly, dryRun, filters, autostart, uninstallPrevious, forceUpdateAll, onStartup);
     }
 
     @GraphQLField

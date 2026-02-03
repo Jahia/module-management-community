@@ -420,7 +420,7 @@ type ASAdminMutations {
         siteKey: String!
     ): String
     "Clear the database connection to use with Augmented Search (indexation and querying)"
-    clearDbConnection: String
+    clearDbConnection: String @deprecated(reason: "Deprecated")
     "Function score mutations"
     functionScore: ASAdminFunctionScoreMutations
     "Remove site from the list of indexed sites"
@@ -432,7 +432,7 @@ type ASAdminMutations {
     setDbConnection(
         "DB connection id"
         connectionId: String!
-    ): String
+    ): String @deprecated(reason: "Deprecated")
     "Given a list of sites, trigger bulk indexing. If no sites are provided, triggers a full reindex."
     startIndex(
         "Force start indexation for when job has already been started"
@@ -455,16 +455,20 @@ type ASAdminMutations {
 
 "List of indexed sites entry point"
 type ASAdminQueries {
+    "Return list of plugins found in this elasticsearch instance connection"
+    connectionPlugins: [GqlPlugin]
     "Current database connection ID used by Augmented Search"
-    currentConnection: String
+    currentConnection: String @deprecated(reason: "Deprecated")
     "Get current shard configuration"
     currentShardConfiguration: GqlShardConfiguration
     "List of available database connections"
-    dbConnections: [GqlAvailableConnection]
+    dbConnections: [GqlAvailableConnection] @deprecated(reason: "Deprecated")
     "Function score queries"
     functionScore: ASAdminFunctionScoreQueries
     "Get index sizes"
     indexSizes: [GqlIndexSize]
+    "Returns if AS has an active elasticsearch connection."
+    isConnected: Boolean
     "List sites configured for Augmented Search"
     listSites: siteList
     "Get optimal shard configurations"
@@ -515,6 +519,8 @@ type AdminQuery {
     cluster: Cluster
     "Current datetime"
     datetime: String
+    "Elasticsearch query extension API"
+    elasticsearch: GqlElasticsearchQuery
     "Get Jahia admin query"
     jahia: JahiaAdminQuery!
     modulesManagement: ModuleManagementQueryResult
@@ -544,23 +550,23 @@ type AdminTools {
         areModules: Boolean,
         "Only return bundles whose symbolic names match the given regular expression"
         nameRegExp: String,
-        "Only return bundles that have 1 or more dependencies configured with an unsupported version range"
+        "When set to 'true', only return bundles that have at least one dependency with an unsupported version range (to be considered supported, a version range should be open to minor upgrade based on SemVer)"
         withUnsupportedDependenciesOnly: Boolean = false
     ): [BundleWithDependencies]
     "Will return all the duplicate export packages and the bundles that export them"
     findMatchingExportPackages(
-        "will return only export-package matching the RegExp"
+        "Regular expression for the export packages. When specified, only export packages matching this regular expression are retrieved."
         RegExp: String,
-        "will return only export-package found multiple times for a same package name"
+        "When set to 'true', only return export packages found multiple times for the same package name. By default (or when set to 'false'), all export packages are retrieved, regardless of how many times they are exported."
         duplicates: Boolean = false
     ): FindExportPackage
     "Will return all the import packages matching the given parameters."
     findMatchingImportPackages(
-        "will return only import-package matching the RegExp"
+        "Regular expression for the import packages. When specified, only import packages matching this regular expression are retrieved"
         RegExp: String,
-        "will return only import-package matching the given version"
+        "Version for the import package. When specified, only import packages of an exact version or a version range matching this version are retrieved. Note that this parameter does not apply on the versions of the bundles, but on the versions of the import packages"
         version: String,
-        "will return only import-package with no version range limitations"
+        "Filter the import packages on whether their version is missing (when the flag is set to 'true') or is set (when the flag is set to 'false'). If not specified, import packages with and without version are retrieved"
         versionMissing: Boolean = false
     ): FindImportPackage
 }
@@ -695,7 +701,7 @@ type ClusteredModuleManagementMutationResult {
     pushBundles: String
     synchronizeBundles: String
     "Return the list of modules that have been updated"
-    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], forceUpdateAll: Boolean = false, jahiaOnly: Boolean = true, uninstallPrevious: Boolean = false): [String]
+    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], forceUpdateAll: Boolean = false, jahiaOnly: Boolean = true, onStartup: Boolean = false, uninstallPrevious: Boolean = false): [String]
 }
 
 "Mutation for configuration value object"
@@ -1075,7 +1081,7 @@ type GenericJCRNode implements JCRNode {
         "When set to true, returns the node in the default language if there is no translation for the requested language. Returns null if the option \"Replace untranslated content with the default language content\" is not activated for the site of the requested node. Will also return null if there is no translation for the default language."
         useFallbackLanguage: Boolean = false
     ): JCRProperty
-    "Returns count of all references of the node across all sites"
+    "Returns count of all references of the node across all sites. If this property returns null, references are not supported for this node."
     referenceCount(
         "Filter out referencing types which should not be counted"
         typesFilter: InputNodeTypesInput
@@ -1606,6 +1612,13 @@ type GqlEditorForms {
         "A string representation of a locale, in IETF BCP 47 language tag format, ie en_US, en, fr, fr_CH, ..."
         uiLocale: String!
     ): [GqlEditorFormValueConstraint]
+    "Retrieve info for given node types"
+    nodeTypeInfo(
+        "node types"
+        nodeTypes: [String]!,
+        "A string representation of a locale, in IETF BCP 47 language tag format, ie en_US, en, fr, fr_CH, ..."
+        uiLocale: String!
+    ): [NodeTypeInfo]
     "Retrieve the number of sub contents under the node for given types"
     subContentsCount(
         "List of node types to check for"
@@ -1615,6 +1628,16 @@ type GqlEditorForms {
         "node path"
         nodePath: String
     ): Int
+}
+
+"Elasticsearch queries object"
+type GqlElasticsearchQuery {
+    """
+
+    Return true if an elasticsearch connection can be established from existing configuration, false otherwise.
+    Check logs for more details.
+    """
+    testConnection: Boolean
 }
 
 type GqlExperience {
@@ -1671,7 +1694,15 @@ type GqlHealthCheck {
         health: GqlProbeHealth
     ): [GqlProbe]
     "Highest reported status across all probes"
-    status: GqlProbeStatus
+    status: GqlHealthCheckStatus
+}
+
+"HealthCheck Status"
+type GqlHealthCheckStatus {
+    "Health of the probe"
+    health: GqlProbeHealth
+    "Message explaining probe status"
+    message: String @deprecated(reason: "When multiple probe return the same error status (YELLOW or RED), the message does not guarantee which of the probe will get its message returned. We recommend using the \"health\" parameter and corresponding individual probe message instead.")
 }
 
 "Index size"
@@ -1919,7 +1950,7 @@ type GqlProbeStatus {
     "Health of the probe"
     health: GqlProbeHealth
     "Message explaining probe status"
-    message: String @deprecated(reason: "When multiple probe return the same error status (YELLOW or RED), the message does not guarantee which of the probe will get its message returned. We recommend using the \"health\" parameter and corresponding individual probe message instead.")
+    message: String
 }
 
 "Publication background job"
@@ -2671,6 +2702,44 @@ type JCRNodeType {
         "Language"
         language: String!
     ): String
+    "Returns the node types that extend the current node type (in CND using the `extends=...` syntax), filtered by the specified parameters."
+    extendedBy(
+        "fetching only nodes after this node (exclusive)"
+        after: String,
+        "fetching only nodes before this node (exclusive)"
+        before: String,
+        "Filter by graphQL fields values"
+        fieldFilter: InputFieldFiltersInput,
+        "Filter on node type"
+        filter: InputNodeTypesListInput,
+        "fetching only the first certain number of nodes"
+        first: Int,
+        "fetching only the last certain number of nodes"
+        last: Int,
+        "fetching only the first certain number of nodes"
+        limit: Int,
+        "fetching only nodes after this node (inclusive)"
+        offset: Int
+    ): JCRNodeTypeConnection
+    "Returns the node types dynamically extended by the current node type (in CND using the `extends=...` syntax), filtered by the specified parameters."
+    extends(
+        "fetching only nodes after this node (exclusive)"
+        after: String,
+        "fetching only nodes before this node (exclusive)"
+        before: String,
+        "Filter by graphQL fields values"
+        fieldFilter: InputFieldFiltersInput,
+        "Filter on node type"
+        filter: InputNodeTypesListInput,
+        "fetching only the first certain number of nodes"
+        first: Int,
+        "fetching only the last certain number of nodes"
+        last: Int,
+        "fetching only the first certain number of nodes"
+        limit: Int,
+        "fetching only nodes after this node (inclusive)"
+        offset: Int
+    ): JCRNodeTypeConnection
     "Returns true if nodes of this type must support orderable child nodes; returns false otherwise."
     hasOrderableChildNodes: Boolean
     "Node type icon"
@@ -3248,7 +3317,7 @@ type JCRSite implements JCRNode {
         "When set to true, returns the node in the default language if there is no translation for the requested language. Returns null if the option \"Replace untranslated content with the default language content\" is not activated for the site of the requested node. Will also return null if there is no translation for the default language."
         useFallbackLanguage: Boolean = false
     ): JCRProperty
-    "Returns count of all references of the node across all sites"
+    "Returns count of all references of the node across all sites. If this property returns null, references are not supported for this node."
     referenceCount(
         "Filter out referencing types which should not be counted"
         typesFilter: InputNodeTypesInput
@@ -3634,11 +3703,21 @@ type Mutation {
         "Should save"
         save: Boolean = true,
         "The name of the workspace to fetch the node from; either 'edit', 'live', or null to use 'edit' by default"
-        workspace: Workspace
+        workspace: Workspace = EDIT
     ): JCRMutation
     "Generate a new JWT token"
     jwtToken(ips: [String], referer: [String], scopes: [String]!): JWTToken
     mutateWorkflows(definition: String): [WorkflowMutation]
+}
+
+"GraphQL representation of node type information"
+type NodeTypeInfo {
+    "Returns icon url of the node type"
+    iconUrl: String
+    "Returns the localized label of the node type"
+    label: String
+    "Returns the name of the node type"
+    name: String
 }
 
 "GraphQL representation of node type tree entry"
@@ -3877,7 +3956,7 @@ type Query {
     "JCR Queries"
     jcr(
         "The name of the workspace to fetch the node from; either EDIT, LIVE, or null to use EDIT by default"
-        workspace: Workspace
+        workspace: Workspace = EDIT
     ): JCRQuery!
     "Search in Jahia using Augmented Search"
     search(
@@ -4386,7 +4465,7 @@ type VanityUrl implements JCRNode {
         "When set to true, returns the node in the default language if there is no translation for the requested language. Returns null if the option \"Replace untranslated content with the default language content\" is not activated for the site of the requested node. Will also return null if there is no translation for the default language."
         useFallbackLanguage: Boolean = false
     ): JCRProperty
-    "Returns count of all references of the node across all sites"
+    "Returns count of all references of the node across all sites. If this property returns null, references are not supported for this node."
     referenceCount(
         "Filter out referencing types which should not be counted"
         typesFilter: InputNodeTypesInput
@@ -4581,7 +4660,7 @@ type augmentedSearchResult {
         "Page count to offset the results window"
         page: Int,
         "Number of documents in the results window"
-        size: Int = 25,
+        size: Int,
         "Sort object, by default, doesn’t do any sorting and return the results by weight."
         sortBy: [InputsortV2]
     ): searchResultsV2
@@ -5086,17 +5165,15 @@ enum Workspace {
 }
 
 "Controls the fuzziness level for fuzzy search queries. Fuzziness means the number of character changes (insertions, deletions, substitutions) needed to transform one word into another."
-enum fuzzyLevel {
+enum fuzziness {
     "Automatically selects fuzziness based on term length: 0 for 1-2 characters, 1 for 3-5 characters, 2 for >5 characters"
     AUTO
-    "No fuzziness is applied. Note that all other parameters will be disregarded if sent."
+    "No fuzziness is applied, it is set to 0. Note that all other parameters will be disregarded if sent."
     NONE
     "Maximum of 1 character change"
     ONE
     "Maximum of 2 character changes"
     TWO
-    "Maximum of 0 character changes"
-    ZERO
 }
 
 "Status of indexation"
@@ -5520,7 +5597,7 @@ input Inputfuzzy {
     "The maximum number of terms that the fuzzy query will expand to. Higher values increase memory consumption and query time."
     expansions: Int
     "The configured fuzzy matching level that determines how many character changes are allowed"
-    fuzzyLevel: fuzzyLevel
+    fuzziness: fuzziness
     "The number of initial characters which will not be \"fuzzified\". This helps to reduce the number of fuzzy terms and increase performance."
     prefix: Int
     "Controls whether fuzzy matches include transpositions of adjacent characters (ab → ba). Enabling this generally produces better results."

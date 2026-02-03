@@ -11,8 +11,6 @@ import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import java.io.IOException;
@@ -37,14 +35,24 @@ public class ModuleManagementQueryResult {
     @GraphQLName("availableUpdates")
     @GraphQLDescription("Return a list of modules that have updates available")
     public Set<String> getAvailableUpdates(@GraphQLName("filters") List<String> filters) throws IOException {
-        return moduleManagementCommunityService.listAvailableUpdates(true, filters, false);
+        return getModuleManagementCommunityService().listAvailableUpdates(true, filters, false);
+    }
+
+    private ModuleManagementCommunityService getModuleManagementCommunityService() {
+        if (moduleManagementCommunityService == null) {
+            moduleManagementCommunityService = org.jahia.osgi.BundleUtils.getOsgiService(ModuleManagementCommunityService.class, null);
+            if (moduleManagementCommunityService == null) {
+                throw new IllegalStateException("ModuleManagementCommunityService is not available. Please ensure the module is installed and active.");
+            }
+        }
+        return moduleManagementCommunityService;
     }
 
     @GraphQLField
     @GraphQLName("lastUpdateTime")
     @GraphQLDescription("Return the last time the module updates were checked")
     public String getLastUpdateTime() {
-        return moduleManagementCommunityService.getLastUpdateTime().toString();
+        return getModuleManagementCommunityService().getLastUpdateTime().toString();
     }
 
 
@@ -53,7 +61,7 @@ public class ModuleManagementQueryResult {
     @GraphQLDescription("Return a list of features available in the Jahia community edition")
     public List<GqlFeature> getFeatures(@GraphQLName("jahiaOnly") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean jahiaOnly,
                                      @GraphQLName("filters") List<String> filters) throws IOException {
-        return moduleManagementCommunityService.getFeatures(jahiaOnly, filters).stream().map(
+        return getModuleManagementCommunityService().getFeatures(jahiaOnly, filters).stream().map(
                 GqlFeature::new
         ).collect(Collectors.toList());
     }
@@ -75,7 +83,7 @@ public class ModuleManagementQueryResult {
     @GraphQLName("installedModules")
     @GraphQLDescription("Return a list of installed modules in the Jahia community edition")
     public Set<String> getInstalledModules() throws IOException {
-        return moduleManagementCommunityService.getInstalledModules();
+        return getModuleManagementCommunityService().getInstalledModules();
     }
 
     @GraphQLField

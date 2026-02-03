@@ -12,7 +12,7 @@ import java.util.Set;
 
 public interface ModuleManagementCommunityService {
 
-    Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious, boolean forceUpdateAll) throws IOException;
+    Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious, boolean forceUpdateAll, boolean onStartup) throws IOException;
 
     Set<String> listAvailableUpdates(boolean jahiaOnly, List<String> filters, boolean forceUpdate) throws IOException;
 
