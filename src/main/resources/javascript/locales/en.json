@@ -144,6 +144,9 @@
       "title": "Installed modules"
     },
     "title": "Modules management",
+    "uninstallBundle": "Uninstall bundle",
+    "uninstallBundleError": "An error occurred while uninstalling the bundle",
+    "uninstallBundleSuccess": "Bundle uninstalled successfully",
     "updateAll": "Update all",
     "updateAllError": "An error occurred while updating all modules",
     "updateAllSuccess": "All modules have been updated successfully",

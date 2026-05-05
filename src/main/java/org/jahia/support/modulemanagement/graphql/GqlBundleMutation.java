@@ -41,6 +41,17 @@ public class GqlBundleMutation {
     }
 
     @GraphQLField
+    @GraphQLName("uninstall")
+    public String uninstall() {
+        ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
+        BundleInfo bundleInfo = BundleInfo.fromBundle(bundle);
+        if (moduleManager != null) {
+            moduleManager.uninstall(bundleInfo.getKey(), null);
+        }
+        return "Bundle " + bundleInfo.getKey() + " uninstalled successfully.";
+    }
+
+    @GraphQLField
     @GraphQLName("refresh")
     public String refresh() {
         ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");

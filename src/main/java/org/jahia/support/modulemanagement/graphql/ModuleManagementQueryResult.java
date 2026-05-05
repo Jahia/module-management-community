@@ -6,6 +6,7 @@ import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import org.apache.karaf.features.Feature;
 import org.jahia.api.settings.SettingsBean;
+import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
@@ -75,6 +76,10 @@ public class ModuleManagementQueryResult {
             bundle = Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class).getBundleContext().getBundles()).filter(b -> b.getSymbolicName().equals(name)).findFirst().orElse(null);
         } else {
             bundle = Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class).getBundleContext().getBundles()).filter(b -> b.getSymbolicName().equals(name) && version.equals(b.getVersion().toString())).findFirst().orElse(null);
+        }
+        // bundle might have been uninstalled and so be null still
+        if (bundle == null) {
+            throw new DataFetchingException("Bundle with name " + name + " and version " + version + " not found");
         }
         return settingsBean.isClusterActivated() ? new ClusteredGqlBundle(bundle) : new GqlBundle(bundle);
     }

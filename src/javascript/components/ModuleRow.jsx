@@ -8,6 +8,7 @@ import {
     Button,
     Cancel,
     Chip,
+    Delete,
     Information,
     Link,
     Loader,
@@ -69,6 +70,10 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
         admin { modulesManagement { bundle(bundleId: $bundleId) { refresh } } }
     }`, {variables: {bundleId}});
 
+    const [uninstallBundle] = useMutation(gql`mutation ($bundleId: Long!) {
+        admin { modulesManagement { bundle(bundleId: $bundleId) { uninstall } } }
+    }`, {variables: {bundleId}});
+
     const handleStopBundle = async () => {
         try {
             await stopBundle();
@@ -102,6 +107,17 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
         } catch (e) {
             console.error('Error refreshing bundle:', e);
             notificationContext.notify(t('label.startBundleError'), ['closeButton', 'closeAfter5s']);
+        }
+    };
+
+    const handleUninstallBundle = async () => {
+        try {
+            await uninstallBundle();
+            notificationContext.notify(t('label.uninstallBundleSuccess'), ['closeButton', 'closeAfter5s']);
+            await refreshAllModules();
+        } catch (e) {
+            console.error('Error uninstalling bundle:', e);
+            notificationContext.notify(t('label.uninstallBundleError'), ['closeButton', 'closeAfter5s']);
         }
     };
 
@@ -211,13 +227,22 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
                             title={t('label.showDetails')}
                             onClick={() => setOpen(true)}/>
                     {(bundle.state === 'INSTALLED' || bundle.state === 'RESOLVED') && (
-                        <Button variant="ghost"
-                                size="default"
-                                color="accent"
-                                label=""
-                                icon={<Power/>}
-                                title={t('label.startBundle')}
-                                onClick={handleStartBundle}/>
+                        <>
+                            <Button variant="ghost"
+                                    size="default"
+                                    color="accent"
+                                    label=""
+                                    icon={<Power/>}
+                                    title={t('label.startBundle')}
+                                    onClick={handleStartBundle}/>
+                            <Button variant="ghost"
+                                    size="default"
+                                    color="danger"
+                                    label=""
+                                    icon={<Delete/>}
+                                    title={t('label.uninstallBundle')}
+                                    onClick={handleUninstallBundle}/>
+                        </>
                     )}
                     {bundle.state === 'ACTIVE' && (
                         <>
