@@ -31,4 +31,11 @@ public @interface ModuleManagementCommunityConfig {
     )
     int maxModulesToUpdate() default 10;
 
+    @AttributeDefinition(
+            name = "Refresh Module Updates in Background Cron Expression",
+            description = "Cron expression to schedule the background job for refreshing module updates. " +
+                    "This job will periodically check for module updates in the background."
+    )
+    String refreshModuleUpdatesInBackgroundCron() default "0 0 2 * * ?"; // Default to every day at 2 AM
+
 }

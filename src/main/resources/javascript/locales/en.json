@@ -1,98 +1,156 @@
 {
   "label": {
-    "help": "Help",
-    "loading": "Loading...",
-    "moduleVersion": "Current version of the module: {{version}}",
-    "moduleAvailableVersion": "A new version of the module is available: {{version}}",
-    "title": "Modules management",
-    "subtitle": " Allows to install, update, and manage Jahia modules and if in cluster have an overview of the cluster state",
-    "noUpdatesAvailable": "No updates available",
-    "table": {
-      "title": "Installed modules",
-      "actions": {
-        "title": "Actions",
-        "cluster": "Cluster Actions",
-        "sync": "Synchronize",
-        "push": "Push",
-        "pull": "Pull"
-      },
-      "cells": {
-        "name": "Module name",
-        "version": "Installed version",
-        "available": "Available version",
-        "state": "State",
-        "clusterstate": "State / Cluster state",
-        "cluster": {
-          "nodes": {
-            "state": "Cluster state by nodes"
-          }
+    "bundle": {
+      "details": {
+        "dependencies": {
+          "modules": "Module dependencies",
+          "nodeTypes": "Node type dependencies"
+        },
+        "identity": {
+          "builtAt": "Built at",
+          "bundleId": "Bundle ID",
+          "description": "Description",
+          "license": "License",
+          "name": "Name",
+          "vendor": "Vendor",
+          "version": "Version"
+        },
+        "manifest": {
+          "hide": "Hide full manifest",
+          "show": "Show full manifest"
+        },
+        "section": {
+          "dependencies": "Dependencies",
+          "identity": "Identity",
+          "manifest": "Full Manifest",
+          "services": "Runtime Services"
+        },
+        "services": {
+          "consumes": "Consumes",
+          "none": "None",
+          "provides": "Provides"
         }
+      },
+      "sites": {
+        "actions": {
+          "disable": "Disable module",
+          "disableAllSites": "Disable module on all sites",
+          "disableAllSitesExceptSystem": "Disable module on all sites except system",
+          "enable": "Enable module",
+          "enableAllSites": "Enable module on all sites",
+          "enableAllSitesExceptSystem": "Enable module on all sites except system"
+        },
+        "disabled": "Disabled",
+        "enabled": "Enabled"
+      },
+      "tab": {
+        "bundleDeps": "Bundle dependencies",
+        "details": "Details",
+        "moduleDeps": "Module dependencies",
+        "sites": "Sites"
       }
     },
     "close": "Close",
-    "refresh": "Refresh",
-    "updateAll": "Update all Jahia modules",
-    "updateAllSuccess": "All modules have been updated successfully",
-    "updateAllSuccessWithFilter": "Modules {{modules}} have been updated successfully",
-    "updateAllError": "An error occurred while updating all modules",
-    "lastUpdate": "Latest updates checked at {{date}}",
-    "fetchUpdates": "Fetching updates",
-    "input": {
-      "filterBySymbolicName": "Filter by bundle symbolic name",
-      "dryRun": "Dry run",
-      "jahiaOnly": "Jahia modules only",
-      "autostart": "Autostart modules",
-      "uninstallPrevious": "Uninstall previous version",
-      "updatesOnly": "Show updates only",
-      "onStartup": "Update on next startup"
-    },
-    "pagination": {
-      "previous": "Previous",
-      "next": "Next",
-      "showing": "Showing {{from}} to {{to}} of {{total}} modules"
-    },
-    "bundle": {
-      "sites": {
-        "actions": {
-          "enable": "Enable module",
-          "disable": "Disable module",
-          "enableAllSites": "Enable module on all sites",
-          "disableAllSites": "Disable module on all sites",
-          "enableAllSitesExceptSystem": "Enable module on all sites except system",
-          "disableAllSitesExceptSystem": "Disable module on all sites except system"
-        }
-      }
-    },
-    "sam": {
-      "statusGreen": "All probes are running",
-      "statusRed": "Some probes are not running",
-      "statusYellow": "Some probes are not running, but the server is still functional",
-      "status": "Server status",
-      "loadingStatus": "Loading server status",
-      "errorStatus": "An error occurred while loading the server status",
-      "probes": {
-        "title": "Probes",
-        "name": "Name",
-        "description": "Description",
-        "severity": "Severity",
-        "status": "Status"
-      },
-      "version": "Jahia Version: {{version}}",
-      "buildDate": "Build Date: {{date}}",
-      "buildNumber": "Build Number: {{number}}"
-    },
     "cluster": {
       "state": {
         "not": {
           "sync": {
-            "short": "Not sync",
-            "long": "Cluster state is not synchronized for this module/bundle"
+            "long": "Cluster state is not synchronized for this module/bundle",
+            "short": "Not sync"
           }
         }
       }
-    }
+    },
+    "fetchUpdates": "Fetching updates",
+    "help": "Help",
+    "input": {
+      "autostart": "Autostart modules",
+      "dryRun": "Dry run",
+      "filterBySymbolicName": "Filter by bundle symbolic name",
+      "group": {
+        "display": "Display",
+        "updateOptions": "Update options"
+      },
+      "jahiaOnly": "Jahia modules only",
+      "onStartup": "Update on next startup",
+      "uninstallPrevious": "Uninstall previous version",
+      "updatesOnly": "Show updates only"
+    },
+    "lastUpdate": "Latest updates checked at {{date}}",
+    "loading": "Loading...",
+    "moduleAvailableVersion": "A new version of the module is available: {{version}}",
+    "moduleVersion": "Current version of the module: {{version}}",
+    "noUpdatesAvailable": "No updates available",
+    "pagination": {
+      "next": "Next",
+      "previous": "Previous",
+      "showing": "Showing {{from}} to {{to}} of {{total}} modules"
+    },
+    "refresh": "Refresh",
+    "refreshBundle": "Refresh bundle",
+    "sam": {
+      "buildDate": "Build Date: {{date}}",
+      "buildNumber": "Build Number: {{number}}",
+      "errorStatus": "An error occurred while loading the server status",
+      "loadingStatus": "Loading server status",
+      "probes": {
+        "description": "Description",
+        "name": "Name",
+        "noDescription": "No description available",
+        "severity": "Severity",
+        "status": "Status",
+        "title": "Probes"
+      },
+      "status": "Server status",
+      "statusGreen": "All probes are running",
+      "statusRed": "Some probes are not running",
+      "statusYellow": "Some probes are not running, but the server is still functional",
+      "version": "Jahia Version: {{version}}"
+    },
+    "showDetails": "Show details",
+    "startBundle": "Start bundle",
+    "startBundleError": "An error occurred while starting the bundle",
+    "startBundleSuccess": "Bundle started successfully",
+    "stopBundle": "Stop bundle",
+    "stopBundleError": "An error occurred while stopping the bundle",
+    "stopBundleSuccess": "Bundle stopped successfully",
+    "subtitle": " Allows to install, update, and manage Jahia modules and if in cluster have an overview of the cluster state",
+    "synchronizeBundlesError": "An error occurred while synchronizing bundles",
+    "synchronizeBundlesSuccess": "Bundles synchronized successfully",
+    "pullBundlesError": "An error occurred while pulling bundles",
+    "pullBundlesSuccess": "Bundles pulled successfully",
+    "pushBundlesError": "An error occurred while pushing bundles",
+    "pushBundlesSuccess": "Bundles pushed successfully",
+    "table": {
+      "actions": {
+        "cluster": "Cluster Actions",
+        "pull": "Pull",
+        "push": "Push",
+        "sync": "Synchronize",
+        "title": "Actions"
+      },
+      "cells": {
+        "available": "Available version",
+        "cluster": {
+          "nodes": {
+            "state": "Cluster state by nodes"
+          }
+        },
+        "clusterstate": "State / Cluster state",
+        "name": "Module name",
+        "state": "State",
+        "version": "Installed version"
+      },
+      "title": "Installed modules"
+    },
+    "title": "Modules management",
+    "updateAll": "Update all",
+    "updateAllError": "An error occurred while updating all modules",
+    "updateAllSuccess": "All modules have been updated successfully",
+    "updateAllSuccessWithFilter": "Modules {{modules}} have been updated successfully",
+    "updateBundle": "Update bundle"
   },
   "help": {
-    "url": "https://github.com/cedmail/moduleManagementCommunity/blob/main/README.md"
+    "url": "https://store.jahia.com/contents/modules-repository/org/jahia/modules/module-management-community.html"
   }
 }

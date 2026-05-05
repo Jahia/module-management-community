@@ -2,6 +2,7 @@ package org.jahia.support.modulemanagement.services;
 
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.IOFileFilter;
 import org.jahia.bin.Jahia;
 import org.jahia.osgi.FrameworkService;
 import org.jahia.services.provisioning.ProvisioningManager;
@@ -14,8 +15,11 @@ import org.osgi.service.event.EventHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Optional;
 
 import static org.jahia.support.modulemanagement.services.ModuleManagementCommunityServiceImpl.SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE;
 
@@ -41,11 +45,24 @@ public class ClusterWideUpdateOnStartup implements EventHandler {
             logger.warn("ModuleManagementCommunityService is available only on processing servers");
             return;
         }
-        Path path = Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", ModuleManagementCommunityServiceImpl.CLUSTER_SYNCHRONIZED_YAML_SKIPPED);
-        if (path.toFile().exists()) {
+        Path path = Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning");
+        // Check for the presence of the cluster synchronized yaml skipped file matching ModuleManagementCommunityServiceImpl.CLUSTER_SYNCHRONIZED_YAML_SKIPPED with date of the day inserted before .yaml.skipped, something like module-management-community-2024-06-15.clusterSynchronized.yaml.skipped
+        Collection<File> listedFiles = FileUtils.listFiles(path.toFile(), new IOFileFilter() {
+            @Override
+            public boolean accept(File file) {
+                return file.getName().startsWith("module-management-community");
+            }
+
+            @Override
+            public boolean accept(File dir, String name) {
+                return false;
+            }
+        }, null);
+        if (listedFiles.stream().anyMatch(f -> f.getName().matches("module-management-community-\\d{4}-\\d{2}-\\d{2}\\.clusterSynchronized\\.yaml\\.skipped"))) {
             try {
-                Path renamePath = Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", ModuleManagementCommunityServiceImpl.CLUSTER_SYNCHRONIZED_YAML);
-                if(path.toFile().renameTo(renamePath.toFile())) {
+                Path renamePath = Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", ModuleManagementCommunityServiceImpl.getProvisioningFilenameWithDateAndExtension(ModuleManagementCommunityServiceImpl.CLUSTER_SYNCHRONIZED_YAML, ".clusterSynchronized"));
+                Optional<File> first = listedFiles.stream().sorted().findFirst();
+                if(first.isPresent() && first.get().renameTo(renamePath.toFile())) {
                     logger.info("Cluster wide update on startup executed successfully. Monitor results for patch file: {}", renamePath);
                 } else {
                     logger.warn("Could not rename {} to {}", ModuleManagementCommunityServiceImpl.CLUSTER_SYNCHRONIZED_YAML_SKIPPED, ModuleManagementCommunityServiceImpl.CLUSTER_SYNCHRONIZED_YAML);

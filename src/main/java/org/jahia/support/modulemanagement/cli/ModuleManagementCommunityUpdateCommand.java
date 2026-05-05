@@ -7,7 +7,7 @@ import org.apache.karaf.shell.api.action.Option;
 import org.apache.karaf.shell.api.action.lifecycle.Reference;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.jahia.osgi.BundleUtils;
-import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
+import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityServiceImpl;
 
 @Command(scope = "jahia", name = "module-community-update", description = "Update modules in the Jahia community edition")

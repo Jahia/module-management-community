@@ -1,4 +1,4 @@
-package org.jahia.support.modulemanagement.services;
+package org.jahia.support.modulemanagement;
 
 import org.apache.karaf.features.Feature;
 import org.osgi.framework.Bundle;

@@ -9,8 +9,7 @@ import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiServic
 import org.jahia.osgi.BundleUtils;
 import org.jahia.services.modulemanager.BundleBucketInfo;
 import org.jahia.services.modulemanager.spi.BundleService;
-import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
-import org.jahia.utils.ClassLoaderUtils;
+import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.wiring.BundleWire;

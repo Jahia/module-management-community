@@ -6,7 +6,7 @@ import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
-import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
+import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 
 import javax.inject.Inject;
 import java.io.IOException;

@@ -3,6 +3,7 @@ package org.jahia.support.modulemanagement.services;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.felix.utils.collections.MapToDictionary;
 import org.apache.karaf.features.Feature;
 import org.apache.karaf.features.FeaturesService;
 import org.apache.maven.artifact.repository.metadata.Versioning;
@@ -35,12 +36,13 @@ import org.jahia.services.templates.JahiaTemplateManagerService;
 import org.jahia.services.usermanager.JahiaUser;
 import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.jahia.settings.SettingsBean;
+import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.jahia.support.modulemanagement.config.ModuleManagementCommunityConfig;
 import org.ops4j.pax.url.mvn.MavenResolver;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.startlevel.BundleStartLevel;
-import org.osgi.framework.wiring.BundleWiring;
+import org.osgi.service.cm.ConfigurationAdmin;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
@@ -50,6 +52,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
 
+import javax.annotation.Nonnull;
 import javax.jcr.RepositoryException;
 import javax.jcr.query.Query;
 import java.io.File;
@@ -94,6 +97,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Reference
     JahiaSitesService jahiaSitesService;
 
+    @Reference
+    ConfigurationAdmin configurationAdmin;
+
     private Instant lastUpdateTime = null;
     private Map<String, String> modulesWithUpdates;
     private BundleContext bundleContext;
@@ -122,6 +128,19 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     .collect(Collectors.toSet());
         }
         maxModulesToUpdate = config.maxModulesToUpdate();
+
+        // If ModuleManagementCommunityConfig.refreshModuleUpdatesInBackgroundCronis set we need to create the configuration file to start the service
+        if (config.refreshModuleUpdatesInBackgroundCron() != null) {
+            try {
+                Map<String, String> properties = new HashMap<>();
+                properties.put("refreshModuleUpdatesInBackgroundCron", config.refreshModuleUpdatesInBackgroundCron());
+                configurationAdmin.getConfiguration("org.jahia.support.modulemanagement.services.RefreshModuleUpdatesInBackground", null).updateIfDifferent(new MapToDictionary(properties));
+                logger.info("Configuration for RefreshModuleUpdatesInBackground updated with cron expression: {}", config.refreshModuleUpdatesInBackgroundCron());
+            } catch (IOException e) {
+                logger.error("Error updating configuration for RefreshModuleUpdatesInBackground", e);
+            }
+        }
+
         if (settingsBean.isProcessingServer()) {
             if (config.updateOnModuleStartup()) {
                 logger.info("ModuleManagementCommunityService is configured to update modules on startup");
@@ -195,6 +214,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             logger.info("Updating modules: {}", String.join(", ", updates));
         }
 
+        // Sort updates to have a deterministic order
+        updates = updates.stream().sorted().collect(Collectors.toCollection(LinkedHashSet::new));
         StringBuilder sb = new StringBuilder();
         sb.append("- installOrUpgradeBundle:\n");
         for (String bundleKey : updates) {
@@ -215,17 +236,23 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         if (!dryRun) {
             if (onStartup) {
                 // Save script in SettingsBean.var path /patches on disk for running upon startup
-                FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(),"patches","provisioning", CLUSTER_SYNCHRONIZED_YAML_SKIPPED).toFile(), yamlScript, StandardCharsets.UTF_8, true);
+                FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", getProvisioningFilenameWithDateAndExtension(CLUSTER_SYNCHRONIZED_YAML_SKIPPED, ".clusterSynchronized")).toFile(), yamlScript, StandardCharsets.UTF_8, false);
             } else {
-                FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(),"patches","provisioning","module-management-community.yaml").toFile(), yamlScript, StandardCharsets.UTF_8, true);
+                FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", getProvisioningFilenameWithDateAndExtension("module-management-community.yaml", ".yaml")).toFile(), yamlScript, StandardCharsets.UTF_8, false);
                 modulesWithUpdates = null; // Clear the cache after execution
             }
         } else {
-            FileUtils.write(File.createTempFile("module-management-community",".yaml"), yamlScript, "UTF-8", true);
+            FileUtils.write(File.createTempFile("module-management-community-temp", ".yaml"), yamlScript, "UTF-8", true);
             logger.info("Dry run mode enabled, not executing provisioning script:\n{}", yamlScript);
         }
 
         return updates;
+    }
+
+    @Nonnull
+    public static String getProvisioningFilenameWithDateAndExtension(String baseName, String extension) {
+        String dateStr = java.time.LocalDate.now().toString();
+        return baseName.replace(extension, "-" + dateStr + extension);
     }
 
     /**
@@ -293,10 +320,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         if (bundleInfo.getOsgiState() == BundleState.ACTIVE) {
             String key = getBundleKey(bundleKey);
             if (excludeModules.stream().anyMatch(pattern -> pattern.matcher(key).matches())) {
-                logger.info("Skipping excluded module: {}", key);
+                logger.debug("Skipping excluded module: {}", key);
                 return;
             }
-            logger.info("Checking for updates for {}", key);
+            logger.debug("Checking for updates for {}", key);
             Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(key, "/"), StringUtils.substringAfterLast(key, "/"));
             logger.debug("Bundle: {}", bundle);
             if (bundle != null) {
@@ -638,7 +665,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         VersionConstraint versionConstraint;
         try {
             versionConstraint = versionScheme.parseVersionConstraint(getVersion(bundle.getVersion()));
-            logger.info("Checking for updates for {} : {}", artifact, versionConstraint.getRange());
+            logger.debug("Checking for updates for {} : {}", artifact, versionConstraint.getRange());
         } catch (InvalidVersionSpecificationException e) {
             throw new DataFetchingException(e);
         }
@@ -647,7 +674,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             File file = resolver.resolveMetadata(artifact.getGroupId(), artifact.getArtifactId(), "maven-metadata.xml", null);
             if (file != null && file.exists()) {
                 List<Version> versions = getVersions(bundle, file, versionScheme, versionConstraint, bundleVersion);
-                logger.info("Found {} versions", versions.size());
+                logger.debug("Found {} versions", versions.size());
                 if (logger.isDebugEnabled()) {
                     versions.forEach(version ->
                             logger.debug("Version : {}", version)

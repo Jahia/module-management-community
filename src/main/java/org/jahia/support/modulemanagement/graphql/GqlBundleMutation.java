@@ -6,7 +6,7 @@ import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
 import org.jahia.osgi.BundleUtils;
 import org.jahia.services.modulemanager.BundleInfo;
 import org.jahia.services.modulemanager.ModuleManager;
-import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
+import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
 
 import java.util.HashSet;

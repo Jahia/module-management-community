@@ -8,7 +8,7 @@ import org.apache.karaf.features.Feature;
 import org.jahia.api.settings.SettingsBean;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
-import org.jahia.support.modulemanagement.services.ModuleManagementCommunityService;
+import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
