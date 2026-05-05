@@ -7,12 +7,18 @@ import {DialogContent} from '@material-ui/core';
 import * as PropTypes from 'prop-types';
 import styles from './ModuleManagementCommunityApp.scss';
 import Mermaid from './Mermaid';
-import BundleDescriptionList from './BundleDescriptionList';
-import BundleInfo from "~/components/BundleInfo";
+import BundleInfo from './BundleInfo';
+
+const BUNDLE_TYPE_COLOR = {
+    module: 'success',
+    templatesSet: 'success',
+    system: 'accent',
+    bundle: 'accent'
+};
 
 const TABS = [
     {id: 'details', labelKey: 'label.bundle.tab.details'},
-    {id: 'sites', labelKey: 'label.bundle.tab.sites', condition: b => b.sitesDeployment?.length > 0},
+    {id: 'sites', labelKey: 'label.bundle.tab.sites', condition: b => b.type === 'module' && b.sitesDeployment?.length > 0},
     {id: 'bundleDeps', labelKey: 'label.bundle.tab.bundleDeps', condition: b => b.dependenciesGraph?.length > 0},
     {id: 'moduleDeps', labelKey: 'label.bundle.tab.moduleDeps', condition: b => b.moduleDependencies?.length > 0}
 ];
@@ -73,6 +79,8 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                 <div className={styles.bundleDetailsTitle}>
                     <Typography variant="title">{bundle.symbolicName}</Typography>
                     <Badge label={'v' + bundle.version} color="accent"/>
+                    <Badge label={bundle.type || 'bundle'}
+                           color={BUNDLE_TYPE_COLOR[bundle.type] || 'default'}/>
                     <Chip variant="bright"
                           label={bundle.state}
                           color={bundle.state === 'ACTIVE' ? 'success' : 'danger'}

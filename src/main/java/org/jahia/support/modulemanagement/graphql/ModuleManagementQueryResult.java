@@ -92,6 +92,19 @@ public class ModuleManagementQueryResult {
     }
 
     @GraphQLField
+    @GraphQLName("installedBundleTypes")
+    @GraphQLDescription("Return a list of 'symbolicName:type' for all installed bundles — lightweight pre-fetch for type filtering")
+    public List<String> getInstalledBundleTypes() {
+        return Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class)
+                        .getBundleContext().getBundles())
+                .map(b -> {
+                    String type = b.getHeaders().get("Jahia-Module-Type");
+                    return b.getSymbolicName() + ":" + (type != null ? type : "bundle");
+                })
+                .collect(Collectors.toList());
+    }
+
+    @GraphQLField
     @GraphQLName("clustered")
     @GraphQLDescription("Return true if the Jahia instance is clustered")
     public boolean isClustered() {

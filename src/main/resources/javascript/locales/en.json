@@ -48,6 +48,11 @@
         "details": "Details",
         "moduleDeps": "Module dependencies",
         "sites": "Sites"
+      },
+      "type": {
+        "bundle": "Bundle",
+        "module": "Module",
+        "system": "System"
       }
     },
     "close": "Close",
@@ -61,12 +66,20 @@
         }
       }
     },
+    "errors": {
+      "loadingModuleData": "An error occurred while loading module data",
+      "loadingVanityUrl": "An error occurred while loading data",
+      "moduleNotFound": "Module not found"
+    },
     "fetchUpdates": "Fetching updates",
     "help": "Help",
     "input": {
       "autostart": "Autostart modules",
       "dryRun": "Dry run",
       "filterBySymbolicName": "Filter by bundle symbolic name",
+      "filterByType": {
+        "all": "All types"
+      },
       "group": {
         "display": "Display",
         "updateOptions": "Update options"
@@ -139,6 +152,7 @@
         "clusterstate": "State / Cluster state",
         "name": "Module name",
         "state": "State",
+        "type": "Type",
         "version": "Installed version"
       },
       "title": "Installed modules"

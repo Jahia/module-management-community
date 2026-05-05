@@ -165,6 +165,8 @@ interface JCRNode {
         "The name of the permission"
         permissionName: String!
     ): Boolean
+    "Return if a node of type jnt:condition is matching for the current node."
+    isConditionMatching: Boolean
     "Check if the node as a renderable template associated with it (not a view a template)."
     isDisplayableNode: Boolean
     "true if node is under a mounted node"
@@ -174,6 +176,8 @@ interface JCRNode {
         "Node type name"
         type: InputNodeTypesInput!
     ): Boolean!
+    "Returns true if the node is visible according to the visibility conditions defined for its type."
+    isVisible: Boolean
     jExperience(
         "Unomi profile id"
         profileId: String,
@@ -266,7 +270,7 @@ interface JCRNode {
     ): String
     "Gets the fully rendered content for this node"
     renderedContent(
-        "Rendering context configuration"
+        "Rendering context configuration. Possible values include 'module', 'gwt', 'page'. Default is 'module'."
         contextConfiguration: String,
         "Is edit mode"
         isEditMode: Boolean,
@@ -274,11 +278,11 @@ interface JCRNode {
         language: String,
         "Main resource path"
         mainResourcePath: String,
-        "Additional request attributes"
+        "Additional request attributes to be included in request. Array of name value pairs: [{name:\"templateSet\", value:\"true\"}]"
         requestAttributes: [InputRenderRequestAttributeInput],
-        "Template type"
+        "Template type. Possible values could be 'html', 'json' etc. Default is 'html'."
         templateType: String,
-        "Name of the view (leave null for default)"
+        "Name of the view (leave null for default). This is the value of j:view property."
         view: String
     ): RenderedNode
     "GraphQL representation of the site the JCR node belongs to, or the system site in case the node does not belong to any site"
@@ -325,6 +329,8 @@ interface JCRNode {
         "Languages"
         languages: [String]
     ): [VanityUrl]
+    "Returns the details of the visibility conditions evaluation for the node."
+    visibilityDetails: [VisibilityConditionEvaluationResult]
     "Read work in progress information for a given node"
     wipInfo: wipInfo
     "Get the workspace of the query"
@@ -504,13 +510,15 @@ type AclRole {
 type AdminMutation {
     "Get Jahia admin mutation"
     jahia: JahiaAdminMutation!
-    modulesManagement: ClusteredModuleManagementMutationResult
+    modulesManagement: ModuleManagementMutationResult
     "Mount point mutation extension API"
     mountPoint: GqlMountPointMutation
     "Personal API tokens mutations"
     personalApiTokens: PersonalApiTokensMutation
     "Augmented Search administrative mutations"
     search: ASAdminMutations
+    "Sitemap API mutations"
+    sitemap: GqlSitemapMutation
 }
 
 "Admin queries root"
@@ -532,6 +540,8 @@ type AdminQuery {
     roles: [AclRole]
     "Augmented Search administrative queries"
     search: ASAdminQueries
+    "Sitemap API queries"
+    sitemap: GqlSitemapQueries
     "Jahia admin tools"
     tools: AdminTools
     "Get user administration endpoint"
@@ -690,18 +700,6 @@ type Cluster {
     isActivated: Boolean
     "Query operation on Jahia's journal across all nodes of a cluster"
     journal: Journal
-}
-
-type ClusteredModuleManagementMutationResult {
-    "Allow developers to perform operations on bundles, such as installing, uninstalling, or updating"
-    bundle(bundleId: Long): GqlBundleMutation
-    "Import a module from the file system into the OSGi framework"
-    importModule(bundleId: Long, force: Boolean = false): String
-    pullBundles: String
-    pushBundles: String
-    synchronizeBundles: String
-    "Return the list of modules that have been updated"
-    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], forceUpdateAll: Boolean = false, jahiaOnly: Boolean = true, onStartup: Boolean = false, uninstallPrevious: Boolean = false): [String]
 }
 
 "Mutation for configuration value object"
@@ -1015,6 +1013,8 @@ type GenericJCRNode implements JCRNode {
         "The name of the permission"
         permissionName: String!
     ): Boolean
+    "Return if a node of type jnt:condition is matching for the current node."
+    isConditionMatching: Boolean
     "Check if the node as a renderable template associated with it (not a view a template)."
     isDisplayableNode: Boolean
     "true if node is under a mounted node"
@@ -1024,6 +1024,8 @@ type GenericJCRNode implements JCRNode {
         "Node type name"
         type: InputNodeTypesInput!
     ): Boolean!
+    "Returns true if the node is visible according to the visibility conditions defined for its type."
+    isVisible: Boolean
     jExperience(
         "Unomi profile id"
         profileId: String,
@@ -1116,7 +1118,7 @@ type GenericJCRNode implements JCRNode {
     ): String
     "Gets the fully rendered content for this node"
     renderedContent(
-        "Rendering context configuration"
+        "Rendering context configuration. Possible values include 'module', 'gwt', 'page'. Default is 'module'."
         contextConfiguration: String,
         "Is edit mode"
         isEditMode: Boolean,
@@ -1124,11 +1126,11 @@ type GenericJCRNode implements JCRNode {
         language: String,
         "Main resource path"
         mainResourcePath: String,
-        "Additional request attributes"
+        "Additional request attributes to be included in request. Array of name value pairs: [{name:\"templateSet\", value:\"true\"}]"
         requestAttributes: [InputRenderRequestAttributeInput],
-        "Template type"
+        "Template type. Possible values could be 'html', 'json' etc. Default is 'html'."
         templateType: String,
-        "Name of the view (leave null for default)"
+        "Name of the view (leave null for default). This is the value of j:view property."
         view: String
     ): RenderedNode
     "GraphQL representation of the site the JCR node belongs to, or the system site in case the node does not belong to any site"
@@ -1175,6 +1177,8 @@ type GenericJCRNode implements JCRNode {
         "Languages"
         languages: [String]
     ): [VanityUrl]
+    "Returns the details of the visibility conditions evaluation for the node."
+    visibilityDetails: [VisibilityConditionEvaluationResult]
     "Read work in progress information for a given node"
     wipInfo: wipInfo
     "Get the workspace of the query"
@@ -1303,6 +1307,7 @@ type GqlBundle {
     sitesDeployment: [GqlSiteDeployment]
     state: BundleState
     symbolicName: String
+    type: String
     version: String
 }
 
@@ -1317,6 +1322,7 @@ type GqlBundleMutation {
     refresh: String
     start: String
     stop: String
+    uninstall: String
 }
 
 "Channel information"
@@ -1495,6 +1501,17 @@ type GqlEditorFormMutations {
         locale: String!,
         "UUID or path of the edited node."
         uuidOrPath: String!
+    ): Boolean
+    "Save the visibility condition for the given node"
+    saveVisibilityCondition(
+        isMatchingAllConditions: Boolean = false,
+        "A string representation of a locale, in IETF BCP 47 language tag format, ie en_US, en, fr, fr_CH, ..."
+        locale: String!,
+        newConditions: [InputVisibilityConditionInput],
+        removedConditions: [String],
+        updatedConditions: [InputVisibilityConditionInput],
+        "UUID of the parent nodes ofr teh visibility condition"
+        uuid: String!
     ): Boolean
     "Unlock the given node for edition, if the node is locked."
     unlockEditor(
@@ -2044,6 +2061,13 @@ type GqlRangeFacetResult {
     field: String
 }
 
+type GqlRemovedAttributes {
+    "Name of the removed attribute"
+    attributes: [String]
+    "Tag on witch the attribute has been removed"
+    tag: String
+}
+
 "Scheduler object which allows to access to background jobs"
 type GqlScheduler {
     "List of active jobs (deprecated)"
@@ -2098,6 +2122,27 @@ type GqlSiteDeployment {
     siteKey: String
 }
 
+type GqlSitemapMutation {
+    "Sending sitemap(s) based on either sitemap index XML or sitemap XML URL to search engine URL(s) specified in CFG"
+    sendSitemapToSearchEngine(
+        "Sitemap index XML or sitemap XML URL"
+        sitemapURL: String!
+    ): Boolean
+    "Trigger the sitemap job execution for the given sitekey"
+    triggerSitemapJob(
+        "Site key"
+        siteKey: String
+    ): Boolean
+}
+
+type GqlSitemapQueries {
+    "Get site URL with only server domain appended from sitemap URL"
+    siteUrl(
+        "Sitemap index XML or sitemap XML URL"
+        siteKey: String!
+    ): String
+}
+
 "Aggregation bucket representation"
 type GqlTermFacetData {
     "The aggregation bucket value"
@@ -2140,6 +2185,17 @@ type GqlTreeFacetResult {
     field: String
     "rootPath passed as a parameter"
     rootPath: String
+}
+
+type GqlValidationResult {
+    "Removed Attributes"
+    removedAttributes: [GqlRemovedAttributes]
+    "Removed tags"
+    removedTags: [String]
+    "Returns true if the provided HTML has no unsafe tag or attribute. An unsafe tag (or attribute) is either a tag not in allowed Tags, or in the disallowed tags from the OSGi configuration."
+    safe: Boolean
+    "The sanitized HTML produced by the policy"
+    sanitizedHtml: String
 }
 
 "Variant information for a given channel"
@@ -2288,6 +2344,12 @@ type GroupEdge {
     index: Int
     "The item at the end of the edge"
     node: Group
+}
+
+"HTML filtering query"
+type HTMLFilteringQuery {
+    "Validate or sanitize an HTML string for a given workspace and site. It returns the sanitized HTML string, the potential removed tags/attributes and whether the provided HTML string is safe or not."
+    validate(html: String!, siteKey: String, workspace: Workspace): GqlValidationResult
 }
 
 "Asset type for image"
@@ -3249,6 +3311,8 @@ type JCRSite implements JCRNode {
     installedModules: [String]
     "Retrieves a collection of module IDs, which are installed on the site, the node belongs to, as well as dependencies of those modules"
     installedModulesWithAllDependencies: [String]
+    "Return if a node of type jnt:condition is matching for the current node."
+    isConditionMatching: Boolean
     "Check if the node as a renderable template associated with it (not a view a template)."
     isDisplayableNode: Boolean
     "true if node is under a mounted node"
@@ -3258,6 +3322,8 @@ type JCRSite implements JCRNode {
         "Node type name"
         type: InputNodeTypesInput!
     ): Boolean!
+    "Returns true if the node is visible according to the visibility conditions defined for its type."
+    isVisible: Boolean
     jExperience(
         "Unomi profile id"
         profileId: String,
@@ -3352,7 +3418,7 @@ type JCRSite implements JCRNode {
     ): String
     "Gets the fully rendered content for this node"
     renderedContent(
-        "Rendering context configuration"
+        "Rendering context configuration. Possible values include 'module', 'gwt', 'page'. Default is 'module'."
         contextConfiguration: String,
         "Is edit mode"
         isEditMode: Boolean,
@@ -3360,11 +3426,11 @@ type JCRSite implements JCRNode {
         language: String,
         "Main resource path"
         mainResourcePath: String,
-        "Additional request attributes"
+        "Additional request attributes to be included in request. Array of name value pairs: [{name:\"templateSet\", value:\"true\"}]"
         requestAttributes: [InputRenderRequestAttributeInput],
-        "Template type"
+        "Template type. Possible values could be 'html', 'json' etc. Default is 'html'."
         templateType: String,
-        "Name of the view (leave null for default)"
+        "Name of the view (leave null for default). This is the value of j:view property."
         view: String
     ): RenderedNode
     "Site server name"
@@ -3415,6 +3481,8 @@ type JCRSite implements JCRNode {
         "Languages"
         languages: [String]
     ): [VanityUrl]
+    "Returns the details of the visibility conditions evaluation for the node."
+    visibilityDetails: [VisibilityConditionEvaluationResult]
     "Read work in progress information for a given node"
     wipInfo: wipInfo
     "Get the workspace of the query"
@@ -3673,6 +3741,65 @@ type Metadata {
     lastPublishedBy: String
 }
 
+"MFA state-modifying operations"
+type MfaFactorsMutation {
+    "Verify Duo factor"
+    verifyDuoFactor(duoCode: String, state: String): MfaResponse
+    "Verify email code factor"
+    verifyEmailCodeFactor(code: String): MfaResponse
+}
+
+"MFA state-modifying operations"
+type MfaMutation {
+    "Clear current MFA session"
+    clear: MfaResponse
+    "Access MFA factors specific mutations"
+    factors: MfaFactorsMutation
+    "Initiate MFA authentication"
+    initiate(password: String, site: String, username: String): MfaResponse
+    "Prepare a specific MFA factor"
+    prepareFactor(factorType: String): MfaResponse
+}
+
+"MFA read-only operations"
+type MfaQuery {
+    "Get list of available MFA factors"
+    availableFactors: [String]
+    "Check if password reset is needed for the current MFA session"
+    checkResetPasswordNeeded(site: String, username: String): Boolean
+    "Get current MFA session status"
+    duoURL: String
+    "Check if MFA is enabled"
+    enabled: Boolean
+    "Check if user is subscribed to Duo MFA"
+    isUserSubscribedToDuo(site: String, user: String): Boolean
+    "Get current MFA session status"
+    sessionStatus: MfaResponse
+}
+
+"Response for MFA operations"
+type MfaResponse {
+    "List of completed MFA factors"
+    completedFactors: [String]
+    "Error message if operation failed"
+    error: String
+    "List of required MFA factors"
+    requiredFactors: [String]
+    "Current MFA session state"
+    sessionState: String
+    "Operation success status"
+    success: Boolean
+}
+
+type ModuleManagementMutationResult {
+    "Allow developers to perform operations on bundles, such as installing, uninstalling, or updating"
+    bundle(bundleId: Long): GqlBundleMutation
+    "Import a module from the file system into the OSGi framework"
+    importModule(bundleId: Long, force: Boolean = false): String
+    "Return the list of modules that have been updated"
+    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], forceUpdateAll: Boolean = false, jahiaOnly: Boolean = true, onStartup: Boolean = false, uninstallPrevious: Boolean = false): [String]
+}
+
 type ModuleManagementQueryResult {
     "Return a list of modules that have updates available"
     availableUpdates(filters: [String]): [String]
@@ -3682,6 +3809,8 @@ type ModuleManagementQueryResult {
     clustered: Boolean
     "Return a list of features available in the Jahia community edition"
     features(filters: [String], jahiaOnly: Boolean = true): [GqlFeature]
+    "Return a list of 'symbolicName:type' for all installed bundles — lightweight pre-fetch for type filtering"
+    installedBundleTypes: [String]
     "Return a list of installed modules in the Jahia community edition"
     installedModules: [String]
     "Return the last time the module updates were checked"
@@ -3707,13 +3836,15 @@ type Mutation {
     ): JCRMutation
     "Generate a new JWT token"
     jwtToken(ips: [String], referer: [String], scopes: [String]!): JWTToken
+    "Main access to MFA API"
+    mfa: MfaMutation
     mutateWorkflows(definition: String): [WorkflowMutation]
 }
 
 "GraphQL representation of node type information"
 type NodeTypeInfo {
     "Returns icon url of the node type"
-    iconUrl: String
+    iconURL: String
     "Returns the localized label of the node type"
     label: String
     "Returns the name of the node type"
@@ -3950,6 +4081,8 @@ type Query {
     dashboard: GqlDashboard
     "Main access field to the DX GraphQL Form API"
     forms: GqlEditorForms
+    "Main access to html filtering API"
+    htmlFiltering: HTMLFilteringQuery
     jExperience: GqljExperience
     "Main access field to the jContent API"
     jcontent: GqlJContent
@@ -3958,6 +4091,8 @@ type Query {
         "The name of the workspace to fetch the node from; either EDIT, LIVE, or null to use EDIT by default"
         workspace: Workspace = EDIT
     ): JCRQuery!
+    "Main access to MFA read-only API"
+    mfa: MfaQuery
     "Search in Jahia using Augmented Search"
     search(
         "Boost specification"
@@ -4397,6 +4532,8 @@ type VanityUrl implements JCRNode {
         "The name of the permission"
         permissionName: String!
     ): Boolean
+    "Return if a node of type jnt:condition is matching for the current node."
+    isConditionMatching: Boolean
     "Check if the node as a renderable template associated with it (not a view a template)."
     isDisplayableNode: Boolean
     "true if node is under a mounted node"
@@ -4406,6 +4543,8 @@ type VanityUrl implements JCRNode {
         "Node type name"
         type: InputNodeTypesInput!
     ): Boolean!
+    "Returns true if the node is visible according to the visibility conditions defined for its type."
+    isVisible: Boolean
     jExperience(
         "Unomi profile id"
         profileId: String,
@@ -4500,7 +4639,7 @@ type VanityUrl implements JCRNode {
     ): String
     "Gets the fully rendered content for this node"
     renderedContent(
-        "Rendering context configuration"
+        "Rendering context configuration. Possible values include 'module', 'gwt', 'page'. Default is 'module'."
         contextConfiguration: String,
         "Is edit mode"
         isEditMode: Boolean,
@@ -4508,11 +4647,11 @@ type VanityUrl implements JCRNode {
         language: String,
         "Main resource path"
         mainResourcePath: String,
-        "Additional request attributes"
+        "Additional request attributes to be included in request. Array of name value pairs: [{name:\"templateSet\", value:\"true\"}]"
         requestAttributes: [InputRenderRequestAttributeInput],
-        "Template type"
+        "Template type. Possible values could be 'html', 'json' etc. Default is 'html'."
         templateType: String,
-        "Name of the view (leave null for default)"
+        "Name of the view (leave null for default). This is the value of j:view property."
         view: String
     ): RenderedNode
     "GraphQL representation of the site the JCR node belongs to, or the system site in case the node does not belong to any site"
@@ -4561,6 +4700,8 @@ type VanityUrl implements JCRNode {
         "Languages"
         languages: [String]
     ): [VanityUrl]
+    "Returns the details of the visibility conditions evaluation for the node."
+    visibilityDetails: [VisibilityConditionEvaluationResult]
     "Read work in progress information for a given node"
     wipInfo: wipInfo
     "Get the workspace of the query"
@@ -4590,6 +4731,11 @@ type VanityUrlMappingMutation {
     ): Boolean
     "Get the identifier of the node currently being mutated"
     uuid: String
+}
+
+type VisibilityConditionEvaluationResult {
+    conditionNode: JCRNode
+    matches: Boolean
 }
 
 "Workflow process"
@@ -5456,6 +5602,12 @@ input InputVanityUrl {
     language: String!
     "The vanity URL"
     url: String!
+}
+
+input InputVisibilityConditionInput {
+    properties: [InputJCRProperty]
+    type: String
+    uuid: String
 }
 
 "Boost fields for document matching"

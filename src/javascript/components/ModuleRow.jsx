@@ -30,7 +30,7 @@ const BUNDLE_QUERY = gql`query ($module: String!, $version: String!) {
     admin {
         modulesManagement {
             bundle(name: $module, version: $version) {
-                symbolicName bundleId state version
+                symbolicName bundleId state version type
                 manifest { key value }
                 dependencies
                 dependenciesGraph(depth: 2)
@@ -46,7 +46,14 @@ const BUNDLE_QUERY = gql`query ($module: String!, $version: String!) {
     }
 }`;
 
-const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClustered, refreshAllModules}) => {
+const BUNDLE_TYPE_COLOR = {
+    module: 'success',
+    templatesSet: 'success',
+    system: 'accent',
+    bundle: 'accent'
+};
+
+const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, reportType, isClustered, refreshAllModules}) => {
     const {t} = useTranslation('module-management-community');
     const notificationContext = useNotifications();
     const [open, setOpen] = useState(false);
@@ -124,6 +131,11 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
     useEffect(() => {
         const bundle = data?.admin?.modulesManagement?.bundle;
         if (bundle !== undefined) {
+            // Report bundle type back to parent for app-level filtering
+            if (reportType && bundle.type) {
+                reportType(bundle.symbolicName, bundle.type);
+            }
+
             const depList = bundle.moduleDependencies?.length > 0 ? bundle.moduleDependencies : bundle.dependencies;
             if (depList) {
                 const deps = updates
@@ -134,7 +146,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
                 }
             }
         }
-    }, [data, updates, dependentUpdates]);
+    }, [data, updates, dependentUpdates, reportType]);
 
     if (error) {
         console.error('Error when fetching module data: ' + error);
@@ -168,12 +180,17 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, isClus
         updates.filter(u => depList.find(dep => dep.split(' [')[0] === u.name)).map(u => u.name) :
         [];
 
+
     return (
         <TableRow>
             <TableBodyCell>
                 <Typography variant="subheading" weight="semiBold">
                     {bundle.symbolicName} <Typography variant="caption">[{bundle.bundleId}]</Typography>
                 </Typography>
+            </TableBodyCell>
+            <TableBodyCell>
+                <Badge label={bundle.type || 'bundle'}
+                       color={BUNDLE_TYPE_COLOR[bundle.type] || 'accent'}/>
             </TableBodyCell>
             <TableBodyCell>
                 <Badge label={bundle.version} color="accent"/>
@@ -287,6 +304,7 @@ ModuleRow.propTypes = {
     updates: PropTypes.arrayOf(PropTypes.shape({name: PropTypes.string, version: PropTypes.string, available: PropTypes.string})),
     handleUpdate: PropTypes.func,
     dependentUpdates: PropTypes.func,
+    reportType: PropTypes.func,
     isClustered: PropTypes.bool,
     refreshAllModules: PropTypes.func
 };

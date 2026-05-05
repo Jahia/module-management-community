@@ -93,6 +93,13 @@ public class GqlBundle {
     }
 
     @GraphQLField
+    @GraphQLName("type")
+    public String getType() {
+        String string = bundle.getHeaders().get("Jahia-Module-Type");
+        return string!=null ? string : "bundle";
+    }
+
+    @GraphQLField
     @GraphQLName("manifest")
     public List<GqlManifestHeader> getManifest(@GraphQLName("keys") List<String> includeKeys) {
         Enumeration<String> keys = bundle.getHeaders().keys();

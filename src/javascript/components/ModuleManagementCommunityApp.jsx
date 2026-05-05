@@ -100,6 +100,8 @@ const ModuleManagementCommunityApp = () => {
     const [modules, setModules] = useState([]);
     const [filter, setFilter] = useState('');
     const [debouncedFilter, setDebouncedFilter] = useState('');
+    const [typeFilter, setTypeFilter] = useState('');
+    const [bundleTypes, setBundleTypes] = useState({});
     const [dependentUpdates, setDependentUpdates] = useState({});
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -110,7 +112,7 @@ const ModuleManagementCommunityApp = () => {
         loading: initialLoading,
         refetch: refreshAllModules
     } = useQuery(gql`query {
-        admin { modulesManagement { installedModules clustered } }
+        admin { modulesManagement { installedModules installedBundleTypes clustered } }
     }`, {fetchPolicy: 'cache-and-network', pollInterval: 30000, initialFetchPolicy: 'network-only'});
 
     const {data, error, loading, refetch} = useQuery(gql`query {
@@ -159,6 +161,19 @@ const ModuleManagementCommunityApp = () => {
     }, [initialData, order, orderBy, updates]);
 
     useEffect(() => {
+        if (initialData?.admin?.modulesManagement?.installedBundleTypes) {
+            const typeMap = {};
+            initialData.admin.modulesManagement.installedBundleTypes.forEach(entry => {
+                const colonIdx = entry.indexOf(':');
+                if (colonIdx > 0) {
+                    typeMap[entry.substring(0, colonIdx)] = entry.substring(colonIdx + 1);
+                }
+            });
+            setBundleTypes(typeMap);
+        }
+    }, [initialData]);
+
+    useEffect(() => {
         setCurrentPage(1);
     }, [debouncedFilter, preferences.updatesOnly]);
 
@@ -180,6 +195,16 @@ const ModuleManagementCommunityApp = () => {
             ...prev,
             [moduleName]: Array.isArray(deps) ? deps : [deps]
         }));
+    }, []);
+
+    const handleReportType = useCallback((moduleName, type) => {
+        setBundleTypes(prev => {
+            if (prev[moduleName] === type) {
+                return prev; // Avoid unnecessary re-renders
+            }
+
+            return {...prev, [moduleName]: type};
+        });
     }, []);
 
     if (error || initialError) {
@@ -263,6 +288,14 @@ const ModuleManagementCommunityApp = () => {
             const hasDirectUpdate = updates.some(u => u.name === m.name);
             const hasDependentUpdate = dependentUpdates[m.name]?.length > 0;
             if (!hasDirectUpdate && !hasDependentUpdate) {
+                return false;
+            }
+        }
+
+        if (typeFilter) {
+            const knownType = bundleTypes[m.name];
+            // If type not yet known, keep the row visible (it will self-hide once loaded)
+            if (knownType && knownType !== typeFilter) {
                 return false;
             }
         }
@@ -390,6 +423,29 @@ const ModuleManagementCommunityApp = () => {
                                 </div>
                             </TableHeadCell>
                             <TableHeadCell>
+                                <div className={styles.columnHeaderCell}>
+                                    <div className={styles.columnHeaderRow}>
+                                        <Typography variant="body" weight="semiBold">
+                                            {t('label.table.cells.type')}
+                                        </Typography>
+                                    </div>
+                                    <select value={typeFilter}
+                                            className={styles.columnFilterInput}
+                                            style={{marginTop: '6px', marginBottom: '8px'}}
+                                            onChange={e => {
+                                                    setTypeFilter(e.target.value);
+                                                    setCurrentPage(1);
+                                                }}
+                                    >
+                                        <option value="">{t('label.input.filterByType.all')}</option>
+                                        <option value="module">module</option>
+                                        <option value="system">system</option>
+                                        <option value="bundle">bundle</option>
+                                        <option value="templatesSet">templatesSet</option>
+                                    </select>
+                                </div>
+                            </TableHeadCell>
+                            <TableHeadCell>
                                 <SortableHeader property="version" label={t('label.table.cells.version')}/>
                             </TableHeadCell>
                             {updates.length > 0 && (
@@ -437,6 +493,7 @@ const ModuleManagementCommunityApp = () => {
                                        updates={updates}
                                        handleUpdate={handleUpdateAll}
                                        dependentUpdates={handleDependentUpdate}
+                                       reportType={handleReportType}
                                        isClustered={isClustered}
                                        refreshAllModules={refreshAllModules}/>
                         ))}
