@@ -180,7 +180,6 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
         updates.filter(u => depList.find(dep => dep.split(' [')[0] === u.name)).map(u => u.name) :
         [];
 
-
     return (
         <TableRow>
             <TableBodyCell>
@@ -243,7 +242,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
                             icon={<Information/>}
                             title={t('label.showDetails')}
                             onClick={() => setOpen(true)}/>
-                    {(bundle.state === 'INSTALLED' || bundle.state === 'RESOLVED') && (
+                    {bundle.type !== 'bundle' && (bundle.state === 'INSTALLED' || bundle.state === 'RESOLVED') && (
                         <>
                             <Button variant="ghost"
                                     size="default"
@@ -263,13 +262,15 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
                     )}
                     {bundle.state === 'ACTIVE' && (
                         <>
-                            <Button variant="ghost"
-                                    size="default"
-                                    color="default"
-                                    label=""
-                                    icon={<Cancel/>}
-                                    title={t('label.stopBundle')}
-                                    onClick={handleStopBundle}/>
+                            {bundle.type !== 'bundle' && (
+                                <Button variant="ghost"
+                                        size="default"
+                                        color="default"
+                                        label=""
+                                        icon={<Cancel/>}
+                                        title={t('label.stopBundle')}
+                                        onClick={handleStopBundle}/>
+                            )}
                             <Button variant="ghost"
                                     size="default"
                                     color="default"
@@ -277,7 +278,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
                                     icon={<Reload/>}
                                     title={t('label.refreshBundle')}
                                     onClick={handleRefreshBundle}/>
-                            {updateAvailable && (
+                            {bundle.type !== 'bundle' && updateAvailable && (
                                 <Button variant="ghost"
                                         size="default"
                                         color="accent"
