@@ -43,17 +43,24 @@
         "disabled": "Disabled",
         "enabled": "Enabled"
       },
-      "tab": {
-        "bundleDeps": "Bundle dependencies",
-        "details": "Details",
-        "moduleDeps": "Module dependencies",
-        "sites": "Sites"
-      },
-      "type": {
-        "bundle": "Bundle",
-        "module": "Module",
-        "system": "System"
-      }
+        "tab": {
+          "bundleDeps": "Bundle dependencies",
+          "details": "Details",
+          "moduleDeps": "Module dependencies",
+          "sites": "Sites",
+          "versions": "Version history"
+        },
+        "type": {
+          "bundle": "Bundle",
+          "module": "Module",
+          "system": "System"
+        },
+        "versions": {
+          "hint": "These are all versions of this bundle available in the module management store (/module-management/bundles) that are not currently installed.",
+          "install": "Install this version",
+          "installError": "An error occurred while installing the selected version",
+          "installSuccess": "Bundle version installed successfully"
+        }
     },
     "close": "Close",
     "cluster": {
@@ -73,6 +80,12 @@
     },
     "fetchUpdates": "Fetching updates",
     "help": "Help",
+    "importModule": {
+      "button": "Force reimport content",
+      "error": "An error occurred while reimporting module content",
+      "success": "Module content reimported successfully",
+      "tooltip": "Force reimport of the module's JCR content (import XML/ZIP files from META-INF)"
+    },
     "input": {
       "autostart": "Autostart modules",
       "dryRun": "Dry run",

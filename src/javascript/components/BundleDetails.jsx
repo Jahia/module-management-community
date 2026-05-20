@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
-import {Badge, Button, Chip, Close, Reload, Rocket, Separator, Switch, Typography} from '@jahia/moonstone';
+import {Badge, Button, Chip, Close, CloudUpload, Reload, Replay, Rocket, Separator, Switch, Typography} from '@jahia/moonstone';
 import {DialogContent} from '@material-ui/core';
 import * as PropTypes from 'prop-types';
 import styles from './ModuleManagementCommunityApp.scss';
@@ -19,6 +19,7 @@ const BUNDLE_TYPE_COLOR = {
 const TABS = [
     {id: 'details', labelKey: 'label.bundle.tab.details'},
     {id: 'sites', labelKey: 'label.bundle.tab.sites', condition: b => b.type === 'module' && b.sitesDeployment?.length > 0},
+    {id: 'versions', labelKey: 'label.bundle.tab.versions', condition: b => b.previousVersions?.length > 0},
     {id: 'bundleDeps', labelKey: 'label.bundle.tab.bundleDeps', condition: b => b.dependenciesGraph?.length > 0},
     {id: 'moduleDeps', labelKey: 'label.bundle.tab.moduleDeps', condition: b => b.moduleDependencies?.length > 0}
 ];
@@ -27,6 +28,8 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
     const {t} = useTranslation('module-management-community');
     const [bundle, setBundle] = useState(initialBundle);
     const [activeTab, setActiveTab] = useState('details');
+    const [importResult, setImportResult] = useState(null);
+    const [installVersionResult, setInstallVersionResult] = useState(null);
 
     useEffect(() => {
         setBundle(initialBundle);
@@ -40,6 +43,14 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
         admin { modulesManagement { bundle(bundleId: $bundleId) { disableOnSites(siteKeys: $siteKeys) } } }
     }`, {variables: {bundleId: bundle.bundleId, siteKeys: []}});
 
+    const [importModuleMutation] = useMutation(gql`mutation ($bundleId: Long!) {
+        admin { modulesManagement { importModule(bundleId: $bundleId, force: true) } }
+    }`);
+
+    const [installBundleFromJcrMutation] = useMutation(gql`mutation ($jcrPath: String!) {
+        admin { modulesManagement { installBundleFromJcr(jcrPath: $jcrPath) } }
+    }`);
+
     const handleSiteDeployment = async (event, value, checked) => {
         try {
             if (checked) {
@@ -52,6 +63,34 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
         } catch (error) {
             console.error('Error updating site deployment:', error);
         }
+    };
+
+    const handleForceImport = async () => {
+        try {
+            const result = await importModuleMutation({variables: {bundleId: bundle.bundleId}});
+            const msg = result?.data?.admin?.modulesManagement?.importModule;
+            setImportResult({success: true, message: msg || t('label.importModule.success')});
+        } catch (error) {
+            setImportResult({success: false, message: t('label.importModule.error')});
+            console.error('Error force-importing module:', error);
+        }
+
+        setTimeout(() => setImportResult(null), 5000);
+    };
+
+    const handleInstallVersion = async jcrPath => {
+        setInstallVersionResult(null);
+        try {
+            const result = await installBundleFromJcrMutation({variables: {jcrPath}});
+            const msg = result?.data?.admin?.modulesManagement?.installBundleFromJcr;
+            setInstallVersionResult({success: true, message: msg || t('label.bundle.versions.installSuccess')});
+            await refetch();
+        } catch (error) {
+            setInstallVersionResult({success: false, message: t('label.bundle.versions.installError')});
+            console.error('Error installing bundle version:', error);
+        }
+
+        setTimeout(() => setInstallVersionResult(null), 6000);
     };
 
     const handleBulkSites = async (enable, excludeSystem) => {
@@ -88,6 +127,15 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                     <Typography variant="caption" className={styles.bundleId}>[{bundle.bundleId}]</Typography>
                 </div>
                 <div className={styles.bundleDetailsHeaderActions}>
+                    {(bundle.type === 'module' || bundle.type === 'templatesSet') && (
+                        <Button variant="ghost"
+                                size="small"
+                                color="default"
+                                icon={<CloudUpload/>}
+                                label={t('label.importModule.button')}
+                                title={t('label.importModule.tooltip')}
+                                onClick={handleForceImport}/>
+                    )}
                     <Button variant="ghost"
                             size="small"
                             color="default"
@@ -102,6 +150,21 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                             onClick={() => close(false)}/>
                 </div>
             </div>
+
+            {importResult && (
+                <div
+                    style={{
+                        padding: '8px 16px',
+                        margin: '4px 0',
+                        borderRadius: '4px',
+                        backgroundColor: importResult.success ? 'var(--color-success_light)' : 'var(--color-danger_light)',
+                        color: importResult.success ? 'var(--color-success_dark)' : 'var(--color-danger_dark)',
+                        fontSize: '13px'
+                    }}
+                >
+                    {importResult.message}
+                </div>
+            )}
 
             <Separator variant="horizontal" spacing="none"/>
 
@@ -166,6 +229,54 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                     </div>
                                 </li>
                             ))}
+                        </ul>
+                    </div>
+                )}
+
+                {activeTab === 'versions' && (
+                    <div className={styles.versionsTab}>
+                        {installVersionResult && (
+                            <div
+                                style={{
+                                    padding: '8px 16px',
+                                    marginBottom: '12px',
+                                    borderRadius: '4px',
+                                    backgroundColor: installVersionResult.success ? 'var(--color-success_light)' : 'var(--color-danger_light)',
+                                    color: installVersionResult.success ? 'var(--color-success_dark)' : 'var(--color-danger_dark)',
+                                    fontSize: '13px'
+                                }}
+                            >
+                                {installVersionResult.message}
+                            </div>
+                        )}
+                        <Typography variant="body" className={styles.versionHistoryHint}>
+                            {t('label.bundle.versions.hint')}
+                        </Typography>
+                        <ul className={styles.versionList}>
+                            {bundle.previousVersions.map(v => {
+                                const sizeKb = v.size ? (v.size / (1024 * 1024)).toFixed(2) + ' MB' : '—';
+                                const date = v.lastModified ? new Date(v.lastModified).toLocaleString() : '—';
+                                return (
+                                    <li key={v.jcrPath} className={styles.versionItem}>
+                                        <div className={styles.versionItemInfo}>
+                                            <div className={styles.versionItemHeader}>
+                                                <Badge label={v.version} color="accent"/>
+                                            </div>
+                                            <Typography variant="caption" className={styles.versionMeta}>
+                                                {v.fileName} &nbsp;·&nbsp; {sizeKb} &nbsp;·&nbsp; {date}
+                                            </Typography>
+                                        </div>
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            color="accent"
+                                            icon={<Replay/>}
+                                            label={t('label.bundle.versions.install')}
+                                            onClick={() => handleInstallVersion(v.jcrPath)}
+                                        />
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </div>
                 )}

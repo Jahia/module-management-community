@@ -30,4 +30,8 @@ public interface ModuleManagementCommunityService {
     boolean disableModuleOnSites(Bundle bundle, Set<String> sites);
 
     boolean importModule(Bundle bundle, boolean force) throws IOException;
+
+    List<Map<String, Object>> getBundleVersionsFromJcr(Bundle bundle) throws RepositoryException;
+
+    String installBundleVersionFromJcr(String jcrPath) throws IOException;
 }

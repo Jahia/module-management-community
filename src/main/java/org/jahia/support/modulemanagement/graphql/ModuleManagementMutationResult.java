@@ -51,4 +51,11 @@ public class ModuleManagementMutationResult {
         else
             return "Failed to import module.";
     }
+
+    @GraphQLField
+    @GraphQLName("installBundleFromJcr")
+    @GraphQLDescription("Install a bundle version from its JCR path (rollback to a previous version stored in /module-management/bundles/)")
+    public String installBundleFromJcr(@GraphQLName("jcrPath") String jcrPath) throws IOException {
+        return moduleManagementCommunityService.installBundleVersionFromJcr(jcrPath);
+    }
 }

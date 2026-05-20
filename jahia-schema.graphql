@@ -429,6 +429,8 @@ type ASAdminMutations {
     clearDbConnection: String @deprecated(reason: "Deprecated")
     "Function score mutations"
     functionScore: ASAdminFunctionScoreMutations
+    "Metrics mutations"
+    metrics: ASMetricsMutations
     "Remove site from the list of indexed sites"
     removeSite(
         "Site key"
@@ -477,6 +479,8 @@ type ASAdminQueries {
     isConnected: Boolean
     "List sites configured for Augmented Search"
     listSites: siteList
+    "Augmented Search performance metrics"
+    metrics: ASMetricsQueries
     "Get optimal shard configurations"
     optimalShardConfigurations(
         "Maximum average shard size allowed, in Gb"
@@ -484,6 +488,18 @@ type ASAdminQueries {
         "Minimum amount of heap memory for each shard, in Mb"
         minHeapPerShardInMb: Float
     ): [GqlShardConfiguration]
+}
+
+"Augmented Search performance metrics mutations"
+type ASMetricsMutations {
+    "Flush all metrics data"
+    flush: Boolean
+}
+
+"Augmented Search performance metrics"
+type ASMetricsQueries {
+    "Search metrics"
+    search: SearchMetrics
 }
 
 "GraphQL representation of a Jahia ACL role"
@@ -1302,6 +1318,7 @@ type GqlBundle {
     moduleDependencies: [String]
     moduleDependenciesGraph(depth: Int = 3): String
     nodeTypesDependencies: [String]
+    previousVersions: [GqlBundleVersion]
     services: [String]
     servicesInUse: [String]
     sitesDeployment: [GqlSiteDeployment]
@@ -1323,6 +1340,14 @@ type GqlBundleMutation {
     start: String
     stop: String
     uninstall: String
+}
+
+type GqlBundleVersion {
+    fileName: String
+    jcrPath: String
+    lastModified: String
+    size: Long
+    version: String
 }
 
 "Channel information"
@@ -3796,6 +3821,8 @@ type ModuleManagementMutationResult {
     bundle(bundleId: Long): GqlBundleMutation
     "Import a module from the file system into the OSGi framework"
     importModule(bundleId: Long, force: Boolean = false): String
+    "Install a bundle version from its JCR path (rollback to a previous version stored in /module-management/bundles/)"
+    installBundleFromJcr(jcrPath: String): String
     "Return the list of modules that have been updated"
     updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], forceUpdateAll: Boolean = false, jahiaOnly: Boolean = true, onStartup: Boolean = false, uninstallPrevious: Boolean = false): [String]
 }
@@ -4131,6 +4158,20 @@ type RenderedNode {
         "Assets type"
         type: String!
     ): [StaticAsset]
+}
+
+"Search performance metrics"
+type SearchMetrics {
+    "Average search duration in milliseconds"
+    avgMs: Float
+    "Total number of searches"
+    count: Int
+    "Number of errors"
+    errors: Long
+    "Maximum search duration in milliseconds"
+    maxMs: Long
+    "Minimum search duration in milliseconds"
+    minMs: Long
 }
 
 "Simple numeric aggregation on properties values"
@@ -4796,6 +4837,8 @@ type augmentedSearchResult {
     ): GqlMetricsFacetResult
     "Retrieves aggregations for range facet"
     rangeFacet(
+        "Defines whether the facet aggregation should be executed on the exact search filter (disjunctive: false) or on a modified version of the filter without the current facet field."
+        disjunctive: Boolean = false,
         "Defines the field to aggregate on, this field is required."
         field: String!,
         "List of available ranges to be used"

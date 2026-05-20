@@ -19,6 +19,7 @@ import javax.inject.Inject;
 import javax.jcr.RepositoryException;
 import java.util.*;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 
 public class GqlBundle {
@@ -229,6 +230,56 @@ public class GqlBundle {
             Arrays.stream(inUse).map(serviceReference -> ((String[]) serviceReference.getProperties().get("objectClass"))[0]).forEach(services::add);
         }
         return services;
+    }
+
+    @GraphQLField
+    @GraphQLName("previousVersions")
+    public List<GqlBundleVersion> getPreviousVersions() {
+        try {
+            return moduleManagementCommunityService.getBundleVersionsFromJcr(bundle)
+                    .stream().map(GqlBundleVersion::new).collect(Collectors.toList());
+        } catch (RepositoryException e) {
+            throw new DataFetchingException("Error retrieving previous versions from JCR", e);
+        }
+    }
+
+    @GraphQLName("GqlBundleVersion")
+    public static class GqlBundleVersion {
+        private final Map<String, Object> data;
+
+        public GqlBundleVersion(Map<String, Object> data) {
+            this.data = data;
+        }
+
+        @GraphQLField
+        @GraphQLName("version")
+        public String getVersion() {
+            return (String) data.get("version");
+        }
+
+        @GraphQLField
+        @GraphQLName("jcrPath")
+        public String getJcrPath() {
+            return (String) data.get("jcrPath");
+        }
+
+        @GraphQLField
+        @GraphQLName("fileName")
+        public String getFileName() {
+            return (String) data.get("fileName");
+        }
+
+        @GraphQLField
+        @GraphQLName("size")
+        public Long getSize() {
+            return (Long) data.get("size");
+        }
+
+        @GraphQLField
+        @GraphQLName("lastModified")
+        public String getLastModified() {
+            return (String) data.get("lastModified");
+        }
     }
 
     @GraphQLField()

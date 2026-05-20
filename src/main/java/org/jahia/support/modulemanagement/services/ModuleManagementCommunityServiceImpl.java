@@ -607,6 +607,127 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return false;
     }
 
+    @Override
+    public List<Map<String, Object>> getBundleVersionsFromJcr(Bundle bundle) throws RepositoryException {
+        String groupId = bundle.getHeaders().get("Jahia-GroupId");
+        if (groupId == null) {
+            logger.debug("No Jahia-GroupId header for bundle {}, skipping JCR version lookup", bundle.getSymbolicName());
+            return Collections.emptyList();
+        }
+        String groupPath = groupId.replace('.', '/');
+        String jcrBundlePath = "/module-management/bundles/" + groupPath + "/" + bundle.getSymbolicName();
+
+        return jcrTemplate.doExecuteWithSystemSessionAsUser(
+                jahiaUserManagerService.lookupRootUser().getJahiaUser(),
+                Constants.EDIT_WORKSPACE, null,
+                session -> {
+                    if (!session.itemExists(jcrBundlePath)) {
+                        return Collections.emptyList();
+                    }
+                    javax.jcr.Node bundleFolder = session.getNode(jcrBundlePath);
+                    javax.jcr.NodeIterator versionFolders = bundleFolder.getNodes();
+                    List<Map<String, Object>> versions = new ArrayList<>();
+                    while (versionFolders.hasNext()) {
+                        javax.jcr.Node versionFolder = versionFolders.nextNode();
+                        if (versionFolder.isNodeType("jnt:moduleManagementBundleFolder")) {
+                            javax.jcr.NodeIterator jarNodes = versionFolder.getNodes();
+                            while (jarNodes.hasNext()) {
+                                javax.jcr.Node jarNode = jarNodes.nextNode();
+                                if (jarNode.isNodeType("jnt:moduleManagementBundle")) {
+                                    Map<String, Object> info = new HashMap<>();
+                                    info.put("version", versionFolder.getName());
+                                    info.put("jcrPath", jarNode.getPath());
+                                    info.put("fileName", jarNode.getName());
+                                    try {
+                                        if (jarNode.hasNode("jcr:content")) {
+                                            javax.jcr.Node content = jarNode.getNode("jcr:content");
+                                            if (content.hasProperty("jcr:data")) {
+                                                javax.jcr.Binary bin = content.getProperty("jcr:data").getBinary();
+                                                info.put("size", bin.getSize());
+                                                bin.dispose();
+                                            }
+                                            if (content.hasProperty("jcr:lastModified")) {
+                                                info.put("lastModified", content.getProperty("jcr:lastModified").getDate().toInstant().toString());
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        logger.warn("Error reading metadata for {} version {}", bundle.getSymbolicName(), versionFolder.getName(), e);
+                                    }
+                                    versions.add(info);
+                                }
+                            }
+                        }
+                    }
+                    versions.sort((a, b) -> {
+                        String vA = (String) a.get("version");
+                        String vB = (String) b.get("version");
+                        try {
+                            VersionScheme vs = new GenericVersionScheme();
+                            return vs.parseVersion(vB).compareTo(vs.parseVersion(vA));
+                        } catch (Exception e) {
+                            return vB.compareTo(vA);
+                        }
+                    });
+
+                    // Collect all OSGi-installed versions of this bundle (any state)
+                    Set<String> installedVersions = Arrays.stream(bundleContext.getBundles())
+                            .filter(b -> bundle.getSymbolicName().equals(b.getSymbolicName()))
+                            .map(b -> b.getVersion().toString())
+                            .collect(Collectors.toSet());
+
+                    // Remove versions that are already present in OSGi
+                    versions.removeIf(v -> installedVersions.contains(v.get("version")));
+
+                    return versions;
+                });
+    }
+
+    @Override
+    public String installBundleVersionFromJcr(String jcrPath) throws IOException {
+        final String[] fileNameHolder = {null};
+        final byte[][] bytesHolder = {null};
+        try {
+            jcrTemplate.doExecuteWithSystemSessionAsUser(
+                    jahiaUserManagerService.lookupRootUser().getJahiaUser(),
+                    Constants.EDIT_WORKSPACE, null,
+                    session -> {
+                        javax.jcr.Node jarNode = session.getNode(jcrPath);
+                        fileNameHolder[0] = jarNode.getName();
+                        javax.jcr.Node content = jarNode.getNode("jcr:content");
+                        javax.jcr.Binary binary = content.getProperty("jcr:data").getBinary();
+                        try (java.io.InputStream in = binary.getStream()) {
+                            bytesHolder[0] = org.apache.commons.io.IOUtils.toByteArray(in);
+                        } catch (IOException e) {
+                            throw new RepositoryException("Error reading JAR binary from JCR", e);
+                        } finally {
+                            binary.dispose();
+                        }
+                        return null;
+                    });
+        } catch (RepositoryException e) {
+            throw new IOException("Error reading bundle from JCR path: " + jcrPath, e);
+        }
+
+        String fileName = fileNameHolder[0];
+        byte[] bytes = bytesHolder[0];
+
+        File tempFile = File.createTempFile("bundle-rollback-", ".jar");
+        try {
+            FileUtils.writeByteArrayToFile(tempFile, bytes);
+            String yamlScript = "- installBundle:\n" +
+                    "  - url: '" + tempFile.toURI() + "'\n" +
+                    "  autoStart: false\n" +
+                    "  uninstallPreviousVersion: false\n" +
+                    "  ignoreChecks: true\n" +
+                    "- karafCommand: \"log:log 'Bundle " + fileName + " installed from JCR rollback'\"\n";
+            provisioningManager.executeScript(yamlScript, "yaml");
+            logger.info("Bundle {} installed from JCR path: {}", fileName, jcrPath);
+            return "Bundle " + fileName + " installed successfully from version history";
+        } finally {
+            FileUtils.deleteQuietly(tempFile);
+        }
+    }
+
     private boolean checkImported(final JahiaTemplatesPackage jahiaTemplatesPackage) {
 
         try {
