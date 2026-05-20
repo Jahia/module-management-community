@@ -684,9 +684,12 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public String installBundleVersionFromJcr(String jcrPath) throws IOException {
+        // Create the temp file first, outside the JCR session, so it survives past the session close
+        File tempFile = File.createTempFile("bundle-rollback-", ".jar");
         final String[] fileNameHolder = {null};
-        final byte[][] bytesHolder = {null};
+
         try {
+            // Stream JCR binary directly to disk — never holds the full JAR in memory
             jcrTemplate.doExecuteWithSystemSessionAsUser(
                     jahiaUserManagerService.lookupRootUser().getJahiaUser(),
                     Constants.EDIT_WORKSPACE, null,
@@ -695,28 +698,26 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                         fileNameHolder[0] = jarNode.getName();
                         javax.jcr.Node content = jarNode.getNode("jcr:content");
                         javax.jcr.Binary binary = content.getProperty("jcr:data").getBinary();
-                        try (java.io.InputStream in = binary.getStream()) {
-                            bytesHolder[0] = org.apache.commons.io.IOUtils.toByteArray(in);
+                        try (java.io.InputStream in = new java.io.BufferedInputStream(binary.getStream(), 64 * 1024);
+                             java.io.OutputStream out = new java.io.BufferedOutputStream(new java.io.FileOutputStream(tempFile), 64 * 1024)) {
+                            org.apache.commons.io.IOUtils.copy(in, out);
                         } catch (IOException e) {
-                            throw new RepositoryException("Error reading JAR binary from JCR", e);
+                            throw new RepositoryException("Error streaming JAR binary to disk", e);
                         } finally {
                             binary.dispose();
                         }
                         return null;
                     });
         } catch (RepositoryException e) {
+            FileUtils.deleteQuietly(tempFile);
             throw new IOException("Error reading bundle from JCR path: " + jcrPath, e);
         }
 
         String fileName = fileNameHolder[0];
-        byte[] bytes = bytesHolder[0];
-
-        File tempFile = File.createTempFile("bundle-rollback-", ".jar");
         try {
-            FileUtils.writeByteArrayToFile(tempFile, bytes);
             String yamlScript = "- installBundle:\n" +
                     "  - url: '" + tempFile.toURI() + "'\n" +
-                    "  autoStart: false\n" +
+                    "  autoStart: flase\n" +
                     "  uninstallPreviousVersion: false\n" +
                     "  ignoreChecks: true\n" +
                     "- karafCommand: \"log:log 'Bundle " + fileName + " installed from JCR rollback'\"\n";
