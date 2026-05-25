@@ -1,0 +1,10 @@
+query GetInstalledModules {
+    admin {
+        modulesManagement {
+            installedModules
+            installedBundleTypes
+            clustered
+        }
+    }
+}
+

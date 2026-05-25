@@ -233,7 +233,7 @@ const ModuleManagementCommunityEntry = () => {
     return (
         <Suspense fallback="loading ...">
             <GlobalStyle/>
-            <div className={styles.root}>
+            <div className={styles.root} id="module-management-community-root">
                 <div className={styles.headerRoot}>
                     <header className={styles.header}>
                         <div className={styles.titles}>

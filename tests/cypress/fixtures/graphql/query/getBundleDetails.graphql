@@ -1,0 +1,30 @@
+query GetBundleDetails($name: String!, $version: String!) {
+    admin {
+        modulesManagement {
+            bundle(name: $name, version: $version) {
+                symbolicName
+                bundleId
+                state
+                version
+                type
+                license
+                dependencies
+                moduleDependencies
+                services
+                servicesInUse
+                sitesDeployment {
+                    siteKey
+                    deployed
+                }
+                previousVersions {
+                    version
+                    jcrPath
+                    fileName
+                    size
+                    lastModified
+                }
+            }
+        }
+    }
+}
+
