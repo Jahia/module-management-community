@@ -26,6 +26,7 @@ import org.jahia.osgi.BundleUtils;
 import org.jahia.osgi.FrameworkService;
 import org.jahia.services.content.*;
 import org.jahia.services.content.decorator.JCRSiteNode;
+import org.jahia.services.modulemanager.BundleInfo;
 import org.jahia.services.modulemanager.ModuleManager;
 import org.jahia.services.modulemanager.spi.BundleService;
 import org.jahia.services.provisioning.ProvisioningManager;
@@ -684,6 +685,24 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public String installBundleVersionFromJcr(String jcrPath) throws IOException {
+        // Derive symbolicName and targetVersion from the JCR path structure:
+        // /module-management/bundles/{group/path}/{symbolicName}/{version}/{file.jar}
+        String[] parts = jcrPath.split("/");
+        if (parts.length < 3) {
+            throw new IOException("Cannot derive bundle coordinates from JCR path: " + jcrPath);
+        }
+        final String symbolicName = parts[parts.length - 3];
+        final String targetVersion = parts[parts.length - 2];
+
+        // Snapshot all currently installed versions of this symbolic name BEFORE installing
+        // so we know exactly which ones to remove afterward
+        List<Bundle> existingVersions = Arrays.stream(bundleContext.getBundles())
+                .filter(b -> symbolicName.equals(b.getSymbolicName()))
+                .collect(Collectors.toList());
+        logger.info("Found {} existing OSGi bundle(s) for {} before restore: {}",
+                existingVersions.size(), symbolicName,
+                existingVersions.stream().map(b -> b.getVersion().toString()).collect(Collectors.joining(", ")));
+
         // Create the temp file first, outside the JCR session, so it survives past the session close
         File tempFile = File.createTempFile("bundle-rollback-", ".jar");
         final String[] fileNameHolder = {null};
@@ -717,16 +736,63 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         try {
             String yamlScript = "- installBundle:\n" +
                     "  - url: '" + tempFile.toURI() + "'\n" +
-                    "  autoStart: flase\n" +
-                    "  uninstallPreviousVersion: false\n" +
+                    "  autoStart: true\n" +
+                    "  uninstallPreviousVersion: true\n" +
                     "  ignoreChecks: true\n" +
                     "- karafCommand: \"log:log 'Bundle " + fileName + " installed from JCR rollback'\"\n";
             provisioningManager.executeScript(yamlScript, "yaml");
             logger.info("Bundle {} installed from JCR path: {}", fileName, jcrPath);
-            return "Bundle " + fileName + " installed successfully from version history";
         } finally {
             FileUtils.deleteQuietly(tempFile);
         }
+
+        // Wait up to 30 s for the restored version to be visible in OSGi
+        Bundle restoredBundle = null;
+        long deadline = System.currentTimeMillis() + 30_000L;
+        while (System.currentTimeMillis() < deadline) {
+            restoredBundle = Arrays.stream(bundleContext.getBundles())
+                    .filter(b -> symbolicName.equals(b.getSymbolicName())
+                            && targetVersion.equals(b.getVersion().toString()))
+                    .findFirst().orElse(null);
+            if (restoredBundle != null) {
+                break;
+            }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        if (restoredBundle == null) {
+            logger.warn("Restored bundle {} v{} did not appear in OSGi within 30 s — skipping old-version cleanup",
+                    symbolicName, targetVersion);
+            return "Bundle " + fileName + " installed but could not confirm in OSGi — other versions were NOT removed";
+        }
+
+        // Uninstall all previously existing versions (other than the one we just restored)
+        ModuleManager moduleManager = BundleUtils.getOsgiService(ModuleManager.class, null);
+        List<String> uninstalled = new ArrayList<>();
+        if (moduleManager != null) {
+            for (Bundle old : existingVersions) {
+                if (!targetVersion.equals(old.getVersion().toString())) {
+                    try {
+                        moduleManager.uninstall(BundleInfo.fromBundle(old).getKey(), null);
+                        uninstalled.add(old.getVersion().toString());
+                        logger.info("Uninstalled old version {} of {}", old.getVersion(), symbolicName);
+                    } catch (Exception e) {
+                        logger.warn("Could not uninstall version {} of {}: {}", old.getVersion(), symbolicName, e.getMessage());
+                    }
+                }
+            }
+        }
+
+        String result = "Bundle " + fileName + " (v" + targetVersion + ") installed successfully";
+        if (!uninstalled.isEmpty()) {
+            result += ". Removed old version(s): " + String.join(", ", uninstalled);
+        }
+        return result;
     }
 
     private boolean checkImported(final JahiaTemplatesPackage jahiaTemplatesPackage) {

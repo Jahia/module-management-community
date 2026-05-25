@@ -56,12 +56,20 @@
           "system": "System"
         },
         "versions": {
+          "confirm": {
+            "message": "Module downgrade is not officially supported. The module will be installed in stopped state — you can start it manually. Do you want to continue?",
+            "proceed": "Downgrade module",
+            "title": "Confirm module downgrade"
+          },
+          "downgrade": "↓ downgrade",
           "hint": "These are all versions of this bundle available in the module management store (/module-management/bundles) that are not currently installed.",
           "install": "Install this version",
           "installError": "An error occurred while installing the selected version",
-          "installSuccess": "Bundle version installed successfully"
+          "installSuccess": "Bundle version installed successfully",
+          "upgrade": "↑ upgrade"
         }
     },
+    "cancel": "Cancel",
     "close": "Close",
     "cluster": {
       "state": {

@@ -2,8 +2,8 @@ import React, {useEffect, useState} from 'react';
 import {useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
-import {Badge, Button, Chip, Close, CloudUpload, Reload, Replay, Rocket, Separator, Switch, Typography} from '@jahia/moonstone';
-import {DialogContent} from '@material-ui/core';
+import {Badge, Button, Chip, Close, CloudUpload, Reload, Replay, Rocket, Separator, Switch, Typography, Warning} from '@jahia/moonstone';
+import {Dialog, DialogActions, DialogContent, DialogTitle} from '@material-ui/core';
 import * as PropTypes from 'prop-types';
 import styles from './ModuleManagementCommunityApp.scss';
 import Mermaid from './Mermaid';
@@ -24,12 +24,26 @@ const TABS = [
     {id: 'moduleDeps', labelKey: 'label.bundle.tab.moduleDeps', condition: b => b.moduleDependencies?.length > 0}
 ];
 
+/**
+ * Compare two OSGi-style version strings (major.minor.patch[.qualifier]).
+ * Returns > 0 if a > b, < 0 if a < b, 0 if equal (qualifier is ignored).
+ */
+const compareOsgiVersions = (a, b) => {
+    const parts = v => (v || '0').split('.').slice(0, 3).map(n => parseInt(n, 10) || 0);
+    const [aMaj, aMin, aPat] = parts(a);
+    const [bMaj, bMin, bPat] = parts(b);
+    return aMaj !== bMaj ? aMaj - bMaj :
+        aMin !== bMin ? aMin - bMin :
+            aPat - bPat;
+};
+
 const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
     const {t} = useTranslation('module-management-community');
     const [bundle, setBundle] = useState(initialBundle);
     const [activeTab, setActiveTab] = useState('details');
     const [importResult, setImportResult] = useState(null);
     const [installVersionResult, setInstallVersionResult] = useState(null);
+    const [confirmJcrPath, setConfirmJcrPath] = useState(null);
 
     useEffect(() => {
         setBundle(initialBundle);
@@ -256,11 +270,16 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                             {bundle.previousVersions.map(v => {
                                 const sizeKb = v.size ? (v.size / (1024 * 1024)).toFixed(2) + ' MB' : '—';
                                 const date = v.lastModified ? new Date(v.lastModified).toLocaleString() : '—';
+                                const isUpgrade = compareOsgiVersions(v.version, bundle.version) > 0;
                                 return (
                                     <li key={v.jcrPath} className={styles.versionItem}>
                                         <div className={styles.versionItemInfo}>
                                             <div className={styles.versionItemHeader}>
                                                 <Badge label={v.version} color="accent"/>
+                                                <Badge
+                                                    label={isUpgrade ? t('label.bundle.versions.upgrade') : t('label.bundle.versions.downgrade')}
+                                                    color={isUpgrade ? 'success' : 'danger'}
+                                                />
                                             </div>
                                             <Typography variant="caption" className={styles.versionMeta}>
                                                 {v.fileName} &nbsp;·&nbsp; {sizeKb} &nbsp;·&nbsp; {date}
@@ -272,7 +291,15 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                             color="accent"
                                             icon={<Replay/>}
                                             label={t('label.bundle.versions.install')}
-                                            onClick={() => handleInstallVersion(v.jcrPath)}
+                                            onClick={() => {
+                                                if (compareOsgiVersions(v.version, bundle.version) > 0) {
+                                                    // Installing a newer version — no warning needed
+                                                    handleInstallVersion(v.jcrPath);
+                                                } else {
+                                                    // Installing an older version — show downgrade dialog
+                                                    setConfirmJcrPath(v.jcrPath);
+                                                }
+                                            }}
                                         />
                                     </li>
                                 );
@@ -289,6 +316,36 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                     <Mermaid>{bundle.moduleDependenciesGraph}</Mermaid>
                 )}
             </div>
+
+            <Dialog open={Boolean(confirmJcrPath)} onClose={() => setConfirmJcrPath(null)}>
+                <DialogTitle>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                        <Warning color="var(--color-warning)"/>
+                        {t('label.bundle.versions.confirm.title')}
+                    </div>
+                </DialogTitle>
+                <DialogContent>
+                    <Typography variant="body">
+                        {t('label.bundle.versions.confirm.message')}
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button variant="ghost"
+                            size="big"
+                            label={t('label.cancel')}
+                            onClick={() => setConfirmJcrPath(null)}/>
+                    <Button variant="default"
+                            size="big"
+                            color="danger"
+                            icon={<Replay/>}
+                            label={t('label.bundle.versions.confirm.proceed')}
+                            onClick={() => {
+                                const path = confirmJcrPath;
+                                setConfirmJcrPath(null);
+                                handleInstallVersion(path);
+                            }}/>
+                </DialogActions>
+            </Dialog>
         </DialogContent>
     );
 };
