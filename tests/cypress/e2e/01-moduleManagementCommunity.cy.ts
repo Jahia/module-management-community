@@ -245,45 +245,48 @@ describe('Module Management Community', () => {
         beforeEach(() => {
             visitPage();
             filterByName(testBundle);
+            // Wait for the debounced filter to apply so only the correct row is shown
+            cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
             waitForRowLoaded();
             cy.get('[title="Show details"]').first().click();
-            cy.get('.MuiDialog-root').should('be.visible');
+            // Wait for the dialog AND its content (bundle name) to be fully loaded
+            cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 
         it('shows the bundle symbolic name in the dialog', () => {
-            cy.get('.MuiDialog-root').should('contain.text', testBundle);
+            cy.get('[data-testid="bundle-details-dialog"]').should('contain.text', testBundle);
         });
 
         it('shows a version badge beginning with "v" in the header', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains(/^v\d+/).should('be.visible');
             });
         });
 
         it('shows the "module" type badge in the header', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('module').should('be.visible');
             });
         });
 
         it('shows an "ACTIVE" state Chip in the header', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('ACTIVE').should('be.visible');
             });
         });
 
         it('shows Refresh and Close action buttons in the dialog header', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Refresh').should('be.visible');
                 cy.contains('button', 'Close').should('be.visible');
             });
         });
 
         it('closes the dialog when the Close button is clicked', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Close').click();
             });
-            cy.get('.MuiDialog-root').should('not.exist');
+            cy.get('[data-testid="bundle-details-dialog"]').should('not.exist');
         });
     });
 
@@ -295,45 +298,47 @@ describe('Module Management Community', () => {
         beforeEach(() => {
             visitPage();
             filterByName(testBundle);
+            cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
             waitForRowLoaded();
             cy.get('[title="Show details"]').first().click();
-            cy.get('.MuiDialog-root').should('be.visible');
+            cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 
         it('shows the "Details" tab button', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Details').should('be.visible');
             });
         });
 
         it('Details tab shows the "Identity" section heading', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('Identity').should('be.visible');
             });
         });
 
         it('Details tab Identity grid contains "Version" label', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('Version').should('be.visible');
             });
         });
 
         it('Details tab Identity grid contains "Bundle ID" label', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('Bundle ID').should('be.visible');
             });
         });
 
         it('"Show full manifest" button expands the manifest table', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Show full manifest').click();
                 cy.contains('button', 'Hide full manifest').should('be.visible');
-                cy.get('table').should('be.visible');
+                // Table may be below the dialog's scroll fold — assert it exists in DOM
+                cy.get('table').should('exist');
             });
         });
 
         it('"Hide full manifest" button collapses the manifest table', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Show full manifest').click();
                 cy.contains('button', 'Hide full manifest').click();
                 cy.contains('button', 'Show full manifest').should('be.visible');
@@ -341,7 +346,7 @@ describe('Module Management Community', () => {
         });
 
         it('shows "Force reimport content" button for module-type bundles', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Force reimport content').should('be.visible');
             });
         });
@@ -355,19 +360,20 @@ describe('Module Management Community', () => {
         beforeEach(() => {
             visitPage();
             filterByName(testBundle);
+            cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
             waitForRowLoaded();
             cy.get('[title="Show details"]').first().click();
-            cy.get('.MuiDialog-root').should('be.visible');
+            cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 
         it('module-management-community has a "Sites" tab (it is deployed to sites)', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Sites').should('be.visible');
             });
         });
 
         it('clicking "Sites" tab shows the bulk-enable/disable action buttons', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Sites').click();
                 cy.contains('Enable module on all sites').should('be.visible');
                 cy.contains('Disable module on all sites').should('be.visible');
@@ -375,7 +381,7 @@ describe('Module Management Community', () => {
         });
 
         it('switching back to "Details" tab restores Identity section', () => {
-            cy.get('.MuiDialog-root').within(() => {
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Sites').click();
                 cy.contains('Enable module on all sites').should('be.visible');
                 cy.contains('button', 'Details').click();

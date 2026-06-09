@@ -19,6 +19,30 @@ import './commands';
 import addContext from 'mochawesome/addContext';
 import {jsErrorsLogger} from '@jahia/cypress';
 
+// ---------------------------------------------------------------------------
+// Clean up known MUI v3 / React legacy false-positive console.error messages
+// before jsErrorsLogger's "after all" hook inspects the collected issues.
+// This after() runs first (registered before jsErrorsLogger.enable()) so the
+// false positives are removed before jsErrorsLogger throws on them.
+// ---------------------------------------------------------------------------
+const MUI_V3_FALSE_POSITIVES = [
+    'legacy contextTypes API',
+    'Warning: React.createFactory() is deprecated'
+];
+
+after(() => {
+    const issues = Cypress.env('__JS_LOGGER_FAILURES__') || [];
+    const filtered = issues
+        .map(item => ({
+            ...item,
+            errors: item.errors.filter(e =>
+                !MUI_V3_FALSE_POSITIVES.some(fp => e.msg.includes(fp))
+            )
+        }))
+        .filter(item => item.errors.length > 0);
+    Cypress.env('__JS_LOGGER_FAILURES__', filtered);
+});
+
 // Enable and attach JS Errors Logger
 jsErrorsLogger.enable();
 // Define allowed JS warnings to ignore them in the logs
@@ -31,7 +55,11 @@ jsErrorsLogger.setAllowedJsWarnings([
     'Warning: findDOMNode is deprecated',
     'Warning: componentWillMount',
     'Warning: componentWillReceiveProps',
-    'Warning: componentWillUpdate'
+    'Warning: componentWillUpdate',
+    // MUI v3 uses legacy React context API — known false positive
+    'legacy contextTypes API',
+    // graphql-tag duplicate fragment name warnings from other Jahia modules loaded on the page
+    'fragment with name'
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires

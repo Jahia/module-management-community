@@ -9,6 +9,7 @@ import org.jahia.api.settings.SettingsBean;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
 import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
+import org.jahia.support.modulemanagement.ExportOptions;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
@@ -16,6 +17,7 @@ import org.osgi.framework.FrameworkUtil;
 import javax.inject.Inject;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -102,6 +104,16 @@ public class ModuleManagementQueryResult {
                     return b.getSymbolicName() + ":" + (type != null ? type : "bundle");
                 })
                 .collect(Collectors.toList());
+    }
+
+    @GraphQLField
+    @GraphQLName("exportYamlPreview")
+    @GraphQLDescription("Preview the provisioning YAML that would be generated for a module snapshot export, without downloading a ZIP")
+    public String getExportYamlPreview(
+            @GraphQLName("types") List<String> types,
+            @GraphQLName("embedAll") @GraphQLDefaultValue(GqlUtils.SupplierTrue.class) boolean embedAll) throws java.io.IOException {
+        Set<String> typesSet = types != null ? new HashSet<>(types) : null;
+        return getModuleManagementCommunityService().previewExportYaml(new ExportOptions(typesSet, embedAll));
     }
 
     @GraphQLField

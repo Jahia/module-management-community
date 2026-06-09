@@ -1,0 +1,104 @@
+.dialogContent {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px 24px !important;
+    min-height: 180px;
+}
+
+.modeGroup {
+    display: flex;
+    flex-direction: row !important;
+    gap: 16px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--color-gray_light, #eee);
+
+    :global(.MuiFormControlLabel-root) {
+        margin-right: 8px;
+    }
+}
+
+.dropZone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 120px;
+    border: 2px dashed var(--color-gray_light, #ccc);
+    border-radius: 8px;
+    padding: 24px;
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s;
+    background-color: var(--color-gray_light_hover, rgba(0, 0, 0, 0.02));
+
+    &:hover {
+        border-color: var(--color-accent, #0062b3);
+        background-color: rgba(0, 98, 179, 0.04);
+    }
+}
+
+.dropZoneDragging {
+    border-color: var(--color-accent, #0062b3);
+    background-color: rgba(0, 98, 179, 0.08);
+}
+
+.dropZoneSelected {
+    border-color: var(--color-success, #279e5e);
+    border-style: solid;
+    background-color: rgba(39, 158, 94, 0.04);
+}
+
+.dropZoneHint {
+    color: #666;
+    text-align: center;
+}
+
+.hiddenInput {
+    display: none;
+}
+
+.fileName {
+    word-break: break-all;
+    text-align: center;
+}
+
+.fileSize {
+    color: #666;
+}
+
+.statusRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.04);
+}
+
+.statusSuccess {
+    background-color: rgba(39, 158, 94, 0.08);
+    border: 1px solid rgba(39, 158, 94, 0.3);
+}
+
+.statusError {
+    background-color: rgba(220, 53, 69, 0.08);
+    border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+.helperText {
+    color: #666 !important;
+}
+
+.dialogActions {
+    padding: 8px 24px 16px !important;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.typeControl {
+    & span:nth-child(2) {
+        color: #1a1a1a !important;
+    }
+}

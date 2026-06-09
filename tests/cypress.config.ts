@@ -1,5 +1,10 @@
 import {defineConfig} from 'cypress';
-import fs from 'fs';
+import * as fs from 'node:fs';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
+const jahiaUrl = process.env.JAHIA_URL || 'http://localhost:8080';
 
 export default defineConfig({
     // DefaultCommandTimeout: 10000,
@@ -38,8 +43,10 @@ export default defineConfig({
             return require('./cypress/plugins/index.js')(on, config);
         },
         excludeSpecPattern: '*.ignore.ts',
-        baseUrl: 'http://localhost:8080'
+        baseUrl: jahiaUrl
     },
     env: {
+        SUPER_USER_PASSWORD: process.env.SUPER_USER_PASSWORD || 'root1234',
+        JAHIA_URL: jahiaUrl
     }
 });

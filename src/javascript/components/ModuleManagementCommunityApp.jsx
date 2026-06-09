@@ -22,6 +22,8 @@ import styles from './ModuleManagementCommunityApp.scss';
 import {Card, CardContent, CardHeader, TableSortLabel} from '@material-ui/core';
 import dayjs from 'dayjs';
 import ModuleRow from './ModuleRow';
+import {UploadModuleDialog} from './UploadModuleDialog';
+import {ExportModulesDialog} from './ExportModulesDialog';
 
 const descendingComparator = (a, b, orderBy) => {
     if (!a[orderBy] && !b[orderBy]) {
@@ -105,6 +107,8 @@ const ModuleManagementCommunityApp = () => {
     const [dependentUpdates, setDependentUpdates] = useState({});
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
+    const [isUploadOpen, setIsUploadOpen] = useState(false);
+    const [isExportOpen, setIsExportOpen] = useState(false);
 
     const {
         data: initialData,
@@ -386,6 +390,20 @@ const ModuleManagementCommunityApp = () => {
                         <Button variant="outlined"
                                 size="big"
                                 color="accent"
+                                label={t('label.upload.deploy')}
+                                icon={<Upload/>}
+                                className={styles.button}
+                                onClick={() => setIsUploadOpen(true)}/>
+                        <Button variant="outlined"
+                                size="big"
+                                color="accent"
+                                label={t('label.export.snapshot')}
+                                icon={<Download/>}
+                                className={styles.button}
+                                onClick={() => setIsExportOpen(true)}/>
+                        <Button variant="outlined"
+                                size="big"
+                                color="accent"
                                 label={t('label.refresh')}
                                 icon={<Reload/>}
                                 className={styles.button}
@@ -533,6 +551,19 @@ const ModuleManagementCommunityApp = () => {
                     </div>
                 </div>
             </CardContent>
+            <UploadModuleDialog
+                isOpen={isUploadOpen}
+                onClose={() => setIsUploadOpen(false)}
+                onDeploySuccess={() => {
+                    setIsUploadOpen(false);
+                    notificationContext.notify(t('label.upload.deploySuccess'), ['closeButton', 'closeAfter5s']);
+                    refreshAllModules();
+                }}
+            />
+            <ExportModulesDialog
+                isOpen={isExportOpen}
+                onClose={() => setIsExportOpen(false)}
+            />
         </Card>
     );
 };

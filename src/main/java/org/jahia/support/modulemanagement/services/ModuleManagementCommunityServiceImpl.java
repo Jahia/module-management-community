@@ -56,9 +56,14 @@ import org.springframework.core.io.Resource;
 import javax.annotation.Nonnull;
 import javax.jcr.RepositoryException;
 import javax.jcr.query.Query;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -66,6 +71,10 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
+import org.jahia.support.modulemanagement.ExportOptions;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -243,7 +252,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 modulesWithUpdates = null; // Clear the cache after execution
             }
         } else {
-            FileUtils.write(File.createTempFile("module-management-community-temp", ".yaml"), yamlScript, "UTF-8", true);
+            FileUtils.write(File.createTempFile("module-management-community-temp", ".yaml", new File(settingsBean.getTmpContentDiskPath())), yamlScript, "UTF-8", true);
             logger.info("Dry run mode enabled, not executing provisioning script:\n{}", yamlScript);
         }
 
@@ -702,9 +711,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         logger.info("Found {} existing OSGi bundle(s) for {} before restore: {}",
                 existingVersions.size(), symbolicName,
                 existingVersions.stream().map(b -> b.getVersion().toString()).collect(Collectors.joining(", ")));
-
+        SettingsBean settingsBean = SettingsBean.getInstance();
         // Create the temp file first, outside the JCR session, so it survives past the session close
-        File tempFile = File.createTempFile("bundle-rollback-", ".jar");
+        File tempFile = File.createTempFile("bundle-rollback-", ".jar", new File(settingsBean.getTmpContentDiskPath()));
         final String[] fileNameHolder = {null};
 
         try {
@@ -793,6 +802,442 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             result += ". Removed old version(s): " + String.join(", ", uninstalled);
         }
         return result;
+    }
+
+    @Override
+    public String deployUploadedModule(InputStream fileStream, String fileName) throws IOException {
+        SettingsBean settingsBean = SettingsBean.getInstance();
+        if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
+            throw new IOException(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
+        }
+        if (!settingsBean.isProcessingServer()) {
+            throw new IOException("Module deployment is only available on processing servers");
+        }
+
+        File tempFile = File.createTempFile("module-upload-", ".jar", new File(settingsBean.getTmpContentDiskPath()));
+        try {
+            FileUtils.copyInputStreamToFile(fileStream, tempFile);
+            validateOsgiBundle(tempFile, fileName);
+
+            String yamlScript = "- installOrUpgradeBundle:\n" +
+                    "  - url: '" + tempFile.toURI() + "'\n" +
+                    "  autoStart: true\n" +
+                    "  uninstallPreviousVersion: true\n" +
+                    "  ignoreChecks: false\n" +
+                    "- karafCommand: \"log:log 'Module " + fileName.replace("'", "\\'") + " deployed via upload'\"\n";
+
+            provisioningManager.executeScript(yamlScript, "yaml");
+            logger.info("Module {} deployed successfully via upload", fileName);
+            return "Module " + fileName + " deployed successfully";
+        } finally {
+            FileUtils.deleteQuietly(tempFile);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Export / Import
+    // -------------------------------------------------------------------------
+
+    @Override
+    public String previewExportYaml(ExportOptions options) throws IOException {
+        List<Bundle> bundles = collectExportBundles(options);
+        // null embeddedJars = preview mode: every bundle shows as ${archiveRoot}/... or mvn: depending on embedAll
+        return buildExportYamlString(bundles, null, options.isEmbedAll());
+    }
+
+    @Override
+    public File exportModulesArchive(ExportOptions options) throws IOException {
+        checkExportAvailability();
+        List<Bundle> bundles = collectExportBundles(options);
+        boolean embedAll = options.isEmbedAll();
+
+        Map<String, File> embeddedJars = new LinkedHashMap<>();
+        Map<String, String> mavenFallbacks = new LinkedHashMap<>();
+        // Track temp files created from JCR so we can delete them after the ZIP is assembled
+        List<File> jcrTempFiles = new ArrayList<>();
+
+        try {
+            for (Bundle bundle : bundles) {
+                String entryName = "bundles/" + bundle.getSymbolicName() + "-" + bundle.getVersion() + ".jar";
+                String mavenUrl = resolveMavenUrl(bundle);
+
+                if (embedAll || mavenUrl == null) {
+                    // Primary: read the JAR from the JCR module-management store
+                    File jar = resolveJarFromJcr(bundle);
+                    if (jar != null) {
+                        jcrTempFiles.add(jar); // owned by us — delete after ZIP is built
+                        embeddedJars.put(entryName, jar);
+                    } else {
+                        // Secondary fallback: bundle loaded directly from a file: location
+                        jar = resolveJarFromDisk(bundle);
+                        if (jar != null) {
+                            embeddedJars.put(entryName, jar); // not owned — do not delete
+                        } else if (mavenUrl != null) {
+                            logger.warn("Bundle {}/{}: JAR not in JCR or disk, falling back to Maven URL",
+                                    bundle.getSymbolicName(), bundle.getVersion());
+                            mavenFallbacks.put(entryName, mavenUrl);
+                        } else {
+                            logger.warn("Skipping bundle {}/{}: JAR cannot be resolved and no Maven URL available",
+                                    bundle.getSymbolicName(), bundle.getVersion());
+                        }
+                    }
+                }
+                // else: embedAll=false and mavenUrl != null → emitted as mvn: URL in YAML
+            }
+
+            String yaml = buildExportYamlString(bundles, embeddedJars, embedAll, mavenFallbacks);
+
+            SettingsBean settingsBean = SettingsBean.getInstance();
+            File zipFile = File.createTempFile("module-export-", ".zip",
+                    new File(settingsBean.getTmpContentDiskPath()));
+
+            try (ZipOutputStream zos = new ZipOutputStream(
+                    new BufferedOutputStream(new FileOutputStream(zipFile), 65536))) {
+
+                for (Map.Entry<String, File> entry : embeddedJars.entrySet()) {
+                    addFileToZip(zos, entry.getValue(), entry.getKey());
+                }
+
+                byte[] yamlBytes = yaml.getBytes(StandardCharsets.UTF_8);
+                zos.putNextEntry(new ZipEntry("provisioning.yaml"));
+                zos.write(yamlBytes);
+                zos.closeEntry();
+            }
+
+            logger.info("Module export archive created: {} bundles ({} embedded from JCR, {} Maven-referenced, {} mvn-fallback)",
+                    bundles.size(), embeddedJars.size(),
+                    bundles.size() - embeddedJars.size() - mavenFallbacks.size(),
+                    mavenFallbacks.size());
+            return zipFile;
+
+        } finally {
+            // Clean up temp files that were streamed out of JCR
+            jcrTempFiles.forEach(FileUtils::deleteQuietly);
+        }
+    }
+
+    @Override
+    public String importModuleArchive(InputStream zipStream, String archiveName) throws IOException {
+        checkExportAvailability();
+
+        SettingsBean settingsBean = SettingsBean.getInstance();
+        File extractDir = new File(settingsBean.getTmpContentDiskPath(),
+                "module-import-" + UUID.randomUUID());
+        if (!extractDir.mkdirs()) {
+            throw new IOException("Cannot create temp extraction directory: " + extractDir);
+        }
+
+        try {
+            int jarCount = extractModuleArchive(zipStream, extractDir);
+
+            File yamlFile = new File(extractDir, "provisioning.yaml");
+            if (!yamlFile.exists()) {
+                throw new IOException("Archive '" + archiveName + "' does not contain provisioning.yaml");
+            }
+
+            String rawYaml = FileUtils.readFileToString(yamlFile, StandardCharsets.UTF_8);
+            // Replace "${archiveRoot}/" (including the slash) with the file:// URI of the
+            // extraction directory.  File.toURI() for a directory always ends with "/",
+            // so "file:///tmp/module-import-uuid/" replaces "${archiveRoot}/" giving
+            // "file:///tmp/module-import-uuid/bundles/foo.jar" — the format the
+            // provisioning manager expects for local file URLs.
+            String extractDirUri = extractDir.toURI().toString(); // e.g. "file:///tmp/module-import-uuid/"
+            String resolvedYaml = rawYaml.replace("${archiveRoot}/", extractDirUri);
+
+            provisioningManager.executeScript(resolvedYaml, "yaml");
+            logger.info("Module archive '{}' imported successfully ({} JARs extracted)", archiveName, jarCount);
+            return "Archive '" + archiveName + "' imported successfully (" + jarCount + " embedded bundle(s) deployed)";
+        } finally {
+            FileUtils.deleteQuietly(extractDir);
+        }
+    }
+
+    // -- helpers --
+
+    private void checkExportAvailability() throws IOException {
+        SettingsBean sb = SettingsBean.getInstance();
+        if (sb.isMaintenanceMode() || sb.isReadOnlyMode() || sb.isFullReadOnlyMode()) {
+            throw new IOException(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
+        }
+        if (!sb.isProcessingServer()) {
+            throw new IOException("Module export/import is only available on processing servers");
+        }
+    }
+
+    private List<Bundle> collectExportBundles(ExportOptions options) {
+        return Arrays.stream(bundleContext.getBundles())
+                .filter(b -> b.getState() == Bundle.ACTIVE || b.getState() == Bundle.RESOLVED)
+                .filter(b -> {
+                    String type = b.getHeaders().get("Jahia-Module-Type");
+                    return type != null && options.getTypes().contains(type);
+                })
+                .sorted(Comparator.comparing(Bundle::getSymbolicName))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Build the provisioning YAML string.
+     *
+     * @param bundles        ordered list of bundles to export
+     * @param embeddedJars   zipEntryName → localFile; {@code null} = preview mode (every bundle shown as archiveRoot/mvn: depending on embedAll)
+     * @param embedAll       when true, emit ${archiveRoot} URLs; when false, emit mvn: URLs for Maven bundles
+     * @param mavenFallbacks zipEntryName → mvn: URL for bundles where embedAll=true but JAR could not be resolved
+     */
+    private String buildExportYamlString(List<Bundle> bundles, Map<String, File> embeddedJars,
+                                          boolean embedAll, Map<String, String> mavenFallbacks) {
+        int defaultStartLevel = SettingsBean.getInstance().getModuleStartLevel();
+        StringBuilder sb = new StringBuilder();
+        sb.append("# Generated by Module Management Community\n");
+        sb.append("# Date: ").append(java.time.LocalDate.now()).append("\n");
+        sb.append("# Eligible bundles: ").append(bundles.size()).append("\n");
+        sb.append("# Embed mode: ").append(embedAll ? "all JARs embedded" : "Maven URLs + embedded non-Maven").append("\n\n");
+        sb.append("- installOrUpgradeBundle:\n");
+
+        int included = 0;
+        for (Bundle bundle : bundles) {
+            String entryName = "bundles/" + bundle.getSymbolicName() + "-" + bundle.getVersion() + ".jar";
+            String mavenUrl = resolveMavenUrl(bundle);
+            int sl = getBundleStartLevel(bundle);
+
+            if (!embedAll && mavenUrl != null) {
+                // Maven-only mode: emit mvn: URL directly
+                sb.append("  - url: '").append(mavenUrl).append("'\n");
+                if (sl != defaultStartLevel) {
+                    sb.append("    startLevel: ").append(sl).append("\n");
+                }
+                included++;
+            } else {
+                // Embed mode (or non-Maven bundle)
+                boolean isEmbedded = (embeddedJars == null) || embeddedJars.containsKey(entryName);
+                if (isEmbedded) {
+                    sb.append("  - url: '${archiveRoot}/").append(entryName).append("'\n");
+                    if (sl != defaultStartLevel) {
+                        sb.append("    startLevel: ").append(sl).append("\n");
+                    }
+                    included++;
+                } else if (mavenFallbacks != null && mavenFallbacks.containsKey(entryName)) {
+                    // JAR not in local cache — fall back to mvn: URL with a comment
+                    sb.append("  - url: '").append(mavenFallbacks.get(entryName)).append("' # JAR not found locally\n");
+                    if (sl != defaultStartLevel) {
+                        sb.append("    startLevel: ").append(sl).append("\n");
+                    }
+                    included++;
+                }
+                // else: skipped — already warned during first pass
+            }
+        }
+
+        sb.append("  autoStart: true\n");
+        sb.append("  uninstallPreviousVersion: true\n");
+        sb.append("  ignoreChecks: false\n");
+        sb.append("- karafCommand: \"log:log 'Module snapshot imported - ")
+                .append(included).append(" bundles'\"\n");
+        return sb.toString();
+    }
+
+    /** Preview / simple overload — no fallbacks map needed. */
+    private String buildExportYamlString(List<Bundle> bundles, Map<String, File> embeddedJars, boolean embedAll) {
+        return buildExportYamlString(bundles, embeddedJars, embedAll, Collections.emptyMap());
+    }
+
+    /**
+     * Return the {@code mvn:} URL for a bundle (used in non-embedAll mode), or {@code null}.
+     */
+    private String resolveMavenUrl(Bundle bundle) {
+        String location = bundle.getLocation();
+        if (location != null && location.startsWith("mvn:")) {
+            return location;
+        }
+        String groupId = bundle.getHeaders().get("Jahia-GroupId");
+        if (groupId != null) {
+            return "mvn:" + groupId + "/" + bundle.getSymbolicName() + "/" + bundle.getVersion();
+        }
+        return null;
+    }
+
+    /**
+     * Resolve the JAR for {@code bundle} by reading it from the JCR module management store
+     * ({@code /module-management/bundles/{groupPath}/{symbolicName}/{version}/...}),
+     * following the same approach as {@link #installBundleVersionFromJcr}.
+     *
+     * <p>The binary is streamed to a <em>temporary</em> file. The caller is responsible
+     * for deleting that file after use (via {@code FileUtils.deleteQuietly}).
+     *
+     * @return a populated temp file, or {@code null} if the bundle is not in JCR
+     */
+    private File resolveJarFromJcr(Bundle bundle) {
+        String groupId = bundle.getHeaders().get("Jahia-GroupId");
+        if (groupId == null) {
+            return null;
+        }
+
+        String groupPath = groupId.replace('.', '/');
+        String version = bundle.getVersion().toString();
+        String jcrVersionPath = "/module-management/bundles/" + groupPath
+                + "/" + bundle.getSymbolicName() + "/" + version;
+
+        SettingsBean settingsBean = SettingsBean.getInstance();
+        File tempFile = null;
+        try {
+            tempFile = File.createTempFile("bundle-export-", ".jar",
+                    new File(settingsBean.getTmpContentDiskPath()));
+            final File out = tempFile;
+
+            boolean found = jcrTemplate.doExecuteWithSystemSessionAsUser(
+                    jahiaUserManagerService.lookupRootUser().getJahiaUser(),
+                    Constants.EDIT_WORKSPACE, null,
+                    session -> {
+                        if (!session.itemExists(jcrVersionPath)) {
+                            logger.debug("JCR path not found for bundle {}/{}: {}",
+                                    bundle.getSymbolicName(), version, jcrVersionPath);
+                            return false;
+                        }
+                        javax.jcr.Node versionFolder = session.getNode(jcrVersionPath);
+                        javax.jcr.NodeIterator it = versionFolder.getNodes();
+                        while (it.hasNext()) {
+                            javax.jcr.Node jarNode = it.nextNode();
+                            if (jarNode.isNodeType("jnt:moduleManagementBundle")) {
+                                javax.jcr.Node content = jarNode.getNode("jcr:content");
+                                javax.jcr.Binary binary = content.getProperty("jcr:data").getBinary();
+                                try (java.io.InputStream in = new java.io.BufferedInputStream(binary.getStream(), 65536);
+                                     java.io.OutputStream os = new java.io.BufferedOutputStream(new java.io.FileOutputStream(out), 65536)) {
+                                    org.apache.commons.io.IOUtils.copy(in, os);
+                                } catch (IOException e) {
+                                    throw new RepositoryException("Error streaming JAR from JCR", e);
+                                } finally {
+                                    binary.dispose();
+                                }
+                                logger.debug("Resolved JAR from JCR for bundle {}/{} ({})",
+                                        bundle.getSymbolicName(), version, jarNode.getPath());
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+
+            if (found && tempFile.length() > 0) {
+                return tempFile;
+            }
+        } catch (Exception e) {
+            logger.debug("JCR JAR resolution failed for bundle {}/{}: {}",
+                    bundle.getSymbolicName(), bundle.getVersion(), e.getMessage());
+        }
+
+        FileUtils.deleteQuietly(tempFile);
+        return null;
+    }
+
+    /**
+     * Fallback: return the JAR {@link File} directly from a {@code file:} location
+     * (e.g. a bundle that was loaded from disk without going through the JCR store).
+     * Returns {@code null} if the location is not a {@code file:} URI or the file does not exist.
+     */
+    private File resolveJarFromDisk(Bundle bundle) {
+        String location = bundle.getLocation();
+        if (location != null && location.startsWith("file:")) {
+            try {
+                File f = new File(new URI(location));
+                if (f.exists() && f.isFile()) {
+                    return f;
+                }
+            } catch (Exception e) {
+                logger.debug("Cannot parse file URI {} for bundle {}", location, bundle.getSymbolicName());
+            }
+        }
+        return null;
+    }
+
+    /** @deprecated kept for backward compatibility — use {@link #resolveJarFromJcr}/{@link #resolveJarFromDisk} */
+    private File resolveAnyJarFile(Bundle bundle, MavenResolver resolver) {
+        File jar = resolveJarFromJcr(bundle);
+        return jar != null ? jar : resolveJarFromDisk(bundle);
+    }
+
+    /** @deprecated use {@link #resolveAnyJarFile} */
+    private File resolveJarFileForEmbed(Bundle bundle, MavenResolver resolver) {
+        return resolveAnyJarFile(bundle, resolver);
+    }
+
+    private int getBundleStartLevel(Bundle bundle) {
+        BundleStartLevel bsl = bundle.adapt(BundleStartLevel.class);
+        return bsl != null ? bsl.getStartLevel() : SettingsBean.getInstance().getModuleStartLevel();
+    }
+
+    private void addFileToZip(ZipOutputStream zos, File file, String entryName) throws IOException {
+        zos.putNextEntry(new ZipEntry(entryName));
+        try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file), 65536)) {
+            byte[] buf = new byte[65536];
+            int len;
+            while ((len = bis.read(buf)) > 0) {
+                zos.write(buf, 0, len);
+            }
+        }
+        zos.closeEntry();
+    }
+
+    /**
+     * Extract entries from a ZIP stream into {@code targetDir}.
+     * Only {@code .jar} and {@code .yaml}/{@code .yml} entries are extracted.
+     * Directory-traversal entries are rejected.
+     *
+     * @return the number of JAR entries extracted
+     */
+    private int extractModuleArchive(InputStream zipStream, File targetDir) throws IOException {
+        int jarCount = 0;
+        try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(zipStream))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName().replace('\\', '/');
+                // Security: no path traversal
+                if (name.contains("..") || name.startsWith("/")) {
+                    logger.warn("Rejecting potentially dangerous ZIP entry: {}", name);
+                    zis.closeEntry();
+                    continue;
+                }
+                // Accept only expected file types
+                if (!name.endsWith(".jar") && !name.endsWith(".yaml") && !name.endsWith(".yml")) {
+                    zis.closeEntry();
+                    continue;
+                }
+                File outFile = new File(targetDir, name);
+                // Double-check the canonical path is still under targetDir
+                if (!outFile.getCanonicalPath().startsWith(targetDir.getCanonicalPath() + File.separator)) {
+                    logger.warn("Rejecting ZIP entry with escape path: {}", name);
+                    zis.closeEntry();
+                    continue;
+                }
+                outFile.getParentFile().mkdirs();
+                try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(outFile), 65536)) {
+                    byte[] buf = new byte[65536];
+                    int len;
+                    while ((len = zis.read(buf)) > 0) {
+                        bos.write(buf, 0, len);
+                    }
+                }
+                if (name.endsWith(".jar")) {
+                    jarCount++;
+                }
+                zis.closeEntry();
+            }
+        }
+        return jarCount;
+    }
+
+    private void validateOsgiBundle(File jarFile, String fileName) throws IOException {
+        if (!fileName.toLowerCase().endsWith(".jar")) {
+            throw new IOException("Only .jar files are accepted");
+        }
+        try (java.util.jar.JarFile jar = new java.util.jar.JarFile(jarFile)) {
+            java.util.jar.Manifest manifest = jar.getManifest();
+            if (manifest == null) {
+                throw new IOException("Invalid JAR: missing MANIFEST.MF");
+            }
+            if (manifest.getMainAttributes().getValue("Bundle-SymbolicName") == null) {
+                throw new IOException("File is not a valid OSGi bundle: missing Bundle-SymbolicName in MANIFEST.MF");
+            }
+        } catch (java.util.zip.ZipException e) {
+            throw new IOException("File is not a valid JAR archive: " + e.getMessage(), e);
+        }
     }
 
     private boolean checkImported(final JahiaTemplatesPackage jahiaTemplatesPackage) {

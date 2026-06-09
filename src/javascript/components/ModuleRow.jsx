@@ -291,7 +291,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
                         </>
                     )}
                 </div>
-                <Dialog fullWidth open={open} maxWidth="lg" onClose={() => setOpen(false)}>
+                <Dialog fullWidth open={open} maxWidth="lg" data-testid="bundle-details-dialog" onClose={() => setOpen(false)}>
                     <BundleDetails bundle={bundle} close={setOpen} refetch={refetch}/>
                 </Dialog>
             </TableBodyCell>
