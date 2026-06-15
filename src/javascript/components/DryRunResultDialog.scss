@@ -30,9 +30,43 @@
   margin-bottom: 8px;
 }
 
+.viewToggle {
+  display: flex;
+  border: 1px solid var(--color-gray_light, #e5e7eb);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.toggleBtn {
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-gray60, #6b7280);
+  transition: background 0.15s, color 0.15s;
+
+  &:hover {
+    background: var(--color-gray_light, #f3f4f6);
+  }
+}
+
+.toggleBtnActive {
+  background: var(--color-accent, #0070ba) !important;
+  color: #fff !important;
+}
+
 .yamlActions {
   display: flex;
   gap: 4px;
+}
+
+.curlHint {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-warning, #d97706);
+  font-style: italic;
 }
 
 .yaml {

@@ -227,7 +227,9 @@
         "noUpdates": "No modules require updates.",
         "scriptLabel": "Generated provisioning script",
         "title": "Dry run — Update preview",
-        "subtitle": "{{count}} module(s) would be updated"
+        "subtitle": "{{count}} module(s) would be updated",
+        "downloadSh": "Download .sh",
+        "curlHint": "Replace <user>:<password> with your Jahia credentials before running."
       }
     },
     "updateBundle": "Update bundle",

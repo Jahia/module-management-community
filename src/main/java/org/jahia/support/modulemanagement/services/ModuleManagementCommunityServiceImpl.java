@@ -1361,19 +1361,26 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             Bundle bundle = null;
             for (Bundle b : bundleContext.getBundles()) {
                 if (symbolicName.equals(b.getSymbolicName())) {
-                    // Prefer ACTIVE state; otherwise take the first match
                     if (bundle == null || b.getState() == Bundle.ACTIVE) {
                         bundle = b;
                     }
                 }
             }
+
             if (bundle == null) {
                 skipped.add(symbolicName + " (not found)");
                 continue;
             }
 
-            String version = getVersion(bundle.getVersion());
-            if (version.contains(SNAPSHOT)) {
+            // Use exact 3-part version (major.minor.micro) — never a range
+            org.osgi.framework.Version v = bundle.getVersion();
+            String version = v.getMajor() + "." + v.getMinor() + "." + v.getMicro();
+            if (v.getQualifier() != null && !v.getQualifier().isEmpty()
+                    && !v.getQualifier().equalsIgnoreCase("SNAPSHOT")) {
+                version = version + "." + v.getQualifier();
+            }
+
+            if (version.toUpperCase().contains(SNAPSHOT)) {
                 skipped.add(symbolicName + " (SNAPSHOT)");
                 continue;
             }
@@ -1387,18 +1394,21 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     groupId = parts[0];
                 }
             }
+
             if (groupId == null) {
                 Dictionary<String, String> headers = bundle.getHeaders();
                 if (headers.get("Jahia-GroupId") != null) {
                     groupId = headers.get("Jahia-GroupId");
                 }
             }
+
             if (groupId == null) {
                 skipped.add(symbolicName + " (groupId unknown)");
                 continue;
             }
 
-            sb.append("  - url: 'mvn:").append(groupId).append("/")
+            // 4-space indent so the list is unambiguously the value of installOrUpgradeBundle
+            sb.append("    - url: 'mvn:").append(groupId).append("/")
               .append(symbolicName).append("/").append(version).append("'\n");
             included.add(symbolicName);
         }
