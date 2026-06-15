@@ -71,6 +71,13 @@
     },
     "cancel": "Cancel",
     "close": "Close",
+    "cleanup": {
+      "jcr": "Clean up JCR versions",
+      "jcrDescription": "Removes old module versions from JCR, keeping only the current and one previous version per module",
+      "success": "JCR module versions cleaned up successfully",
+      "error": "An error occurred during JCR version cleanup",
+      "running": "Cleaning up JCR versions…"
+    },
     "cluster": {
       "state": {
         "not": {
@@ -88,6 +95,10 @@
     },
     "fetchUpdates": "Fetching updates",
     "help": "Help",
+    "menu": {
+      "more": "More actions",
+      "title": "Actions menu"
+    },
     "importModule": {
       "button": "Force reimport content",
       "error": "An error occurred while reimporting module content",
@@ -96,7 +107,9 @@
     },
     "input": {
       "autostart": "Autostart modules",
+      "autostartDesc": "Automatically start modules after installation completes.",
       "dryRun": "Dry run",
+      "dryRunDesc": "Simulate the update without applying any changes. The provisioning script will be shown for review.",
       "filterBySymbolicName": "Filter by bundle symbolic name",
       "filterByType": {
         "all": "All types"
@@ -107,7 +120,20 @@
       },
       "jahiaOnly": "Jahia modules only",
       "onStartup": "Update on next startup",
+      "onStartupDesc": "Write the provisioning script to the patches folder so it runs on the next server restart instead of immediately.",
+      "presets": {
+        "apply": "Apply now",
+        "applyDesc": "Live mode: updates are applied immediately. Previous versions are uninstalled.",
+        "label": "Quick presets:",
+        "safe": "Safe (dry run)",
+        "safeDesc": "Preview mode: simulate updates without making any changes."
+      },
+      "settings": {
+        "modified": "Settings modified from defaults",
+        "persisted": "Settings are saved automatically."
+      },
       "uninstallPrevious": "Uninstall previous version",
+      "uninstallPreviousDesc": "Remove the previously installed version of each module after the new version is successfully installed.",
       "updatesOnly": "Show updates only"
     },
     "lastUpdate": "Latest updates checked at {{date}}",
@@ -183,9 +209,25 @@
     "uninstallBundleError": "An error occurred while uninstalling the bundle",
     "uninstallBundleSuccess": "Bundle uninstalled successfully",
     "updateAll": "Update all",
+    "updateAllBadgeDry": "DRY",
+    "updateAllBadgeLive": "LIVE",
+    "updateAllDryRunTooltip": "Dry run: simulates the update and shows the provisioning script — no changes will be applied.",
+    "updateAllLiveTooltip": "Live mode: updates will be applied immediately to this server.",
     "updateAllError": "An error occurred while updating all modules",
     "updateAllSuccess": "All modules have been updated successfully",
     "updateAllSuccessWithFilter": "Modules {{modules}} have been updated successfully",
+    "dryRun": {
+      "dialog": {
+        "copy": "Copy YAML",
+        "copied": "Copied!",
+        "download": "Download .yaml",
+        "noUpdates": "No modules require updates.",
+        "scriptLabel": "Generated provisioning script",
+        "subtitle_one": "{{count}} module would be updated",
+        "subtitle_other": "{{count}} modules would be updated",
+        "title": "Dry run — Update preview"
+      }
+    },
     "updateBundle": "Update bundle",
     "export": {
       "snapshot": "Export snapshot",

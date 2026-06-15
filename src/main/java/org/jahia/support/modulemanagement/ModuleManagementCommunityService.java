@@ -1,6 +1,7 @@
 package org.jahia.support.modulemanagement;
 
 import org.apache.karaf.features.Feature;
+import org.jahia.support.modulemanagement.UpdateModulesResult;
 import org.osgi.framework.Bundle;
 
 import javax.jcr.RepositoryException;
@@ -59,7 +60,7 @@ public interface ModuleManagementCommunityService {
      */
     String importModuleArchive(InputStream zipStream, String archiveName) throws IOException;
 
-    Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious, boolean forceUpdateAll, boolean onStartup) throws IOException;
+    UpdateModulesResult updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious, boolean forceUpdateAll, boolean onStartup) throws IOException;
 
     Set<String> listAvailableUpdates(boolean jahiaOnly, List<String> filters, boolean forceUpdate) throws IOException;
 
@@ -81,4 +82,18 @@ public interface ModuleManagementCommunityService {
     List<Map<String, Object>> getBundleVersionsFromJcr(Bundle bundle) throws RepositoryException;
 
     String installBundleVersionFromJcr(String jcrPath) throws IOException;
+
+    /**
+     * Remove old module versions from the JCR module-management store
+     * ({@code /module-management/bundles/…}), retaining for each module:
+     * <ol>
+     *   <li>all versions currently installed in OSGi (any state), and</li>
+     *   <li>at most one additional "previous" version (the most recent one not already in OSGi).</li>
+     * </ol>
+     * This keeps storage under control while still allowing a quick roll-back.
+     *
+     * @return a human-readable summary (number of version folders removed, bytes freed)
+     * @throws RepositoryException if JCR access fails
+     */
+    String cleanupJcrVersions() throws RepositoryException;
 }

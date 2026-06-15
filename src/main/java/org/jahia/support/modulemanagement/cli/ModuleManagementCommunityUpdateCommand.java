@@ -8,6 +8,7 @@ import org.apache.karaf.shell.api.action.lifecycle.Reference;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
 import org.jahia.osgi.BundleUtils;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
+import org.jahia.support.modulemanagement.UpdateModulesResult;
 import org.jahia.support.modulemanagement.services.ModuleManagementCommunityServiceImpl;
 
 @Command(scope = "jahia", name = "module-community-update", description = "Update modules in the Jahia community edition")
@@ -40,6 +41,10 @@ public class ModuleManagementCommunityUpdateCommand implements Action {
         if (refresh) {
             return ((ModuleManagementCommunityServiceImpl) communityService).listAvailableUpdates(true, null, true);
         }
-        return communityService.updateModules(true, dryRun, null, clean, clean, force, false);
+        UpdateModulesResult result = communityService.updateModules(true, dryRun, null, clean, clean, force, false);
+        if (dryRun && result.getYamlScript() != null) {
+            return "Dry run — provisioning script:\n" + result.getYamlScript();
+        }
+        return result.getModules();
     }
 }

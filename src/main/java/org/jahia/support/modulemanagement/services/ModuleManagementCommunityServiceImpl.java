@@ -38,6 +38,7 @@ import org.jahia.services.usermanager.JahiaUser;
 import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.jahia.settings.SettingsBean;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
+import org.jahia.support.modulemanagement.UpdateModulesResult;
 import org.jahia.support.modulemanagement.config.ModuleManagementCommunityConfig;
 import org.ops4j.pax.url.mvn.MavenResolver;
 import org.osgi.framework.Bundle;
@@ -193,15 +194,15 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      */
 
     @Override
-    public Set<String> updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious, boolean forceUpdateAll, boolean onStartup) throws IOException {
+    public UpdateModulesResult updateModules(boolean jahiaOnly, boolean dryRun, List<String> filters, boolean autostart, boolean uninstallPrevious, boolean forceUpdateAll, boolean onStartup) throws IOException {
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             logger.warn(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
-            return Collections.emptySet();
+            return new UpdateModulesResult(Collections.emptySet(), null);
         }
         if (!settingsBean.isProcessingServer()) {
             logger.warn("ModuleManagementCommunityService is available only on processing servers");
-            return Collections.emptySet();
+            return new UpdateModulesResult(Collections.emptySet(), null);
         }
 
         if (!dryRun && !jahiaOnly && CollectionUtils.isEmpty(filters)) {
@@ -211,7 +212,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         // Get or refresh the list of available updates
         Set<String> updates = listAvailableUpdates(jahiaOnly, filters, false);
         if (updates.isEmpty()) {
-            return Collections.emptySet();
+            return new UpdateModulesResult(Collections.emptySet(), null);
         }
 
         if (!forceUpdateAll && (maxModulesToUpdate > 0 && updates.size() >= maxModulesToUpdate)) {
@@ -256,7 +257,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             logger.info("Dry run mode enabled, not executing provisioning script:\n{}", yamlScript);
         }
 
-        return updates;
+        return new UpdateModulesResult(updates, yamlScript);
     }
 
     @Nonnull
@@ -1238,6 +1239,167 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         } catch (java.util.zip.ZipException e) {
             throw new IOException("File is not a valid JAR archive: " + e.getMessage(), e);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // JCR version cleanup
+    // -------------------------------------------------------------------------
+
+    @Override
+    public String cleanupJcrVersions() throws RepositoryException {
+        final String BASE_PATH = "/module-management/bundles";
+
+        // Collect all currently OSGi-installed versions, keyed by symbolic name
+        final Map<String, Set<String>> osgiVersions = new HashMap<>();
+        for (Bundle b : bundleContext.getBundles()) {
+            osgiVersions.computeIfAbsent(b.getSymbolicName(), k -> new HashSet<>())
+                        .add(b.getVersion().toString());
+        }
+
+        final int[] removed = {0};
+        final long[] freedBytes = {0};
+
+        jcrTemplate.doExecuteWithSystemSessionAsUser(
+                jahiaUserManagerService.lookupRootUser().getJahiaUser(),
+                Constants.EDIT_WORKSPACE, null,
+                session -> {
+                    if (!session.itemExists(BASE_PATH)) {
+                        logger.info("JCR cleanup: base path {} not found, nothing to do", BASE_PATH);
+                        return null;
+                    }
+
+                    // Walk the tree and collect: moduleFolderPath → list of version-folder nodes
+                    Map<String, List<javax.jcr.Node>> versionsByModule = new LinkedHashMap<>();
+                    collectVersionFolders(session.getNode(BASE_PATH), versionsByModule);
+
+                    VersionScheme vs = new GenericVersionScheme();
+
+                    for (Map.Entry<String, List<javax.jcr.Node>> entry : versionsByModule.entrySet()) {
+                        List<javax.jcr.Node> versionFolders = entry.getValue();
+                        if (versionFolders.size() <= 1) {
+                            continue; // Nothing to clean up for this module
+                        }
+
+                        // Derive the symbolic name from the module folder path
+                        String moduleFolderPath = entry.getKey();
+                        String symbolicName = moduleFolderPath.substring(moduleFolderPath.lastIndexOf('/') + 1);
+
+                        // Sort descending (newest version first)
+                        List<javax.jcr.Node> sorted = new ArrayList<>(versionFolders);
+                        sorted.sort((a, b) -> {
+                            try {
+                                return vs.parseVersion(b.getName()).compareTo(vs.parseVersion(a.getName()));
+                            } catch (Exception e) {
+                                try {
+                                    return b.getName().compareTo(a.getName());
+                                } catch (Exception ex) {
+                                    return 0;
+                                }
+                            }
+                        });
+
+                        // Determine which version names to retain
+                        Set<String> keep = new LinkedHashSet<>();
+                        // 1) Always keep every version that is currently in OSGi
+                        keep.addAll(osgiVersions.getOrDefault(symbolicName, Collections.emptySet()));
+                        // 2) Keep the most-recent JCR version
+                        if (!sorted.isEmpty()) {
+                            try { keep.add(sorted.get(0).getName()); } catch (RepositoryException ignored) {}
+                        }
+                        // 3) Keep one additional "previous" version
+                        for (javax.jcr.Node vf : sorted) {
+                            if (keep.size() >= 2) break;
+                            try { keep.add(vf.getName()); } catch (RepositoryException ignored) {}
+                        }
+
+                        // Remove everything not in the keep set
+                        for (javax.jcr.Node vf : versionFolders) {
+                            try {
+                                String versionName = vf.getName();
+                                if (!keep.contains(versionName)) {
+                                    freedBytes[0] += computeVersionFolderSize(vf);
+                                    vf.remove();
+                                    removed[0]++;
+                                    logger.info("JCR cleanup: removed {} v{}", symbolicName, versionName);
+                                }
+                            } catch (RepositoryException ex) {
+                                try {
+                                    logger.warn("JCR cleanup: could not remove a version of {}: {}", symbolicName, ex.getMessage());
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    }
+
+                    session.save();
+                    return null;
+                });
+
+        String summary = String.format(
+                "JCR version cleanup complete: removed %d version folder(s), freed approximately %.1f MB",
+                removed[0], freedBytes[0] / (1024.0 * 1024.0));
+        logger.info(summary);
+        return summary;
+    }
+
+    /**
+     * Recursively walk {@code folder} and populate {@code result} with:
+     * {@code moduleFolderPath → list of version-folder nodes}.
+     * <p>
+     * A <em>version folder</em> is a {@code jnt:moduleManagementBundleFolder}
+     * that directly contains at least one {@code jnt:moduleManagementBundle} child.
+     * Its parent is treated as the symbolic-name folder.
+     */
+    private void collectVersionFolders(javax.jcr.Node folder,
+                                       Map<String, List<javax.jcr.Node>> result) throws RepositoryException {
+        javax.jcr.NodeIterator children = folder.getNodes();
+        while (children.hasNext()) {
+            javax.jcr.Node child = children.nextNode();
+            if (!child.isNodeType("jnt:moduleManagementBundleFolder")) {
+                continue;
+            }
+            if (hasModuleBundleChild(child)) {
+                // child is a version folder — its parent (folder) is the symbolic-name folder
+                result.computeIfAbsent(folder.getPath(), k -> new ArrayList<>()).add(child);
+            } else {
+                // Recurse: this might be a groupId path component or symbolic-name folder
+                collectVersionFolders(child, result);
+            }
+        }
+    }
+
+    /** Returns {@code true} if {@code folder} has at least one {@code jnt:moduleManagementBundle} child. */
+    private boolean hasModuleBundleChild(javax.jcr.Node folder) throws RepositoryException {
+        javax.jcr.NodeIterator it = folder.getNodes();
+        while (it.hasNext()) {
+            if (it.nextNode().isNodeType("jnt:moduleManagementBundle")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Sum the {@code jcr:data} binary sizes of all {@code jnt:moduleManagementBundle} children
+     * in a version folder.
+     */
+    private long computeVersionFolderSize(javax.jcr.Node versionFolder) throws RepositoryException {
+        long size = 0;
+        javax.jcr.NodeIterator it = versionFolder.getNodes();
+        while (it.hasNext()) {
+            javax.jcr.Node child = it.nextNode();
+            if (child.hasNode("jcr:content")) {
+                javax.jcr.Node content = child.getNode("jcr:content");
+                if (content.hasProperty("jcr:data")) {
+                    javax.jcr.Binary bin = content.getProperty("jcr:data").getBinary();
+                    try {
+                        size += bin.getSize();
+                    } finally {
+                        bin.dispose();
+                    }
+                }
+            }
+        }
+        return size;
     }
 
     private boolean checkImported(final JahiaTemplatesPackage jahiaTemplatesPackage) {

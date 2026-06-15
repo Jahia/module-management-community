@@ -165,6 +165,8 @@ interface JCRNode {
         "The name of the permission"
         permissionName: String!
     ): Boolean
+    "Returns content history for the node"
+    history: GqlContentHistory
     "Return if a node of type jnt:condition is matching for the current node."
     isConditionMatching: Boolean
     "Check if the node as a renderable template associated with it (not a view a template)."
@@ -299,6 +301,13 @@ interface JCRNode {
         "Optional: Return languages only if it is active for the site"
         isActiveOnly: Boolean
     ): [String]
+    "Translate node"
+    translationSuggestions(
+        "Language to translate from"
+        sourceLanguage: String,
+        "Language to translate to"
+        targetLanguage: String
+    ): [TranslatedField]
     "Get node URL"
     url: String
     "GraphQL representations of the reference properties that target the current JCR Node"
@@ -473,8 +482,15 @@ type ASAdminQueries {
     dbConnections: [GqlAvailableConnection] @deprecated(reason: "Deprecated")
     "Function score queries"
     functionScore: ASAdminFunctionScoreQueries
+    "Raw settings and mappings for a specific Elasticsearch index, serialised as JSON strings"
+    indexDetails(
+        "Exact index name"
+        name: String
+    ): GqlIndexDetails
     "Get index sizes"
     indexSizes: [GqlIndexSize]
+    "Information about all Elasticsearch indices managed by Augmented Search (aliases, document count, primary shard size)"
+    indicesInfo: [GqlIndexInfo]
     "Returns if AS has an active elasticsearch connection."
     isConnected: Boolean
     "List sites configured for Augmented Search"
@@ -605,6 +621,14 @@ type Asset {
     size: Float
     "Mime type of the asset"
     type: String
+}
+
+"Result returned by an assisted translation operation"
+type AssistedTranslationResponse {
+    "Human-readable message describing the translation result"
+    message: String
+    "Whether the translation completed successfully"
+    successful: Boolean
 }
 
 "Result of the dependency inspector operation."
@@ -1029,6 +1053,8 @@ type GenericJCRNode implements JCRNode {
         "The name of the permission"
         permissionName: String!
     ): Boolean
+    "Returns content history for the node"
+    history: GqlContentHistory
     "Return if a node of type jnt:condition is matching for the current node."
     isConditionMatching: Boolean
     "Check if the node as a renderable template associated with it (not a view a template)."
@@ -1163,6 +1189,13 @@ type GenericJCRNode implements JCRNode {
         "Optional: Return languages only if it is active for the site"
         isActiveOnly: Boolean
     ): [String]
+    "Translate node"
+    translationSuggestions(
+        "Language to translate from"
+        sourceLanguage: String,
+        "Language to translate to"
+        targetLanguage: String
+    ): [TranslatedField]
     "Get node URL"
     url: String
     "GraphQL representations of the reference properties that target the current JCR Node"
@@ -1439,6 +1472,66 @@ type GqlConfigurationQuery {
     values: [GqlConfigurationProperty]
 }
 
+"Content history information for a node"
+type GqlContentHistory {
+    "Get total count of history entries for the node"
+    count(
+        "Filter count by action (e.g., 'published', 'created', 'updated', 'deleted')"
+        action: String,
+        "Include language-specific nodes in the count (default: false)"
+        withLanguageNodes: Boolean
+    ): Int
+    "Get paginated content history entries for the node, the maximum number of returned entries is 100"
+    entries(
+        "Filter entries by action (e.g., 'published', 'created', 'updated', 'deleted')"
+        action: String,
+        "Maximum number of entries to return (default: 20)"
+        limit: Int,
+        "Number of entries to skip (default: 0)"
+        offset: Int,
+        "Include language-specific nodes in the result (default: false)"
+        withLanguageNodes: Boolean
+    ): [GqlContentHistoryEntry]
+}
+
+"Represents a content change event entry"
+type GqlContentHistoryEntry {
+    "The action performed (e.g., created, updated, deleted, published)"
+    action: String
+    "The timestamp of the history entry in ISO 8601 format"
+    date: String
+    "The unique identifier of the history entry"
+    id: String
+    "The language code if the entry is for a language-specific node"
+    language: String
+    "Additional message about the event"
+    message: String
+    "The technical name of the node"
+    nodeName: String
+    "The localized display name of the node"
+    nodeNameDisplay(
+        "Language code for the display name"
+        language: String!
+    ): String
+    "The path of the node at the time of the event"
+    path: String
+    "The property name if the action was on a specific property"
+    propertyName: String
+    "The localized display name of the property if the action was on a specific property"
+    propertyNameDisplay(
+        "Language code for the display name"
+        language: String!
+    ): String
+    "The timestamp of the history entry as milliseconds since epoch"
+    timestamp: Long
+    "The user who performed the action, resolved from the user key"
+    user: User
+    "The user key who performed the action"
+    userKey: String
+    "The UUID of the node"
+    uuid: String
+}
+
 type GqlDashboard {
     "Retrieves the list of modules currently available on the platform"
     modules: [GqlModule]
@@ -1529,11 +1622,15 @@ type GqlEditorFormMutations {
     ): Boolean
     "Save the visibility condition for the given node"
     saveVisibilityCondition(
+        "When true, all conditions must match for the node to be visible; when false, any single match is sufficient"
         isMatchingAllConditions: Boolean = false,
         "A string representation of a locale, in IETF BCP 47 language tag format, ie en_US, en, fr, fr_CH, ..."
         locale: String!,
+        "New visibility conditions to create"
         newConditions: [InputVisibilityConditionInput],
+        "UUIDs of visibility conditions to remove"
         removedConditions: [String],
+        "Existing visibility conditions to update"
         updatedConditions: [InputVisibilityConditionInput],
         "UUID of the parent nodes ofr teh visibility condition"
         uuid: String!
@@ -1587,6 +1684,7 @@ type GqlEditorFormValueConstraint {
     value: GqlEditorFormValue
 }
 
+"Main entry point for the Content Editor form API — provides queries for form definitions, field constraints, content type trees, and node type information"
 type GqlEditorForms {
     "Retrieve the custom configuration path for CKEditor"
     ckeditorConfigPath(
@@ -1747,6 +1845,40 @@ type GqlHealthCheckStatus {
     message: String @deprecated(reason: "When multiple probe return the same error status (YELLOW or RED), the message does not guarantee which of the probe will get its message returned. We recommend using the \"health\" parameter and corresponding individual probe message instead.")
 }
 
+"An Elasticsearch alias attached to an index"
+type GqlIndexAlias {
+    "True when this alias is used for read operations (name ends with __read)"
+    isReadAlias: Boolean
+    "True when this alias is used for write operations (name ends with __write)"
+    isWriteAlias: Boolean
+    "Alias name"
+    name: String!
+}
+
+"Raw settings and mappings for an Elasticsearch index, serialised as JSON strings"
+type GqlIndexDetails {
+    "Index mappings serialised as a JSON string"
+    mappings: String
+    "Index settings serialised as a JSON string"
+    settings: String
+}
+
+"Information about an Elasticsearch index managed by Augmented Search"
+type GqlIndexInfo {
+    "Aliases attached to this index, classified as read or write based on naming convention"
+    aliases: [GqlIndexAlias]!
+    "Number of documents in the primary shards of this index"
+    docCount: Long
+    "Unix timestamp (ms) at which this index was created during reindexation, or -1 if not available"
+    indexedAt: Long
+    "Full index name in Elasticsearch"
+    name: String!
+    "Total primary shard size in bytes"
+    primarySizeBytes: Long
+    "Language code (e.g. 'en', 'fr_CH') or 'file' extracted from the index name"
+    qualifier: String!
+}
+
 "Index size"
 type GqlIndexSize {
     "Index name"
@@ -1766,6 +1898,56 @@ type GqlJContent {
         "Original html"
         originalHtml: String
     ): String
+    "Search groups through Jahia group manager services. Provider-aware, unlike a raw 'SELECT * FROM [jnt:group]' query."
+    groupSearch(
+        "fetching only nodes after this node (exclusive)"
+        after: String,
+        "fetching only nodes before this node (exclusive)"
+        before: String,
+        "Sort by GraphQL field values"
+        fieldSorter: InputFieldSorterInput,
+        "fetching only the first certain number of nodes"
+        first: Int,
+        "fetching only the last certain number of nodes"
+        last: Int,
+        "fetching only the first certain number of nodes"
+        limit: Int,
+        "fetching only nodes after this node (inclusive)"
+        offset: Int,
+        "Optional provider keys to restrict the search; null targets all providers"
+        providers: [String],
+        "Search scope: '/' (site + global), '/groups' (global only) or '/sites/{site}/groups' (site only)"
+        scopePath: String,
+        "Search term matched against all group properties; blank lists everything"
+        searchTerm: String,
+        "Site key used to resolve site-scoped groups"
+        siteKey: String
+    ): JCRNodeConnection
+    "Search users through Jahia user manager services. Provider-aware (incl. LDAP) and bounded by the configured jahiaJCRUserCountLimit, unlike a raw 'SELECT * FROM [jnt:user]' query."
+    userSearch(
+        "fetching only nodes after this node (exclusive)"
+        after: String,
+        "fetching only nodes before this node (exclusive)"
+        before: String,
+        "Sort by GraphQL field values"
+        fieldSorter: InputFieldSorterInput,
+        "fetching only the first certain number of nodes"
+        first: Int,
+        "fetching only the last certain number of nodes"
+        last: Int,
+        "fetching only the first certain number of nodes"
+        limit: Int,
+        "fetching only nodes after this node (inclusive)"
+        offset: Int,
+        "Optional provider keys to restrict the search; null targets all providers"
+        providers: [String],
+        "Search scope: '/' (site + global), '/users' (global only) or '/sites/{site}/users' (site only)"
+        scopePath: String,
+        "Search term matched against all user properties; blank lists everything (up to the count limit)"
+        searchTerm: String,
+        "Site key used to resolve site-scoped users"
+        siteKey: String
+    ): JCRNodeConnection
 }
 
 "jContent API"
@@ -2627,6 +2809,8 @@ type JCRNodeMutation {
         "The collection of JCR properties: name and language"
         properties: [InputJCRDeletedProperty]
     ): Boolean
+    "Force the publication of the whole sub-tree by first deleting everything in live and then republishing the whole sub-tree"
+    forcePublish: Boolean
     "Grant role permissions to specified principal user/group for the given node"
     grantRoles(
         "Name of principal (user/group)"
@@ -2762,6 +2946,22 @@ type JCRNodeMutation {
         "target path, if different"
         targetPath: String
     ): GqlJcrImageTransformMutation
+    "Translate node"
+    translateNode(
+        "Locale to translate from"
+        sourceLocale: String,
+        "Locale to translate to"
+        targetLocale: String
+    ): AssistedTranslationResponse
+    "Translate property"
+    translateProperty(
+        "Property name to translate"
+        propertyName: String,
+        "Locale to translate from"
+        sourceLocale: String,
+        "Locale to translate to"
+        targetLocale: String
+    ): AssistedTranslationResponse
     "Unlock the node"
     unlock(
         "Type of lock, defaults to user"
@@ -3330,6 +3530,8 @@ type JCRSite implements JCRNode {
         "The name of the permission"
         permissionName: String!
     ): Boolean
+    "Returns content history for the node"
+    history: GqlContentHistory
     "Returns the node of the home page or null if no home page is defined or is not accessible"
     homePage: JCRNode
     "Retrieves a collection of module IDs, which are installed on the site, the node belongs to"
@@ -3476,6 +3678,13 @@ type JCRSite implements JCRNode {
         "Optional: Return languages only if it is active for the site"
         isActiveOnly: Boolean
     ): [String]
+    "Translate node"
+    translationSuggestions(
+        "Language to translate from"
+        sourceLanguage: String,
+        "Language to translate to"
+        targetLanguage: String
+    ): [TranslatedField]
     "Get node URL"
     url: String
     "GraphQL representations of the reference properties that target the current JCR Node"
@@ -3819,12 +4028,14 @@ type MfaResponse {
 type ModuleManagementMutationResult {
     "Allow developers to perform operations on bundles, such as installing, uninstalling, or updating"
     bundle(bundleId: Long): GqlBundleMutation
+    "Remove old module versions from the JCR module-management store, keeping only the currently-installed version(s) and one previous version per module. Returns a human-readable summary of what was removed."
+    cleanupJcrVersions: String
     "Import a module from the file system into the OSGi framework"
     importModule(bundleId: Long, force: Boolean = false): String
     "Install a bundle version from its JCR path (rollback to a previous version stored in /module-management/bundles/)"
     installBundleFromJcr(jcrPath: String): String
-    "Return the list of modules that have been updated"
-    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], forceUpdateAll: Boolean = false, jahiaOnly: Boolean = true, onStartup: Boolean = false, uninstallPrevious: Boolean = false): [String]
+    "Return the list of modules that have been updated and the provisioning YAML script"
+    updateModules(autostart: Boolean = false, dryRun: Boolean = false, filters: [String], forceUpdateAll: Boolean = false, jahiaOnly: Boolean = true, onStartup: Boolean = false, uninstallPrevious: Boolean = false): UpdateModulesResult
 }
 
 type ModuleManagementQueryResult {
@@ -3834,6 +4045,8 @@ type ModuleManagementQueryResult {
     bundle(name: String, version: String): GqlBundle
     "Return true if the Jahia instance is clustered"
     clustered: Boolean
+    "Preview the provisioning YAML that would be generated for a module snapshot export, without downloading a ZIP"
+    exportYamlPreview(embedAll: Boolean = true, types: [String]): String
     "Return a list of features available in the Jahia community edition"
     features(filters: [String], jahiaOnly: Boolean = true): [GqlFeature]
     "Return a list of 'symbolicName:type' for all installed bundles — lightweight pre-fetch for type filtering"
@@ -3866,6 +4079,30 @@ type Mutation {
     "Main access to MFA API"
     mfa: MfaMutation
     mutateWorkflows(definition: String): [WorkflowMutation]
+    "Deletes the provisioning archive from JCR"
+    provisioningGeneratorDelete: Boolean
+    "Generates a provisioning ZIP archive of all active Jahia modules and stores it in JCR"
+    provisioningGeneratorGenerate: Boolean
+    "Removes all support tokens for a user"
+    supportTokenClearAll(
+        "Site key (null for global users)"
+        siteKey: String,
+        "Username whose tokens should be cleared"
+        username: String
+    ): Boolean
+    "Creates a temporary support token for a user. Returns the generated token string, or null on failure."
+    supportTokenCreate(
+        "Purpose of this token"
+        description: String,
+        "Expiration in minutes (default: 60)"
+        expiration: Long,
+        "Email address that will receive the token"
+        recipient: String,
+        "Site key (null for global users)"
+        siteKey: String,
+        "Username to create the token for"
+        username: String
+    ): String
 }
 
 "GraphQL representation of node type information"
@@ -4080,6 +4317,12 @@ type PrincipalEdge {
     node: Principal
 }
 
+"Metadata about the provisioning archive"
+type ProvisioningArchiveInfo {
+    "ISO-8601 timestamp of the last time the archive was generated"
+    createdAt: String
+}
+
 "Root query type"
 type Query {
     "Admin Queries"
@@ -4120,6 +4363,10 @@ type Query {
     ): JCRQuery!
     "Main access to MFA read-only API"
     mfa: MfaQuery
+    "Returns archive metadata if the provisioning archive exists in JCR, null otherwise"
+    provisioningGeneratorArchiveInfo: ProvisioningArchiveInfo
+    "Returns true if a provisioning archive is currently being generated"
+    provisioningGeneratorIsGenerating: Boolean
     "Search in Jahia using Augmented Search"
     search(
         "Boost specification"
@@ -4141,6 +4388,13 @@ type Query {
         "Can be LIVE or EDIT"
         workspace: Workspace = LIVE
     ): augmentedSearchResult
+    "Lists the active tokens for a user"
+    supportTokenListTokens(
+        "Site key (null for global users)"
+        siteKey: String,
+        "Username to query"
+        username: String
+    ): [SupportTokenInfo]
     "Tag Queries"
     tag: JCRTags
     "Retrieves the number of active workflow tasks for the current user"
@@ -4243,6 +4497,18 @@ type Subscription {
     workflowEvent: GqlWorkflowEvent
 }
 
+"Information about a support token (the token value itself is never returned)"
+type SupportTokenInfo {
+    "ISO creation date of the token"
+    createdDate: String
+    "Purpose description for the token"
+    description: String
+    "Expiration in minutes from creation time"
+    expiration: Long
+    "Email address the token was sent to"
+    recipient: String
+}
+
 "Workflow task"
 type Task {
     "Task assignee"
@@ -4277,6 +4543,21 @@ type TaskEdge {
     index: Int
     "The item at the end of the edge"
     node: Task
+}
+
+type TranslatedField {
+    "Name of the translated field"
+    fieldName: String
+    "Translated value of the field"
+    translatedValue: String
+}
+
+"Result of an updateModules operation"
+type UpdateModulesResult {
+    "List of module symbolic names that were (or would be) updated"
+    modules: [String]!
+    "The generated provisioning YAML script. In dry-run mode no changes are applied; in live mode this script was written to the patches folder."
+    yamlScript: String
 }
 
 "GraphQL representation of a usage (node holding the reference + list of properties referencing the caller)"
@@ -4573,6 +4854,8 @@ type VanityUrl implements JCRNode {
         "The name of the permission"
         permissionName: String!
     ): Boolean
+    "Returns content history for the node"
+    history: GqlContentHistory
     "Return if a node of type jnt:condition is matching for the current node."
     isConditionMatching: Boolean
     "Check if the node as a renderable template associated with it (not a view a template)."
@@ -4711,6 +4994,13 @@ type VanityUrl implements JCRNode {
         "Optional: Return languages only if it is active for the site"
         isActiveOnly: Boolean
     ): [String]
+    "Translate node"
+    translationSuggestions(
+        "Language to translate from"
+        sourceLanguage: String,
+        "Language to translate to"
+        targetLanguage: String
+    ): [TranslatedField]
     "The vanity URL"
     url: String
     "GraphQL representations of the reference properties that target the current JCR Node"
@@ -4774,8 +5064,15 @@ type VanityUrlMappingMutation {
     uuid: String
 }
 
+"Result of evaluating a single visibility condition on a node"
 type VisibilityConditionEvaluationResult {
+    conditionDescription(
+        "A string representation of a locale, in IETF BCP 47 language tag format, ie en_US, en, fr, fr_CH, ..."
+        uiLocale: String!
+    ): String
+    "The JCR node representing the visibility condition"
     conditionNode: JCRNode
+    "True if the visibility condition matches for the current context"
     matches: Boolean
 }
 
@@ -5399,8 +5696,11 @@ input InputCarriedJCRNode {
     pathOrId: String!
 }
 
+"Input type representing a key-value context entry used to pass additional information for field constraint resolution"
 input InputContextEntryInput {
+    "The context entry key"
     key: String
+    "The context entry values"
     value: [String]
 }
 
@@ -5647,9 +5947,13 @@ input InputVanityUrl {
     url: String!
 }
 
+"Input type representing a visibility condition to be saved on a node"
 input InputVisibilityConditionInput {
+    "The properties to set on the visibility condition node"
     properties: [InputJCRProperty]
+    "The primary node type of the visibility condition"
     type: String
+    "The UUID of an existing visibility condition node, null for new conditions"
     uuid: String
 }
 

@@ -5,7 +5,7 @@ import {useTranslation} from 'react-i18next';
 import {Badge, Button, Chip, Close, CloudUpload, Reload, Replay, Rocket, Separator, Switch, Typography, Warning} from '@jahia/moonstone';
 import {Dialog, DialogActions, DialogContent, DialogTitle} from '@material-ui/core';
 import * as PropTypes from 'prop-types';
-import styles from './ModuleManagementCommunityApp.scss';
+import styles from './BundleDetails.scss';
 import Mermaid from './Mermaid';
 import BundleInfo from './BundleInfo';
 

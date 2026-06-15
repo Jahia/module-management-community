@@ -172,6 +172,7 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
             maxWidth="sm"
             fullWidth
             onClose={isUploading ? undefined : handleClose}
+            data-testid="upload-module-dialog"
         >
             <DialogTitle disableTypography>
                 <Typography variant="heading" weight="semiBold">

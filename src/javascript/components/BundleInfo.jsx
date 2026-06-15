@@ -2,7 +2,7 @@ import React, {useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Button, Chip, Separator, Typography} from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
-import styles from './ModuleManagementCommunityApp.scss';
+import styles from './BundleDetails.scss';
 
 // Renders a label + value pair inside the identity grid (two adjacent grid children)
 const InfoRow = ({label, value}) => (
