@@ -68,4 +68,12 @@ public class ModuleManagementMutationResult {
     public String cleanupJcrVersions() throws RepositoryException {
         return moduleManagementCommunityService.cleanupJcrVersions();
     }
+
+    @GraphQLField
+    @GraphQLName("generateProvisioningScript")
+    @GraphQLDescription("Generate a YAML provisioning script to replay the given (non-SNAPSHOT) modules on another server.")
+    public String generateProvisioningScript(
+            @GraphQLName("symbolicNames") List<String> symbolicNames) {
+        return moduleManagementCommunityService.generateProvisioningScript(symbolicNames);
+    }
 }

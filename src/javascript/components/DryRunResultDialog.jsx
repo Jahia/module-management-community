@@ -5,7 +5,7 @@ import {Dialog, DialogActions, DialogContent, DialogTitle} from '@material-ui/co
 import {useTranslation} from 'react-i18next';
 import styles from './DryRunResultDialog.scss';
 
-export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript}) => {
+export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript, title}) => {
     const {t} = useTranslation('module-management-community');
     const [copied, setCopied] = useState(false);
 
@@ -29,7 +29,7 @@ export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript}) => {
     return (
         <Dialog open={isOpen} maxWidth="md" fullWidth onClose={onClose} data-testid="dryrun-result-dialog">
             <DialogTitle disableTypography>
-                <Typography variant="title">{t('label.dryRun.dialog.title')}</Typography>
+                <Typography variant="title">{title || t('label.dryRun.dialog.title')}</Typography>
                 <Typography variant="body" className={styles.subtitle}>
                     {t('label.dryRun.dialog.subtitle', {count: modules?.length ?? 0})}
                 </Typography>            </DialogTitle>
@@ -83,6 +83,7 @@ DryRunResultDialog.propTypes = {
     isOpen: PropTypes.bool.isRequired,
     onClose: PropTypes.func.isRequired,
     modules: PropTypes.arrayOf(PropTypes.string),
-    yamlScript: PropTypes.string
+    yamlScript: PropTypes.string,
+    title: PropTypes.string
 };
 

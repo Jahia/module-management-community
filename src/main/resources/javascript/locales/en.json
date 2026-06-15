@@ -43,31 +43,31 @@
         "disabled": "Disabled",
         "enabled": "Enabled"
       },
-        "tab": {
-          "bundleDeps": "Bundle dependencies",
-          "details": "Details",
-          "moduleDeps": "Module dependencies",
-          "sites": "Sites",
-          "versions": "Version history"
+      "tab": {
+        "bundleDeps": "Bundle dependencies",
+        "details": "Details",
+        "moduleDeps": "Module dependencies",
+        "sites": "Sites",
+        "versions": "Version history"
+      },
+      "type": {
+        "bundle": "Bundle",
+        "module": "Module",
+        "system": "System"
+      },
+      "versions": {
+        "confirm": {
+          "message": "Module downgrade is not officially supported. The module will be installed in stopped state — you can start it manually. Do you want to continue?",
+          "proceed": "Downgrade module",
+          "title": "Confirm module downgrade"
         },
-        "type": {
-          "bundle": "Bundle",
-          "module": "Module",
-          "system": "System"
-        },
-        "versions": {
-          "confirm": {
-            "message": "Module downgrade is not officially supported. The module will be installed in stopped state — you can start it manually. Do you want to continue?",
-            "proceed": "Downgrade module",
-            "title": "Confirm module downgrade"
-          },
-          "downgrade": "↓ downgrade",
-          "hint": "These are all versions of this bundle available in the module management store (/module-management/bundles) that are not currently installed.",
-          "install": "Install this version",
-          "installError": "An error occurred while installing the selected version",
-          "installSuccess": "Bundle version installed successfully",
-          "upgrade": "↑ upgrade"
-        }
+        "downgrade": "↓ downgrade",
+        "hint": "These are all versions of this bundle available in the module management store (/module-management/bundles) that are not currently installed.",
+        "install": "Install this version",
+        "installError": "An error occurred while installing the selected version",
+        "installSuccess": "Bundle version installed successfully",
+        "upgrade": "↑ upgrade"
+      }
     },
     "cancel": "Cancel",
     "close": "Close",
@@ -86,6 +86,9 @@
             "short": "Not sync"
           }
         }
+      },
+      "ops": {
+        "title": "Cluster operations"
       }
     },
     "errors": {
@@ -223,9 +226,8 @@
         "download": "Download .yaml",
         "noUpdates": "No modules require updates.",
         "scriptLabel": "Generated provisioning script",
-        "subtitle_one": "{{count}} module would be updated",
-        "subtitle_other": "{{count}} modules would be updated",
-        "title": "Dry run — Update preview"
+        "title": "Dry run — Update preview",
+        "subtitle": "{{count}} module(s) would be updated"
       }
     },
     "updateBundle": "Update bundle",
@@ -289,6 +291,27 @@
       "validation": {
         "noFile": "Please select a file",
         "notJar": "Only .jar files are accepted"
+      }
+    },
+    "generateScript": {
+      "menuItem": "Generate provisioning script",
+      "title": "Generate provisioning script",
+      "subtitle": "Select the modules to include. Only stable (non-SNAPSHOT) versions are available. Drop the generated YAML into any Jahia server's patches/provisioning folder to replay this module set.",
+      "includeTypes": "Include types:",
+      "type": {
+        "module": "Modules",
+        "system": "System",
+        "templatesSet": "Template sets"
+      },
+      "searchPlaceholder": "Filter by bundle name…",
+      "selectAll": "Select all",
+      "clearAll": "Clear all",
+      "empty": "No modules match the current filters.",
+      "summary": "{{selected}} of {{total}} modules selected · {{snapshots}} SNAPSHOT(s) excluded",
+      "generate": "Generate script",
+      "generating": "Generating…",
+      "result": {
+        "title": "Provisioning script — module set"
       }
     }
   },

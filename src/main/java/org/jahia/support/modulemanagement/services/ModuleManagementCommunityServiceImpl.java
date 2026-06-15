@@ -4,6 +4,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.felix.utils.collections.MapToDictionary;
+import java.util.ArrayList;
 import org.apache.karaf.features.Feature;
 import org.apache.karaf.features.FeaturesService;
 import org.apache.maven.artifact.repository.metadata.Versioning;
@@ -1342,6 +1343,83 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     }
 
     /**
+     * @see ModuleManagementCommunityService#generateProvisioningScript(List)
+     */
+    @Override
+    public String generateProvisioningScript(List<String> symbolicNames) {
+        if (symbolicNames == null || symbolicNames.isEmpty()) {
+            return "# No modules selected\n";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("- installOrUpgradeBundle:\n");
+        List<String> included = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
+
+        for (String symbolicName : symbolicNames) {
+            // Find the currently active bundle by symbolic name (version-agnostic lookup)
+            Bundle bundle = null;
+            for (Bundle b : bundleContext.getBundles()) {
+                if (symbolicName.equals(b.getSymbolicName())) {
+                    // Prefer ACTIVE state; otherwise take the first match
+                    if (bundle == null || b.getState() == Bundle.ACTIVE) {
+                        bundle = b;
+                    }
+                }
+            }
+            if (bundle == null) {
+                skipped.add(symbolicName + " (not found)");
+                continue;
+            }
+
+            String version = getVersion(bundle.getVersion());
+            if (version.contains(SNAPSHOT)) {
+                skipped.add(symbolicName + " (SNAPSHOT)");
+                continue;
+            }
+
+            // Determine Maven groupId — same logic as listAvailableUpdates
+            String groupId = null;
+            String location = bundle.getLocation();
+            if (location != null && location.startsWith("mvn:")) {
+                String[] parts = StringUtils.substringAfter(location, "mvn:").split("/");
+                if (parts.length >= 2) {
+                    groupId = parts[0];
+                }
+            }
+            if (groupId == null) {
+                Dictionary<String, String> headers = bundle.getHeaders();
+                if (headers.get("Jahia-GroupId") != null) {
+                    groupId = headers.get("Jahia-GroupId");
+                }
+            }
+            if (groupId == null) {
+                skipped.add(symbolicName + " (groupId unknown)");
+                continue;
+            }
+
+            sb.append("  - url: 'mvn:").append(groupId).append("/")
+              .append(symbolicName).append("/").append(version).append("'\n");
+            included.add(symbolicName);
+        }
+
+        sb.append("  autoStart: true\n");
+        sb.append("  uninstallPreviousVersion: true\n");
+        sb.append("  ignoreChecks: true\n");
+
+        if (!included.isEmpty()) {
+            sb.append("- karafCommand: \"log:log 'Provisioning script applied: ")
+              .append(String.join(", ", included)).append("'\"\n");
+        }
+
+        if (!skipped.isEmpty()) {
+            sb.append("# Excluded modules: ").append(String.join(", ", skipped)).append("\n");
+        }
+
+        return sb.toString();
+    }
+
+    /**
      * Recursively walk {@code folder} and populate {@code result} with:
      * {@code moduleFolderPath → list of version-folder nodes}.
      * <p>
@@ -1350,8 +1428,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * Its parent is treated as the symbolic-name folder.
      */
     private void collectVersionFolders(javax.jcr.Node folder,
-                                       Map<String, List<javax.jcr.Node>> result) throws RepositoryException {
-        javax.jcr.NodeIterator children = folder.getNodes();
+                                       Map<String, List<javax.jcr.Node>> result) throws RepositoryException {        javax.jcr.NodeIterator children = folder.getNodes();
         while (children.hasNext()) {
             javax.jcr.Node child = children.nextNode();
             if (!child.isNodeType("jnt:moduleManagementBundleFolder")) {

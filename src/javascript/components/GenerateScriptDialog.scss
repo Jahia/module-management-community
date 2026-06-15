@@ -1,0 +1,149 @@
+.subtitle {
+    margin-top: 4px;
+    color: var(--color-gray60);
+    display: block;
+}
+
+.content {
+    padding: 12px 24px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Type filter row */
+.typeRow {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: var(--color-gray_light40, #f8f9fa);
+    border-radius: 6px;
+}
+
+.typeLabel {
+    color: var(--color-gray60);
+    white-space: nowrap;
+}
+
+.typeChip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+/* Search + actions row */
+.searchRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.searchInput {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+
+    &:focus {
+        outline: none;
+        border-color: var(--color-accent);
+    }
+}
+
+/* Module list */
+.moduleList {
+    border: 1px solid var(--color-gray_light);
+    border-radius: 6px;
+    overflow-y: auto;
+    max-height: 340px;
+}
+
+.moduleRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--color-gray_light);
+    transition: background 0.1s;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:hover {
+        background: var(--color-gray_light_hover, rgba(0, 0, 0, 0.04));
+    }
+}
+
+.moduleRowChecked {
+    background: var(--color-accent_10, rgba(0, 112, 186, 0.04));
+}
+
+.checkbox {
+    cursor: pointer;
+    accent-color: var(--color-accent);
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+.moduleName {
+    flex: 1;
+    font-family: monospace;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+/* Type badge */
+.typeBadge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.type_module    { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.type_system    { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+.type_templatesSet { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.type_bundle    { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+
+.empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--color-gray60);
+}
+
+/* Summary line */
+.summary {
+    color: var(--color-gray60);
+    font-size: 12px;
+}
+
+/* Footer */
+.actions {
+    padding: 12px 24px !important;
+    justify-content: flex-end !important;
+    gap: 8px;
+}
+

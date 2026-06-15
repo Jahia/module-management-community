@@ -96,4 +96,13 @@ public interface ModuleManagementCommunityService {
      * @throws RepositoryException if JCR access fails
      */
     String cleanupJcrVersions() throws RepositoryException;
+
+    /**
+     * Generate a provisioning YAML script to replay the given modules on another server.
+     * Only bundles whose version does NOT contain "SNAPSHOT" are included.
+     *
+     * @param symbolicNames list of bundle symbolic names to include
+     * @return YAML provisioning script string
+     */
+    String generateProvisioningScript(List<String> symbolicNames);
 }

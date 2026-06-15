@@ -93,10 +93,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 36px;
-    height: 36px;
-    padding: 0 8px;
-    font-size: 22px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    font-size: 20px;
     font-weight: bold;
     line-height: 1;
     color: var(--color-accent);
@@ -104,6 +104,7 @@
     border: 1px solid var(--color-accent);
     border-radius: 4px;
     cursor: pointer;
+    flex-shrink: 0;
     transition: background-color 0.15s ease;
 
     &:hover { background-color: rgba(0, 0, 0, 0.06); }
@@ -192,4 +193,20 @@
 .noClusterData {
     font-style: italic;
     color: var(--color-gray60);
+}
+
+/* Menu section header (disabled label used as divider in the ⋮ menu) */
+.menuSectionHeader {
+    opacity: 1 !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-gray60) !important;
+    pointer-events: none;
+}
+
+.marginBorder {
+    margin-left: var(--spacing-small);
+    margin-right: var(--spacing-small);
 }

@@ -12,6 +12,7 @@ import {
     MenuItem,
     Reload,
     Separator,
+    Server,
     Switch,
     Table,
     TableBody,
@@ -28,12 +29,12 @@ import dayjs from 'dayjs';
 import {getComparator, resolveAllDependentModules} from '../utils/moduleUtils';
 import {useModulePreferences} from '../hooks/useModulePreferences';
 import ModuleRow from './ModuleRow';
-import {ClusterActionsPanel} from './ClusterActionsPanel';
 import {ModuleTablePagination} from './ModuleTablePagination';
 import {UploadModuleDialog} from './UploadModuleDialog';
 import {ExportModulesDialog} from './ExportModulesDialog';
 import {DryRunResultDialog} from './DryRunResultDialog';
 import {UpdateOptionsPopover} from './UpdateOptionsPopover';
+import {GenerateScriptDialog} from './GenerateScriptDialog';
 
 // ── GraphQL documents ────────────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ const ModuleManagementCommunityApp = () => {
     const [itemsPerPage, setItemsPerPage] = useState(20);
     const [isUploadOpen, setIsUploadOpen] = useState(false);
     const [isExportOpen, setIsExportOpen] = useState(false);
+    const [isGenerateScriptOpen, setIsGenerateScriptOpen] = useState(false);
     const [menuAnchor, setMenuAnchor] = useState(null);
     const [dryRunResult, setDryRunResult] = useState(null);
 
@@ -324,7 +326,6 @@ const ModuleManagementCommunityApp = () => {
                 }
                 action={
                     <div className={styles.actionGroup}>
-                        {isClustered && <ClusterActionsPanel onOperation={handleClusterOperation}/>}
 
                         <UpdateOptionsPopover preferences={preferences} onPreferencesChange={setPreferences}/>
 
@@ -345,7 +346,8 @@ const ModuleManagementCommunityApp = () => {
 
                         <Tooltip
                             title={preferences.dryRun ? t('label.updateAllDryRunTooltip') : t('label.updateAllLiveTooltip')}
-                            placement="bottom">
+                            placement="bottom"
+                        >
                             <span>
                                 <Button variant="outlined"
                                         size="big"
@@ -383,9 +385,44 @@ const ModuleManagementCommunityApp = () => {
                                           setMenuAnchor(null);
                                           setIsExportOpen(true);
                                       }}/>
+                            <MenuItem label={t('label.generateScript.menuItem')}
+                                      iconStart={<Download/>}
+                                      onClick={() => {
+                                          setMenuAnchor(null);
+                                          setIsGenerateScriptOpen(true);
+                                      }}/>
+                            <Divider/>
                             <MenuItem label={t('label.cleanup.jcr')}
                                       iconStart={<DeletePermanently/>}
                                       onClick={handleCleanupJcr}/>
+                            {isClustered && <Divider/>}
+                            {isClustered && (
+                                <MenuItem isDisabled
+                                          label={t('label.cluster.ops.title')}
+                                          iconStart={<Server/>}
+                                          className={styles.menuSectionHeader}/>
+                            )}
+                            {isClustered && (
+                                <MenuItem label={t('label.table.actions.sync')}
+                                          iconStart={<Reload/>}
+                                          onClick={() => {
+ setMenuAnchor(null); handleClusterOperation('synchronize');
+}}/>
+                            )}
+                            {isClustered && (
+                                <MenuItem label={t('label.table.actions.push')}
+                                          iconStart={<Upload/>}
+                                          onClick={() => {
+ setMenuAnchor(null); handleClusterOperation('push');
+}}/>
+                            )}
+                            {isClustered && (
+                                <MenuItem label={t('label.table.actions.pull')}
+                                          iconStart={<Download/>}
+                                          onClick={() => {
+ setMenuAnchor(null); handleClusterOperation('pull');
+}}/>
+                            )}
                             <Divider/>
                             <MenuItem isDisabled label={t('label.lastUpdate', {date: lastUpdate})}/>
                         </Menu>
@@ -394,7 +431,7 @@ const ModuleManagementCommunityApp = () => {
                 classes={{action: styles.action, title: styles.titleWrapper}}
             />
 
-            <CardContent>
+            <CardContent className={styles.marginBorder}>
                 <Separator variant="horizontal" spacing="none"/>
                 <Table>
                     <TableHead>
@@ -420,7 +457,9 @@ const ModuleManagementCommunityApp = () => {
                                 <div className={styles.columnHeaderCell}>
                                     <div className={styles.columnHeaderRow}>
                                         <Typography variant="body"
-                                                    weight="semiBold">{t('label.table.cells.type')}</Typography>
+                                                    weight="semiBold"
+                                        >{t('label.table.cells.type')}
+                                        </Typography>
                                     </div>
                                     <select value={typeFilter}
                                             className={styles.columnFilterInput}
@@ -487,7 +526,9 @@ const ModuleManagementCommunityApp = () => {
 
                             <TableHeadCell>
                                 <Typography variant="body"
-                                            weight="semiBold">{t('label.table.actions.title')}</Typography>
+                                            weight="semiBold"
+                                >{t('label.table.actions.title')}
+                                </Typography>
                             </TableHeadCell>
                         </TableRow>
                     </TableHead>
@@ -523,6 +564,12 @@ const ModuleManagementCommunityApp = () => {
                                     refreshAllModules();
                                 }}/>
             <ExportModulesDialog isOpen={isExportOpen} onClose={() => setIsExportOpen(false)}/>
+            <GenerateScriptDialog
+                isOpen={isGenerateScriptOpen}
+                modules={modules}
+                bundleTypes={bundleTypes}
+                onClose={() => setIsGenerateScriptOpen(false)}
+            />
             <DryRunResultDialog isOpen={Boolean(dryRunResult)}
                                 modules={dryRunResult?.modules}
                                 yamlScript={dryRunResult?.yamlScript}
