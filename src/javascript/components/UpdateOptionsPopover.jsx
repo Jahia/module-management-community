@@ -62,9 +62,9 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange}) => {
             <Popover
                 open={Boolean(anchorEl)}
                 anchorEl={anchorEl}
-                onClose={handleClose}
                 anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
                 transformOrigin={{vertical: 'top', horizontal: 'right'}}
+                onClose={handleClose}
             >
                 <div className={styles.popover}>
                     <Typography variant="subheading" weight="bold" className={styles.popoverTitle}>
@@ -101,7 +101,8 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange}) => {
                     {/* Options with descriptions */}
                     {OPTION_META.map(({key, labelKey, descKey, danger}) => (
                         <div key={key}
-                             className={`${styles.switchRow} ${danger && !preferences[key] ? styles.dangerRow : ''}`}>
+                             className={`${styles.switchRow} ${danger && !preferences[key] ? styles.dangerRow : ''}`}
+                        >
                             <div className={styles.switchLabelRow}>
                                 <Switch
                                     checked={preferences[key]}

@@ -3,6 +3,7 @@ import {Button, Loader, Typography} from '@jahia/moonstone';
 import {Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Radio, RadioGroup} from '@material-ui/core';
 import {useTranslation} from 'react-i18next';
 import styles from './UploadModuleDialog.scss';
+import PropTypes from 'prop-types';
 
 const UPLOAD_URL = `${window.contextJsParameters?.contextPath || ''}/modules/module-management-community/upload`;
 const IMPORT_URL = `${window.contextJsParameters?.contextPath || ''}/modules/module-management-community/import`;
@@ -55,13 +56,11 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
             if (!name.endsWith('.zip')) {
                 return t('label.import.validation.notZip');
             }
-        } else {
-            if (!name.endsWith('.jar')) {
-                return t('label.upload.validation.notJar');
-            }
+        } else if (!name.endsWith('.jar')) {
+            return t('label.upload.validation.notJar');
         }
 
-        return null; // valid
+        return null; // Valid
     };
 
     const selectFile = file => {
@@ -168,11 +167,11 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
 
     return (
         <Dialog
+            fullWidth
             open={isOpen}
             maxWidth="sm"
-            fullWidth
-            onClose={isUploading ? undefined : handleClose}
             data-testid="upload-module-dialog"
+            onClose={isUploading ? undefined : handleClose}
         >
             <DialogTitle disableTypography>
                 <Typography variant="heading" weight="semiBold">
@@ -184,8 +183,8 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                 {/* Mode selector */}
                 <RadioGroup
                     value={mode}
-                    onChange={e => handleModeChange(e.target.value)}
                     className={styles.modeGroup}
+                    onChange={e => handleModeChange(e.target.value)}
                 >
                     <FormControlLabel
                         className={styles.typeControl}
@@ -291,6 +290,12 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
             </DialogActions>
         </Dialog>
     );
+};
+
+UploadModuleDialog.propTypes = {
+    isOpen: PropTypes.bool,
+    onClose: PropTypes.func,
+    onDeploySuccess: PropTypes.func
 };
 
 export default UploadModuleDialog;

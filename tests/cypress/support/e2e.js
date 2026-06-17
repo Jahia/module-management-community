@@ -56,10 +56,13 @@ jsErrorsLogger.setAllowedJsWarnings([
     'Warning: componentWillMount',
     'Warning: componentWillReceiveProps',
     'Warning: componentWillUpdate',
-    // MUI v3 uses legacy React context API — known false positive
+    // MUI v3 uses legacy React context (contextTypes / childContextTypes) — known false positives
     'legacy contextTypes API',
+    'childContextTypes API',
     // graphql-tag duplicate fragment name warnings from other Jahia modules loaded on the page
-    'fragment with name'
+    'fragment with name',
+    // Moonstone Typography (<p>) nested inside another <p> — cosmetic warning from Jahia platform
+    'validateDOMNesting'
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires

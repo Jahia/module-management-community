@@ -35,6 +35,7 @@ import {ExportModulesDialog} from './ExportModulesDialog';
 import {DryRunResultDialog} from './DryRunResultDialog';
 import {UpdateOptionsPopover} from './UpdateOptionsPopover';
 import {GenerateScriptDialog} from './GenerateScriptDialog';
+import PropTypes from 'prop-types';
 
 // ── GraphQL documents ────────────────────────────────────────────────────────
 
@@ -76,6 +77,14 @@ const SortableHeader = ({property, label, order, orderBy, onSort}) => (
         <Typography variant="body" weight="semiBold">{label}</Typography>
     </TableSortLabel>
 );
+
+SortableHeader.propTypes = {
+    property: PropTypes.string,
+    label: PropTypes.string,
+    order: PropTypes.string,
+    orderBy: PropTypes.string,
+    onSort: PropTypes.func
+};
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -356,6 +365,7 @@ const ModuleManagementCommunityApp = () => {
                                         icon={<Upload/>}
                                         isDisabled={updates.length === 0}
                                         className={styles.button}
+                                        data-testid="update-all-btn"
                                         onClick={() => handleUpdateAll([])}/>
                             </span>
                         </Tooltip>
@@ -363,6 +373,7 @@ const ModuleManagementCommunityApp = () => {
                         <button className={styles.dotMenuBtn}
                                 title={t('label.menu.title')}
                                 type="button"
+                                data-testid="more-actions-btn"
                                 onClick={e => setMenuAnchor(e.currentTarget)}
                         >⋮
                         </button>
@@ -406,22 +417,25 @@ const ModuleManagementCommunityApp = () => {
                                 <MenuItem label={t('label.table.actions.sync')}
                                           iconStart={<Reload/>}
                                           onClick={() => {
- setMenuAnchor(null); handleClusterOperation('synchronize');
-}}/>
+                                              setMenuAnchor(null);
+                                              handleClusterOperation('synchronize');
+                                          }}/>
                             )}
                             {isClustered && (
                                 <MenuItem label={t('label.table.actions.push')}
                                           iconStart={<Upload/>}
                                           onClick={() => {
- setMenuAnchor(null); handleClusterOperation('push');
-}}/>
+                                              setMenuAnchor(null);
+                                              handleClusterOperation('push');
+                                          }}/>
                             )}
                             {isClustered && (
                                 <MenuItem label={t('label.table.actions.pull')}
                                           iconStart={<Download/>}
                                           onClick={() => {
- setMenuAnchor(null); handleClusterOperation('pull');
-}}/>
+                                              setMenuAnchor(null);
+                                              handleClusterOperation('pull');
+                                          }}/>
                             )}
                             <Divider/>
                             <MenuItem isDisabled label={t('label.lastUpdate', {date: lastUpdate})}/>

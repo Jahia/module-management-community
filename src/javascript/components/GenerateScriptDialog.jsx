@@ -129,12 +129,12 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
     return (
         <>
             <Dialog
+                fullWidth
                 open={isOpen}
                 maxWidth="md"
-                fullWidth
+                data-testid="generate-script-dialog"
                 onClose={onClose}
                 onEnter={handleOpen}
-                data-testid="generate-script-dialog"
             >
                 <DialogTitle disableTypography>
                     <Typography variant="title">{t('label.generateScript.title')}</Typography>
@@ -169,8 +169,14 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                         />
-                        <Button variant="ghost" size="small" label={t('label.generateScript.selectAll')} onClick={selectAll}/>
-                        <Button variant="ghost" size="small" label={t('label.generateScript.clearAll')} onClick={clearAll}/>
+                        <Button variant="ghost"
+                                size="small"
+                                label={t('label.generateScript.selectAll')}
+                                onClick={selectAll}/>
+                        <Button variant="ghost"
+                                size="small"
+                                label={t('label.generateScript.clearAll')}
+                                onClick={clearAll}/>
                     </div>
 
                     {/* Module list */}
@@ -184,7 +190,9 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
                                 const type = bundleTypes?.[m.name] || 'bundle';
                                 const isChecked = selected.has(m.name);
                                 return (
-                                    <label key={m.name} className={`${styles.moduleRow} ${isChecked ? styles.moduleRowChecked : ''}`}>
+                                    <label key={m.name}
+                                           className={`${styles.moduleRow} ${isChecked ? styles.moduleRowChecked : ''}`}
+                                    >
                                         <input
                                             type="checkbox"
                                             className={styles.checkbox}
@@ -231,9 +239,12 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
             <DryRunResultDialog
                 isOpen={Boolean(scriptResult)}
                 title={t('label.generateScript.result.title')}
-                onClose={() => { setScriptResult(null); onClose(); }}
                 modules={scriptResult?.modules}
                 yamlScript={scriptResult?.yamlScript}
+                onClose={() => {
+                    setScriptResult(null);
+                    onClose();
+                }}
             />
         </>
     );

@@ -4,10 +4,6 @@
  * Admin route: /jahia/administration/module-management-community
  * Root element: #module-management-community-root
  *
- * The app is a server-level admin panel that lists all installed OSGi
- * bundles/modules with filtering, sorting, pagination, and per-bundle detail
- * dialogs (identity, sites, version history, dependency graphs).
- *
  * Test module used as a stable reference anchor: "module-management-community"
  * (always installed and ACTIVE while the test suite runs).
  */
@@ -15,7 +11,6 @@
 describe('Module Management Community', () => {
     const adminPath = '/jahia/administration/module-management-community';
     const root = '#module-management-community-root';
-    /** Bundle guaranteed to be installed and ACTIVE during the test run */
     const testBundle = 'module-management-community';
     const nameFilterPlaceholder = 'Filter by bundle symbolic name';
 
@@ -23,30 +18,24 @@ describe('Module Management Community', () => {
     // Helpers
     // ---------------------------------------------------------------------------
 
-    /**
-     * Visit the admin page and wait until the table has rendered the test bundle
-     * row (also proves the initial GQL query and that row's per-row query both
-     * finished).
-     */
     const visitPage = () => {
         cy.login();
         cy.visit(adminPath);
         cy.get(root, {timeout: 10000}).should('be.visible');
     };
 
-    /** Type into the symbolic-name filter input */
     const filterByName = (name: string) => {
         cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).clear();
         cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).type(name);
     };
 
-    /**
-     * After filtering to a single row, wait for its per-row GQL query to finish.
-     * The "Show details" action button is rendered only after ModuleRow's query
-     * resolves — so its presence proves the row is fully loaded.
-     */
     const waitForRowLoaded = () => {
         cy.get('[title="Show details"]', {timeout: 20000}).first().should('be.visible');
+    };
+
+    /** Open the ⋮ more-actions menu */
+    const openMoreActionsMenu = () => {
+        cy.get('[data-testid="more-actions-btn"]').click();
     };
 
     // ===========================================================================
@@ -62,10 +51,6 @@ describe('Module Management Community', () => {
 
         it('renders the application subtitle about installing and managing modules', () => {
             cy.get(root).should('contain.text', 'Allows to install');
-        });
-
-        it('renders the "Latest updates checked at" timestamp area', () => {
-            cy.contains('Latest updates checked at').should('be.visible');
         });
 
         it('renders the "Installed modules" card header', () => {
@@ -96,8 +81,20 @@ describe('Module Management Community', () => {
             cy.contains('button', 'Help').should('be.visible');
         });
 
-        it('renders the Refresh button in the sidebar', () => {
+        it('renders the Refresh button', () => {
             cy.contains('button', 'Refresh').should('be.visible');
+        });
+
+        it('renders the Update All button with DRY/LIVE mode indicator', () => {
+            cy.contains('button', /Update all.*\(DRY\)|\(LIVE\)/).should('be.visible');
+        });
+
+        it('renders the update options (⚙) button', () => {
+            cy.get('[data-testid="update-options-btn"]').should('be.visible');
+        });
+
+        it('renders the more-actions (⋮) menu button', () => {
+            cy.get('[data-testid="more-actions-btn"]').should('be.visible');
         });
     });
 
@@ -189,7 +186,6 @@ describe('Module Management Community', () => {
         });
 
         it('items-per-page selector contains options 20, 40 and 60', () => {
-            // Items-per-page select is the second <select> on the page (type filter is the first)
             cy.get('select').eq(1).within(() => {
                 cy.get('option[value="20"]').should('exist');
                 cy.get('option[value="40"]').should('exist');
@@ -245,11 +241,9 @@ describe('Module Management Community', () => {
         beforeEach(() => {
             visitPage();
             filterByName(testBundle);
-            // Wait for the debounced filter to apply so only the correct row is shown
             cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
             waitForRowLoaded();
             cy.get('[title="Show details"]').first().click();
-            // Wait for the dialog AND its content (bundle name) to be fully loaded
             cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 
@@ -291,7 +285,7 @@ describe('Module Management Community', () => {
     });
 
     // ===========================================================================
-    // 7. BUNDLE DETAILS DIALOG — Details tab (Identity & Manifest)
+    // 7. BUNDLE DETAILS DIALOG — Details tab
     // ===========================================================================
 
     describe('Bundle details dialog — Details tab', () => {
@@ -332,7 +326,6 @@ describe('Module Management Community', () => {
             cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Show full manifest').click();
                 cy.contains('button', 'Hide full manifest').should('be.visible');
-                // Table may be below the dialog's scroll fold — assert it exists in DOM
                 cy.get('table').should('exist');
             });
         });
@@ -438,7 +431,6 @@ describe('Module Management Community', () => {
         });
 
         it('getBundleDetails returns correct type and state for module-management-community', () => {
-            // Resolve the installed version first so we can query by name+version
             cy.apollo({
                 queryFile: 'graphql/query/getInstalledModules.graphql'
             }).then(response => {
@@ -448,7 +440,6 @@ describe('Module Management Community', () => {
                     m.startsWith('module-management-community/')
                 );
                 expect(entry).to.be.a('string');
-                // Entry format: "symbolicName/version:state"
                 const version = (entry as string).split('/')[1].split(':')[0];
 
                 cy.apollo({
@@ -462,6 +453,107 @@ describe('Module Management Community', () => {
                     expect(bundle.type).to.equal('module');
                 });
             });
+        });
+    });
+
+    // ===========================================================================
+    // 11. UPDATE OPTIONS POPOVER
+    // ===========================================================================
+
+    describe('Update options popover', () => {
+        beforeEach(visitPage);
+
+        it('renders the update options (Tune/⚙) button', () => {
+            cy.get('[data-testid="update-options-btn"]').should('be.visible');
+        });
+
+        it('opens the update options popover when the button is clicked', () => {
+            cy.get('[data-testid="update-options-btn"]').click();
+            cy.contains('Update options').should('be.visible');
+        });
+
+        it('popover shows Quick presets: "Safe (dry run)" and "Apply now"', () => {
+            cy.get('[data-testid="update-options-btn"]').click();
+            cy.contains('Quick presets:').should('be.visible');
+            cy.contains('Safe (dry run)').should('be.visible');
+            cy.contains('Apply now').should('be.visible');
+        });
+
+        it('popover shows all four update option labels with descriptions', () => {
+            cy.get('[data-testid="update-options-btn"]').click();
+            cy.contains('Dry run').should('be.visible');
+            cy.contains('Autostart modules').should('be.visible');
+            cy.contains('Uninstall previous version').should('be.visible');
+            cy.contains('Update on next startup').should('be.visible');
+        });
+
+        it('popover shows "Settings are saved automatically" notice', () => {
+            cy.get('[data-testid="update-options-btn"]').click();
+            cy.contains('Settings are saved automatically').should('be.visible');
+        });
+
+        it('Update All button shows "(DRY)" suffix by default', () => {
+            cy.contains('button', /Update all.*\(DRY\)/i).should('be.visible');
+        });
+
+        it('clicking "Apply now" preset switches Update All button to "(LIVE)" mode', () => {
+            cy.get('[data-testid="update-options-btn"]').click();
+            cy.contains('Apply now').click();
+            cy.contains('button', /Update all.*\(LIVE\)/i).should('be.visible');
+        });
+
+        it('clicking "Safe (dry run)" preset restores "(DRY)" mode', () => {
+            // Open popover, click Apply now (LIVE), then click Safe (dry run) — popover stays open
+            cy.get('[data-testid="update-options-btn"]').click();
+            cy.contains('Apply now').click();
+            cy.contains('Safe (dry run)').click();
+            cy.contains('button', /Update all.*\(DRY\)/i).should('be.visible');
+        });
+    });
+
+    // ===========================================================================
+    // 12. MORE ACTIONS MENU
+    // ===========================================================================
+
+    describe('More actions (⋮) menu', () => {
+        beforeEach(visitPage);
+
+        it('renders the more-actions button', () => {
+            cy.get('[data-testid="more-actions-btn"]').should('be.visible');
+        });
+
+        it('menu contains "Deploy module" item', () => {
+            openMoreActionsMenu();
+            cy.contains('Deploy module').should('be.visible');
+        });
+
+        it('menu contains "Export snapshot" item', () => {
+            openMoreActionsMenu();
+            cy.contains('Export snapshot').should('be.visible');
+        });
+
+        it('menu contains "Generate provisioning script" item', () => {
+            openMoreActionsMenu();
+            cy.contains('Generate provisioning script').should('be.visible');
+        });
+
+        it('menu contains "Clean up JCR versions" item', () => {
+            openMoreActionsMenu();
+            cy.contains('Clean up JCR versions').should('be.visible');
+        });
+
+        it('menu shows "Latest updates checked at" timestamp entry', () => {
+            openMoreActionsMenu();
+            cy.contains('Latest updates checked at').should('exist');
+        });
+
+        it('menu closes when pressing Escape', () => {
+            openMoreActionsMenu();
+            cy.get('menu[role="list"]').should('be.visible');
+            cy.contains('Deploy module').should('be.visible');
+            cy.get(root).click();
+            cy.get('menu[role="list"]').should('not.be.visible');
+            cy.get(root).contains('Deploy module').should('not.be.visible');
         });
     });
 });

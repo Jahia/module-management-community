@@ -32,9 +32,15 @@ const compareOsgiVersions = (a, b) => {
     const parts = v => (v || '0').split('.').slice(0, 3).map(n => parseInt(n, 10) || 0);
     const [aMaj, aMin, aPat] = parts(a);
     const [bMaj, bMin, bPat] = parts(b);
-    return aMaj !== bMaj ? aMaj - bMaj :
-        aMin !== bMin ? aMin - bMin :
-            aPat - bPat;
+    if (aMaj !== bMaj) {
+        return aMaj - bMaj;
+    }
+
+    if (aMin !== bMin) {
+        return aMin - bMin;
+    }
+
+    return aPat - bPat;
 };
 
 const BundleDetails = ({bundle: initialBundle, close, refetch}) => {

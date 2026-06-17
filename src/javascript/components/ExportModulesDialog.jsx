@@ -3,6 +3,7 @@ import {Button, Loader, Switch, Typography} from '@jahia/moonstone';
 import {Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, FormGroup} from '@material-ui/core';
 import {useTranslation} from 'react-i18next';
 import styles from './ExportModulesDialog.scss';
+import PropTypes from 'prop-types';
 
 const EXPORT_BASE_URL = `${window.contextJsParameters?.contextPath || ''}/modules/module-management-community/export`;
 
@@ -12,7 +13,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
     const {t} = useTranslation('module-management-community');
 
     const [selectedTypes, setSelectedTypes] = useState(new Set(BUNDLE_TYPES));
-    // embedAll=true (default): embed every JAR in the ZIP for a self-contained archive
+    // EmbedAll=true (default): embed every JAR in the ZIP for a self-contained archive
     const [embedAll, setEmbedAll] = useState(true);
     const [status, setStatus] = useState('idle');
     const [errorMessage, setErrorMessage] = useState('');
@@ -122,7 +123,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
     const isBusy = isExporting || isPreviewing;
 
     return (
-        <Dialog open={isOpen} maxWidth="md" fullWidth onClose={handleClose} data-testid="export-modules-dialog">
+        <Dialog fullWidth open={isOpen} maxWidth="md" data-testid="export-modules-dialog" onClose={handleClose}>
             <DialogTitle disableTypography>
                 <Typography variant="heading" weight="semiBold">
                     {t('label.export.dialog.title')}
@@ -142,9 +143,9 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                             control={
                                 <Checkbox
                                     checked={selectedTypes.has(type)}
-                                    onChange={() => handleTypeToggle(type)}
                                     disabled={isBusy || (selectedTypes.has(type) && selectedTypes.size === 1)}
                                     color="primary"
+                                    onChange={() => handleTypeToggle(type)}
                                 />
                             }
                             label={<Typography variant="body">{t(`label.export.dialog.types.${type}`)}</Typography>}
@@ -155,12 +156,13 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                 {/* Embed toggle */}
                 <div className={styles.embedRow}>
                     <Switch
+                        data-testid="embed-all-toggle"
                         checked={embedAll}
+                        disabled={isBusy}
                         onChange={(e, value, checked) => {
                             setEmbedAll(checked);
                             setPreviewYaml('');
                         }}
-                        disabled={isBusy}
                     />
                     <div className={styles.embedLabel}>
                         <Typography variant="body" weight="semiBold">
@@ -235,6 +237,11 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
             </DialogActions>
         </Dialog>
     );
+};
+
+ExportModulesDialog.propTypes = {
+    isOpen: PropTypes.bool.isRequired,
+    onClose: PropTypes.func.isRequired
 };
 
 export default ExportModulesDialog;

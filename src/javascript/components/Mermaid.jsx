@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import mermaid from 'mermaid';
 import elkLayouts from '@mermaid-js/layout-elk';
 import PropTypes from 'prop-types';
@@ -81,10 +81,7 @@ const Mermaid = ({className, children, onError}) => {
                 }
             })();
         }
-    }, [
-        diagramText,
-        onError
-    ]);
+    }, [containerId, diagramText, onError, renderJS]);
 
     // Render container (div) to hold diagram (nested SVG)
     return (

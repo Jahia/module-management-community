@@ -5,7 +5,6 @@ import ModuleManagementCommunityEntry from '~/components/ModuleManagementCommuni
 export const registerRoutes = () => {
     const COMP_NAME = 'module-management-community';
 
-
     registry.add('adminRoute', `${COMP_NAME}`, {
         targets: ['administration-server-systemComponents:33'],
         label: 'Module Management Community',

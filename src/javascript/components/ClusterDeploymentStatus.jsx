@@ -30,10 +30,10 @@ const ClusterDeploymentStatus = ({clusterDeployment, bundleKey}) => {
                 return (
                     <div key={node.nodeId} className={styles.clusterNode}>
                         <Chip
-                            variant={!isVersionConsistent ? 'outlined' : 'bright'}
+                            variant={isVersionConsistent ? 'bright' : 'outlined'}
                             label={node.nodeId}
                             color={color}
-                            icon={!isVersionConsistent ? <Information/> : null}
+                            icon={isVersionConsistent ? null : <Information/>}
                             title={`${node.bundles.find(b => b.key === bundleKey)?.key} - ${state}`}
                         />
                     </div>

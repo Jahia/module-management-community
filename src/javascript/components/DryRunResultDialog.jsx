@@ -47,8 +47,13 @@ export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript, title}
     }, []);
 
     return (
-        <Dialog open={isOpen} maxWidth="md" fullWidth onClose={onClose}
-                onEnter={handleEnter} data-testid="dryrun-result-dialog">
+        <Dialog fullWidth
+                open={isOpen}
+                maxWidth="md"
+                data-testid="dryrun-result-dialog"
+                onClose={onClose}
+                onEnter={handleEnter}
+        >
             <DialogTitle disableTypography>
                 <Typography variant="title">{title || t('label.dryRun.dialog.title')}</Typography>
                 <Typography variant="body" className={styles.subtitle}>
@@ -120,8 +125,11 @@ export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript, title}
             </DialogContent>
 
             <DialogActions className={styles.actions}>
-                <Button variant="outlined" size="big" color="accent"
-                        label={t('label.close')} onClick={onClose}/>
+                <Button variant="outlined"
+                        size="big"
+                        color="accent"
+                        label={t('label.close')}
+                        onClick={onClose}/>
             </DialogActions>
         </Dialog>
     );

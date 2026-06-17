@@ -1,12 +1,11 @@
 import React, {Suspense} from 'react';
 import ModuleManagementCommunityApp from './ModuleManagementCommunityApp';
-import {GlobalStyle, Help, Separator, Typography} from '@jahia/moonstone';
+import {Help, Separator, Typography, Button} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
 import styles from './ModuleManagementCommunityEntry.scss';
 import {capitalize} from '@material-ui/core/utils/helpers';
 import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
-import {Button} from '@jahia/moonstone';
 import {HealthStatus} from './HealthStatus';
 
 const ModuleManagementCommunityEntry = () => {
@@ -32,7 +31,6 @@ const ModuleManagementCommunityEntry = () => {
 
     return (
         <Suspense fallback="loading ...">
-            <GlobalStyle/>
             <div className={styles.root} id="module-management-community-root">
                 <div className={styles.headerRoot}>
                     <header className={styles.header}>

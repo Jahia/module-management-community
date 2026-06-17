@@ -1,0 +1,10 @@
+mutation UninstallBundle($bundleId: Long!) {
+    admin {
+        modulesManagement {
+            bundle(bundleId: $bundleId) {
+                uninstall
+            }
+        }
+    }
+}
+

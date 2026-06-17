@@ -47,6 +47,10 @@ export default defineConfig({
     },
     env: {
         SUPER_USER_PASSWORD: process.env.SUPER_USER_PASSWORD || 'root1234',
-        JAHIA_URL: jahiaUrl
+        JAHIA_URL: jahiaUrl,
+        // Module used for store.jahia.com deployment integration tests
+        STORE_TEST_MODULE: process.env.STORE_TEST_MODULE || 'healthcheck',
+        STORE_VERSION_1: process.env.STORE_VERSION_1 || '3.4.0',
+        STORE_VERSION_2: process.env.STORE_VERSION_2 || '3.3.0'
     }
 });

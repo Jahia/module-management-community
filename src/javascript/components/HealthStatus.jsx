@@ -42,22 +42,34 @@ export const HealthStatus = ({status, probes, version}) => {
     };
 
     const renderStatusBadge = s => {
-        let buttonClass = 'red';
-        let buttonIcon = <Cancel/>;
         if (s === 'GREEN') {
-            buttonClass = 'green';
-            buttonIcon = <Check/>;
-        } else if (s === 'YELLOW') {
-            buttonClass = 'yellow';
-            buttonIcon = <Warning/>;
+            return (
+                <Button variant="outlined"
+                        size="big"
+                        label=""
+                        icon={<Check/>}
+                        className={`${styles.statusButton} ${styles.green}`}
+                        onClick={handleBadgeClick}/>
+            );
+        }
+
+        if (s === 'YELLOW') {
+            return (
+                <Button variant="outlined"
+                        size="big"
+                        label=""
+                        icon={<Warning/>}
+                        className={`${styles.statusButton} ${styles.yellow}`}
+                        onClick={handleBadgeClick}/>
+            );
         }
 
         return (
             <Button variant="outlined"
                     size="big"
                     label=""
-                    icon={buttonIcon}
-                    className={`${styles.statusButton} ${styles[buttonClass]}`}
+                    icon={<Cancel/>}
+                    className={`${styles.statusButton} ${styles.red}`}
                     onClick={handleBadgeClick}/>
         );
     };

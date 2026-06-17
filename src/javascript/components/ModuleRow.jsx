@@ -1,30 +1,22 @@
-import React, {memo, useEffect, useState} from 'react';
-import {useMutation, useQuery} from '@apollo/client';
+import React, {memo, useEffect} from 'react';
+import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
-import {useNotifications} from '@jahia/react-material';
 import {
     Badge,
-    Button,
-    Cancel,
     Chip,
-    Delete,
     Information,
     Link,
     Loader,
-    Power,
-    Reload,
     Rocket,
     TableBodyCell,
     TableRow,
-    Typography,
-    Upload
+    Typography
 } from '@jahia/moonstone';
-import {Dialog} from '@material-ui/core';
 import * as PropTypes from 'prop-types';
 import styles from './ModuleManagementCommunityApp.scss';
-import BundleDetails from './BundleDetails';
 import ClusterDeploymentStatus from './ClusterDeploymentStatus';
+import BundleActions from './BundleActions';
 
 const BUNDLE_QUERY = gql`query ($module: String!, $version: String!) {
     admin {
@@ -56,78 +48,11 @@ const BUNDLE_TYPE_COLOR = {
 
 const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, reportType, isClustered, refreshAllModules}) => {
     const {t} = useTranslation('module-management-community');
-    const notificationContext = useNotifications();
-    const [open, setOpen] = useState(false);
 
     const {data, error, loading, refetch} = useQuery(BUNDLE_QUERY, {
         fetchPolicy: 'cache-and-network',
         variables: {module: module.name, version: module.version}
     });
-
-    const bundleId = data?.admin?.modulesManagement?.bundle?.bundleId;
-
-    const [stopBundle] = useMutation(gql`mutation ($bundleId: Long!) {
-        admin { modulesManagement { bundle(bundleId: $bundleId) { stop } } }
-    }`, {variables: {bundleId}});
-
-    const [startBundle] = useMutation(gql`mutation ($bundleId: Long!) {
-        admin { modulesManagement { bundle(bundleId: $bundleId) { start } } }
-    }`, {variables: {bundleId}});
-
-    const [refreshBundle] = useMutation(gql`mutation ($bundleId: Long!) {
-        admin { modulesManagement { bundle(bundleId: $bundleId) { refresh } } }
-    }`, {variables: {bundleId}});
-
-    const [uninstallBundle] = useMutation(gql`mutation ($bundleId: Long!) {
-        admin { modulesManagement { bundle(bundleId: $bundleId) { uninstall } } }
-    }`, {variables: {bundleId}});
-
-    const handleStopBundle = async () => {
-        try {
-            await stopBundle();
-            notificationContext.notify(t('label.stopBundleSuccess'), ['closeButton', 'closeAfter5s']);
-            await refetch();
-            await refreshAllModules();
-        } catch (e) {
-            console.error('Error stopping bundle:', e);
-            notificationContext.notify(t('label.stopBundleError'), ['closeButton', 'closeAfter5s']);
-        }
-    };
-
-    const handleStartBundle = async () => {
-        try {
-            await startBundle();
-            notificationContext.notify(t('label.startBundleSuccess'), ['closeButton', 'closeAfter5s']);
-            await refetch();
-            await refreshAllModules();
-        } catch (e) {
-            console.error('Error starting bundle:', e);
-            notificationContext.notify(t('label.startBundleError'), ['closeButton', 'closeAfter5s']);
-        }
-    };
-
-    const handleRefreshBundle = async () => {
-        try {
-            await refreshBundle();
-            notificationContext.notify(t('label.startBundleSuccess'), ['closeButton', 'closeAfter5s']);
-            await refetch();
-            await refreshAllModules();
-        } catch (e) {
-            console.error('Error refreshing bundle:', e);
-            notificationContext.notify(t('label.startBundleError'), ['closeButton', 'closeAfter5s']);
-        }
-    };
-
-    const handleUninstallBundle = async () => {
-        try {
-            await uninstallBundle();
-            notificationContext.notify(t('label.uninstallBundleSuccess'), ['closeButton', 'closeAfter5s']);
-            await refreshAllModules();
-        } catch (e) {
-            console.error('Error uninstalling bundle:', e);
-            notificationContext.notify(t('label.uninstallBundleError'), ['closeButton', 'closeAfter5s']);
-        }
-    };
 
     useEffect(() => {
         const bundle = data?.admin?.modulesManagement?.bundle;
@@ -235,65 +160,11 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
                 </TableBodyCell>
             )}
             <TableBodyCell>
-                <div className={styles.actionGroup} style={{width: 'fit-content'}}>
-                    <Button variant="ghost"
-                            size="default"
-                            color="default"
-                            label=""
-                            icon={<Information/>}
-                            title={t('label.showDetails')}
-                            onClick={() => setOpen(true)}/>
-                    {bundle.type !== 'bundle' && (bundle.state === 'INSTALLED' || bundle.state === 'RESOLVED') && (
-                        <>
-                            <Button variant="ghost"
-                                    size="default"
-                                    color="accent"
-                                    label=""
-                                    icon={<Power/>}
-                                    title={t('label.startBundle')}
-                                    onClick={handleStartBundle}/>
-                            <Button variant="ghost"
-                                    size="default"
-                                    color="danger"
-                                    label=""
-                                    icon={<Delete/>}
-                                    title={t('label.uninstallBundle')}
-                                    onClick={handleUninstallBundle}/>
-                        </>
-                    )}
-                    {bundle.state === 'ACTIVE' && (
-                        <>
-                            {bundle.type !== 'bundle' && (
-                                <Button variant="ghost"
-                                        size="default"
-                                        color="default"
-                                        label=""
-                                        icon={<Cancel/>}
-                                        title={t('label.stopBundle')}
-                                        onClick={handleStopBundle}/>
-                            )}
-                            <Button variant="ghost"
-                                    size="default"
-                                    color="default"
-                                    label=""
-                                    icon={<Reload/>}
-                                    title={t('label.refreshBundle')}
-                                    onClick={handleRefreshBundle}/>
-                            {bundle.type !== 'bundle' && updateAvailable && (
-                                <Button variant="ghost"
-                                        size="default"
-                                        color="accent"
-                                        label=""
-                                        icon={<Upload/>}
-                                        title={t('label.updateBundle')}
-                                        onClick={() => handleUpdate(bundle.symbolicName)}/>
-                            )}
-                        </>
-                    )}
-                </div>
-                <Dialog fullWidth open={open} maxWidth="lg" data-testid="bundle-details-dialog" onClose={() => setOpen(false)}>
-                    <BundleDetails bundle={bundle} close={setOpen} refetch={refetch}/>
-                </Dialog>
+                <BundleActions bundle={bundle}
+                               refetch={refetch}
+                               refreshAllModules={refreshAllModules}
+                               hasUpdateAvailable={updateAvailable}
+                               onUpdate={handleUpdate}/>
             </TableBodyCell>
         </TableRow>
     );
