@@ -19,7 +19,7 @@ const BUNDLE_TYPE_COLOR = {
 const TABS = [
     {id: 'details', labelKey: 'label.bundle.tab.details'},
     {id: 'sites', labelKey: 'label.bundle.tab.sites', condition: b => b.type === 'module' && b.sitesDeployment?.length > 0},
-    {id: 'versions', labelKey: 'label.bundle.tab.versions', condition: b => b.previousVersions?.length > 0},
+    {id: 'versions', labelKey: 'label.bundle.tab.versions', condition: b => b.storeVersions?.length > 0 || b.previousVersions?.length > 0},
     {id: 'bundleDeps', labelKey: 'label.bundle.tab.bundleDeps', condition: b => b.dependenciesGraph?.length > 0},
     {id: 'moduleDeps', labelKey: 'label.bundle.tab.moduleDeps', condition: b => b.moduleDependencies?.length > 0}
 ];
@@ -49,7 +49,9 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
     const [activeTab, setActiveTab] = useState('details');
     const [importResult, setImportResult] = useState(null);
     const [installVersionResult, setInstallVersionResult] = useState(null);
-    const [confirmJcrPath, setConfirmJcrPath] = useState(null);
+    // Tracks pending install for the downgrade confirmation dialog.
+    // Shape: null | { source: 'store', version } | { source: 'jcr', version, jcrPath }
+    const [confirmInstall, setConfirmInstall] = useState(null);
 
     useEffect(() => {
         setBundle(initialBundle);
@@ -69,6 +71,10 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
 
     const [installBundleFromJcrMutation] = useMutation(gql`mutation ($jcrPath: String!) {
         admin { modulesManagement { installBundleFromJcr(jcrPath: $jcrPath) } }
+    }`);
+
+    const [installBundleFromStoreMutation] = useMutation(gql`mutation ($symbolicName: String!, $version: String!) {
+        admin { modulesManagement { installBundleFromStore(symbolicName: $symbolicName, version: $version) } }
     }`);
 
     const handleSiteDeployment = async (event, value, checked) => {
@@ -98,11 +104,25 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
         setTimeout(() => setImportResult(null), 5000);
     };
 
-    const handleInstallVersion = async jcrPath => {
+    /**
+     * Execute the install — dispatches to the correct mutation by source:
+     *   source='store'  → provisioning YAML (upgrade-safe, no JAR download)
+     *   source='jcr'    → JCR binary install (supports downgrade, version already in JCR)
+     */
+    const executeInstall = async target => {
         setInstallVersionResult(null);
         try {
-            const result = await installBundleFromJcrMutation({variables: {jcrPath}});
-            const msg = result?.data?.admin?.modulesManagement?.installBundleFromJcr;
+            let msg;
+            if (target.source === 'store') {
+                const result = await installBundleFromStoreMutation({
+                    variables: {symbolicName: bundle.symbolicName, version: target.version}
+                });
+                msg = result?.data?.admin?.modulesManagement?.installBundleFromStore;
+            } else {
+                const result = await installBundleFromJcrMutation({variables: {jcrPath: target.jcrPath}});
+                msg = result?.data?.admin?.modulesManagement?.installBundleFromJcr;
+            }
+
             setInstallVersionResult({success: true, message: msg || t('label.bundle.versions.installSuccess')});
             await refetch();
         } catch (error) {
@@ -111,6 +131,22 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
         }
 
         setTimeout(() => setInstallVersionResult(null), 6000);
+    };
+
+    /**
+     * Initiate an install:
+     *  - Store upgrades: execute immediately (provisioning YAML is upgrade-only, safe)
+     *  - JCR downgrades: show confirmation dialog first
+     *  - Everything else: execute immediately
+     */
+    const handleInstallClick = target => {
+        const isDowngrade = compareOsgiVersions(target.version, bundle.version) < 0;
+        const isJcr = target.source !== 'store';
+        if (isDowngrade && isJcr) {
+            setConfirmInstall(target); // Downgrade via JCR requires explicit confirmation
+        } else {
+            executeInstall(target);
+        }
     };
 
     const handleBulkSites = async (enable, excludeSystem) => {
@@ -253,66 +289,156 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                     </div>
                 )}
 
-                {activeTab === 'versions' && (
-                    <div className={styles.versionsTab}>
-                        {installVersionResult && (
-                            <div
-                                style={{
-                                    padding: '8px 16px',
-                                    marginBottom: '12px',
-                                    borderRadius: '4px',
-                                    backgroundColor: installVersionResult.success ? 'var(--color-success_light)' : 'var(--color-danger_light)',
-                                    color: installVersionResult.success ? 'var(--color-success_dark)' : 'var(--color-danger_dark)',
-                                    fontSize: '13px'
-                                }}
-                            >
-                                {installVersionResult.message}
-                            </div>
-                        )}
-                        <Typography variant="body" className={styles.versionHistoryHint}>
-                            {t('label.bundle.versions.hint')}
-                        </Typography>
-                        <ul className={styles.versionList}>
-                            {bundle.previousVersions.map(v => {
-                                const sizeKb = v.size ? (v.size / (1024 * 1024)).toFixed(2) + ' MB' : '—';
-                                const date = v.lastModified ? new Date(v.lastModified).toLocaleString() : '—';
-                                const isUpgrade = compareOsgiVersions(v.version, bundle.version) > 0;
-                                return (
-                                    <li key={v.jcrPath} className={styles.versionItem}>
-                                        <div className={styles.versionItemInfo}>
-                                            <div className={styles.versionItemHeader}>
-                                                <Badge label={v.version} color="accent"/>
-                                                <Badge
-                                                    label={isUpgrade ? t('label.bundle.versions.upgrade') : t('label.bundle.versions.downgrade')}
-                                                    color={isUpgrade ? 'success' : 'danger'}
-                                                />
-                                            </div>
-                                            <Typography variant="caption" className={styles.versionMeta}>
-                                                {v.fileName} &nbsp;·&nbsp; {sizeKb} &nbsp;·&nbsp; {date}
-                                            </Typography>
-                                        </div>
-                                        <Button
-                                            variant="outlined"
-                                            size="small"
-                                            color="accent"
-                                            icon={<Replay/>}
-                                            label={t('label.bundle.versions.install')}
-                                            onClick={() => {
-                                                if (compareOsgiVersions(v.version, bundle.version) > 0) {
-                                                    // Installing a newer version — no warning needed
-                                                    handleInstallVersion(v.jcrPath);
-                                                } else {
-                                                    // Installing an older version — show downgrade dialog
-                                                    setConfirmJcrPath(v.jcrPath);
-                                                }
-                                            }}
-                                        />
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </div>
-                )}
+                {activeTab === 'versions' && (() => {
+                    // Build a fast lookup: version string → JCR entry (path + metadata)
+                    const jcrByVersion = {};
+                    (bundle.previousVersions || []).forEach(v => {
+                        jcrByVersion[v.version] = v;
+                    });
+                    // JCR versions NOT in the store catalogue (legacy / non-store sources)
+                    const storeVersionStrings = new Set((bundle.storeVersions || []).map(v => v.version));
+                    const jcrOnlyVersions = (bundle.previousVersions || [])
+                        .filter(v => !storeVersionStrings.has(v.version));
+
+                    return (
+                        <div className={styles.versionsTab}>
+                            {installVersionResult && (
+                                <div
+                                    style={{
+                                        padding: '8px 16px',
+                                        marginBottom: '12px',
+                                        borderRadius: '4px',
+                                        backgroundColor: installVersionResult.success ? 'var(--color-success_light)' : 'var(--color-danger_light)',
+                                        color: installVersionResult.success ? 'var(--color-success_dark)' : 'var(--color-danger_dark)',
+                                        fontSize: '13px'
+                                    }}
+                                >
+                                    {installVersionResult.message}
+                                </div>
+                            )}
+
+                            {/* ── Store catalogue versions ── */}
+                            {bundle.storeVersions?.length > 0 && (
+                                <>
+                                    <Typography variant="subheading" weight="semiBold" className={styles.versionSectionTitle}>
+                                        {t('label.bundle.versions.storeSection')}
+                                    </Typography>
+                                    <Typography variant="caption" className={styles.versionHistoryHint}>
+                                        {t('label.bundle.versions.storeHint')}
+                                    </Typography>
+                                    <ul className={styles.versionList}>
+                                        {bundle.storeVersions.map(v => {
+                                            const isCurrent = v.version === bundle.version;
+                                            const isUpgrade = compareOsgiVersions(v.version, bundle.version) > 0;
+                                            const jcrEntry = jcrByVersion[v.version];
+                                            return (
+                                                <li key={v.version} className={styles.versionItem}>
+                                                    <div className={styles.versionItemInfo}>
+                                                        <div className={styles.versionItemHeader}>
+                                                            <Badge label={v.version} color={isCurrent ? 'default' : 'accent'}/>
+                                                            {isCurrent ? (
+                                                                <Badge label={t('label.bundle.versions.current')} color="success"/>
+                                                            ) : (
+                                                                <Badge
+                                                                    label={isUpgrade ? t('label.bundle.versions.upgrade') : t('label.bundle.versions.downgrade')}
+                                                                    color={isUpgrade ? 'success' : 'danger'}
+                                                                />
+                                                            )}
+                                                            {jcrEntry && (
+                                                                <Badge label={t('label.bundle.versions.inJcr')} color="default"/>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {!isCurrent && isUpgrade && (
+                                                        // Upgrade: provisioning YAML via store (safe, no downgrade risk)
+                                                        <Button
+                                                            variant="outlined"
+                                                            size="small"
+                                                            color="accent"
+                                                            icon={<Replay/>}
+                                                            label={t('label.bundle.versions.install')}
+                                                            onClick={() => handleInstallClick({source: 'store', version: v.version})}
+                                                        />
+                                                    )}
+                                                    {!isCurrent && !isUpgrade && jcrEntry && (
+                                                        // Downgrade in JCR: use JCR binary (only path that supports downgrade)
+                                                        <Button
+                                                            variant="outlined"
+                                                            size="small"
+                                                            color="danger"
+                                                            icon={<Replay/>}
+                                                            label={t('label.bundle.versions.install')}
+                                                            onClick={() => handleInstallClick({source: 'jcr', version: v.version, jcrPath: jcrEntry.jcrPath})}
+                                                        />
+                                                    )}
+                                                    {!isCurrent && !isUpgrade && !jcrEntry && v.storeUrl && (
+                                                        // Downgrade not in JCR: link to store page (cannot install without JCR binary)
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="small"
+                                                            color="default"
+                                                            label={t('label.bundle.versions.viewOnStore')}
+                                                            onClick={() => window.open(v.storeUrl, '_blank', 'noopener,noreferrer')}
+                                                        />
+                                                    )}
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </>
+                            )}
+
+                            {/* ── JCR-only versions (not in store catalogue) ── */}
+                            {jcrOnlyVersions.length > 0 && (
+                                <>
+                                    <Typography
+                                        variant="subheading"
+                                        weight="semiBold"
+                                        className={styles.versionSectionTitle}
+                                        style={{marginTop: bundle.storeVersions?.length > 0 ? '16px' : 0}}
+                                    >
+                                        {t('label.bundle.versions.jcrSection')}
+                                    </Typography>
+                                    <Typography variant="caption" className={styles.versionHistoryHint}>
+                                        {t('label.bundle.versions.jcrHint')}
+                                    </Typography>
+                                    <ul className={styles.versionList}>
+                                        {jcrOnlyVersions.map(v => {
+                                            const sizeKb = v.size ? (v.size / (1024 * 1024)).toFixed(2) + ' MB' : '—';
+                                            const date = v.lastModified ? new Date(v.lastModified).toLocaleString() : '—';
+                                            const isUpgrade = compareOsgiVersions(v.version, bundle.version) > 0;
+                                            return (
+                                                <li key={v.jcrPath} className={styles.versionItem}>
+                                                    <div className={styles.versionItemInfo}>
+                                                        <div className={styles.versionItemHeader}>
+                                                            <Badge label={v.version} color="accent"/>
+                                                            <Badge
+                                                                label={isUpgrade ? t('label.bundle.versions.upgrade') : t('label.bundle.versions.downgrade')}
+                                                                color={isUpgrade ? 'success' : 'danger'}
+                                                            />
+                                                            <Badge label={t('label.bundle.versions.inJcr')} color="default"/>
+                                                        </div>
+                                                        <Typography variant="caption" className={styles.versionMeta}>
+                                                            {v.fileName} &nbsp;·&nbsp; {sizeKb} &nbsp;·&nbsp; {date}
+                                                        </Typography>
+                                                    </div>
+                                                    <Button
+                                                        variant="outlined"
+                                                        size="small"
+                                                        color="accent"
+                                                        icon={<Replay/>}
+                                                        label={t('label.bundle.versions.install')}
+                                                        onClick={() => handleInstallClick({source: 'jcr', version: v.version, jcrPath: v.jcrPath})}
+                                                    />
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {activeTab === 'bundleDeps' && (
                     <Mermaid>{bundle.dependenciesGraph}</Mermaid>
@@ -323,7 +449,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                 )}
             </div>
 
-            <Dialog open={Boolean(confirmJcrPath)} onClose={() => setConfirmJcrPath(null)}>
+            <Dialog open={Boolean(confirmInstall)} onClose={() => setConfirmInstall(null)}>
                 <DialogTitle>
                     <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                         <Warning color="var(--color-warning)"/>
@@ -339,16 +465,16 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                     <Button variant="ghost"
                             size="big"
                             label={t('label.cancel')}
-                            onClick={() => setConfirmJcrPath(null)}/>
+                            onClick={() => setConfirmInstall(null)}/>
                     <Button variant="default"
                             size="big"
                             color="danger"
                             icon={<Replay/>}
                             label={t('label.bundle.versions.confirm.proceed')}
                             onClick={() => {
-                                const path = confirmJcrPath;
-                                setConfirmJcrPath(null);
-                                handleInstallVersion(path);
+                                const target = confirmInstall;
+                                setConfirmInstall(null);
+                                executeInstall(target);
                             }}/>
                 </DialogActions>
             </Dialog>
@@ -363,4 +489,3 @@ BundleDetails.propTypes = {
 };
 
 export default BundleDetails;
-

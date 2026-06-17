@@ -1,5 +1,7 @@
 package org.jahia.support.modulemanagement.services;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -18,6 +20,7 @@ import org.eclipse.aether.version.Version;
 import org.eclipse.aether.version.VersionConstraint;
 import org.eclipse.aether.version.VersionScheme;
 import org.jahia.api.Constants;
+import org.jahia.bin.Jahia;
 import org.jahia.data.templates.JahiaTemplatesPackage;
 import org.jahia.exceptions.JahiaRuntimeException;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
@@ -65,6 +68,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -89,7 +93,48 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     public static final String INVALID_VERSION_SPECIFICATION = "Invalid version specification";
     public static final String CLUSTER_SYNCHRONIZED_YAML_SKIPPED = "module-management-community.clusterSynchronized.yaml.skipped"; // We need to use skipped suffix to avoid execution on startup before cluster is ready
     public static final String CLUSTER_SYNCHRONIZED_YAML = "module-management-community.clusterSynchronized.yaml";
+
+    /** URL of the Jahia store module catalogue — configurable, refreshed periodically by the background job. */
+    private static final String STORE_MODULE_LIST_URL =
+            "https://store.jahia.com/en/sites/private-app-store/contents/modules-repository.moduleList.json";
+
     private final Logger logger = LoggerFactory.getLogger(ModuleManagementCommunityServiceImpl.class);
+
+    // ── Store index (replaces Maven for Jahia module update checks) ──────────────
+    /** Immutable snapshot; replaced atomically on every refresh. */
+    private volatile Map<String, StoreModuleEntry> storeModuleIndex = Collections.emptyMap();
+    private volatile Instant storeIndexLastFetched = null;
+    /** Effective URL read from OSGi config at activation time. */
+    private String storeModuleListUrl = STORE_MODULE_LIST_URL;
+    /** Current Jahia version, parsed once at activation for store compatibility checks. */
+    private org.osgi.framework.Version jahiaVersion;
+
+    /**
+     * Lightweight record representing one module entry from the Jahia store catalogue.
+     * Versions are stored in the order they appear in the JSON (not necessarily sorted).
+     */
+    private static final class StoreModuleEntry {
+        final String name;       // OSGi symbolic name
+        final String groupId;    // Maven groupId
+        final String storeUrl;   // Jahia store page URL (module-level remoteUrl)
+        /** All known version strings (may include SNAPSHOTs). */
+        final List<String> versions;
+        /** version → direct download URL (may be empty for some versions). */
+        final Map<String, String> downloadUrls;
+        /** version → minimum Jahia version string required (e.g. {@code "8.1.6.0"}). */
+        final Map<String, String> requiredVersions;
+
+        StoreModuleEntry(String name, String groupId, String storeUrl,
+                         List<String> versions, Map<String, String> downloadUrls,
+                         Map<String, String> requiredVersions) {
+            this.name = name;
+            this.groupId = groupId;
+            this.storeUrl = storeUrl;
+            this.versions = versions;
+            this.downloadUrls = downloadUrls;
+            this.requiredVersions = requiredVersions;
+        }
+    }
 
     @Reference
     ProvisioningManager provisioningManager;
@@ -121,7 +166,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Activate
     public void activate(ModuleManagementCommunityConfig config, BundleContext bundleContext) {
         this.bundleContext = bundleContext;
-        logger.info("ModuleManagementCommunityService activated");
+        this.storeModuleListUrl = StringUtils.defaultIfBlank(config.storeModuleListUrl(), STORE_MODULE_LIST_URL);
+        this.jahiaVersion = new org.osgi.framework.Version(Jahia.VERSION);
+        logger.info("ModuleManagementCommunityService activated — Jahia {} — store index URL: {}",
+                jahiaVersion, storeModuleListUrl);
         SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             logger.warn(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
@@ -156,7 +204,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         if (settingsBean.isProcessingServer()) {
             if (config.updateOnModuleStartup()) {
                 logger.info("ModuleManagementCommunityService is configured to update modules on startup");
+                // Load the store index first (fast), then trigger the actual update
                 CompletableFuture.runAsync(() -> {
+                    refreshStoreIndex();
                     try {
                         updateModules(true, false, null, true, true, true, false);
                         logger.info("Modules update upon startup is done successfully");
@@ -168,18 +218,16 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     return null;
                 });
             } else {
+                // Fast path: load the JSON store index asynchronously.
+                // No Maven calls at startup — the UI is responsive immediately.
                 CompletableFuture.runAsync(() -> {
-                    try {
-                        listAvailableUpdates(true, null, true);
-                        logger.info("Modules list refresh upon startup is done successfully");
-                    } catch (IOException e) {
-                        logger.error("Error updating modules on startup", e);
-                    }
+                    refreshStoreIndex();
+                    logger.info("Store module index loaded upon startup");
                 }).exceptionally(ex -> {
-                    logger.error("Error during module update on startup", ex);
+                    logger.error("Error loading store module index on startup", ex);
                     return null;
                 });
-                logger.info("ModuleManagementCommunityService is not configured to update modules on startup");
+                logger.info("ModuleManagementCommunityService startup: store index refresh scheduled");
             }
         }
     }
@@ -270,10 +318,17 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     /**
      * Lists available updates for modules based on the provided filters.
      *
-     * @param jahiaOnly If true, only Jahia modules will be considered.
-     * @param filters   List of regex patterns to filter modules by their names, if empty or null, all modules will be considered.
-     * @return Set of module names that have updates available.
-     * @throws IOException If an error occurs during the update check.
+     * <p><strong>Fast path (Jahia modules)</strong>: compares installed bundles whose
+     * {@code Jahia-Module-Type} header is set against the in-memory store index loaded from
+     * {@code modules-repository.moduleList.json}. No Maven network calls are needed.
+     *
+     * <p><strong>Slow path (non-Jahia bundles)</strong>: still uses Maven metadata lookup, but
+     * only executed when {@code jahiaOnly = false} is explicitly requested.
+     *
+     * @param jahiaOnly If true, only Jahia modules (module / system / templatesSet) are checked.
+     * @param filters   Optional regex patterns to restrict which modules are checked.
+     * @param forceUpdate When true, bypass the 2-hour result cache.
+     * @return Set of update keys in the form {@code symbolicName/currentVersion : latestVersion}.
      */
     @Override
     public Set<String> listAvailableUpdates(boolean jahiaOnly, List<String> filters, boolean forceUpdate) throws IOException {
@@ -281,7 +336,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         if (!forceUpdate && (lastUpdateTime != null && Instant.now().minus(Duration.ofHours(2)).isBefore(lastUpdateTime) && modulesWithUpdates != null)) {
             logger.info("Module updates is cached until {}", lastUpdateTime.plus(Duration.ofHours(2)));
             Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
-            return filteredUpdates != null ? filteredUpdates : modulesWithUpdates.keySet();
+            return filteredUpdates != null ? filteredUpdates : new HashSet<>(modulesWithUpdates.keySet());
         }
 
         SettingsBean settingsBean = SettingsBean.getInstance();
@@ -296,29 +351,45 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
         modulesWithUpdates = new HashMap<>();
 
-        // Rest of the existing code to find updates
-        ModuleManager moduleManager = BundleUtils.getOsgiService(ModuleManager.class, null);
-        if (moduleManager == null) {
-            throw new DataFetchingException("Module manager service is not available");
-        }
-        MavenResolver resolver = BundleUtils.getOsgiService(MavenResolver.class, null);
-        if (resolver == null) {
-            throw new DataFetchingException("Maven resolver service is not available");
+        // ── Fast path: JSON store index for Jahia modules ────────────────────────
+        checkJahiaModulesAgainstStoreIndex();
+
+        // ── Slow path: Maven for plain OSGi bundles (only when caller asks) ───────
+        if (!jahiaOnly) {
+            MavenResolver resolver = BundleUtils.getOsgiService(MavenResolver.class, null);
+            if (resolver != null) {
+                ModuleManager moduleManager = BundleUtils.getOsgiService(ModuleManager.class, null);
+                if (moduleManager != null) {
+                    moduleManager.getAllLocalInfos().forEach((key, bundleInfo) -> {
+                        if (bundleInfo.getOsgiState() == BundleState.ACTIVE) {
+                            String bKey = getBundleKey(key);
+                            Bundle bundle = BundleUtils.getBundle(
+                                    StringUtils.substringBeforeLast(bKey, "/"),
+                                    StringUtils.substringAfterLast(bKey, "/"));
+                            // Only check non-Jahia bundles here; Jahia modules are handled above
+                            if (bundle != null && !BundleUtils.isJahiaModuleBundle(bundle)) {
+                                checkBundleUpdates(key, bundleInfo, resolver);
+                            }
+                        }
+                    });
+                }
+            } else {
+                logger.warn("Maven resolver not available — non-Jahia bundle updates cannot be checked");
+            }
         }
 
-        moduleManager.getAllLocalInfos().forEach((key, bundleInfo) ->
-                checkBundleUpdates(key, bundleInfo, resolver)
-        );
         lastUpdateTime = Instant.now();
-        Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
 
-        Set<String> availableUpdates = filteredUpdates != null ? filteredUpdates : modulesWithUpdates.keySet();
-        // If jahiaOnly is true, filter the updates to only include Jahia modules
+        Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
+        Set<String> availableUpdates = filteredUpdates != null ? filteredUpdates : new HashSet<>(modulesWithUpdates.keySet());
+
+        // If jahiaOnly is true, remove any non-Jahia entries that may have slipped through
         if (jahiaOnly) {
             availableUpdates.removeIf(update -> {
                 String bundleKey = StringUtils.substringBeforeLast(update, " : ");
-                Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(bundleKey, "/"), StringUtils.substringAfterLast(bundleKey, "/"));
-                logger.debug("Bundle: {}", bundle);
+                Bundle bundle = BundleUtils.getBundle(
+                        StringUtils.substringBeforeLast(bundleKey, "/"),
+                        StringUtils.substringAfterLast(bundleKey, "/"));
                 if (bundle != null) {
                     return !BundleUtils.isJahiaModuleBundle(bundle);
                 }
@@ -326,6 +397,180 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             });
         }
         return availableUpdates;
+    }
+
+    // ── Store index management ─────────────────────────────────────────────────────
+
+    /**
+     * Scan all ACTIVE Jahia module bundles and compare their version against the store index.
+     * Populates {@link #modulesWithUpdates} for entries where a newer non-SNAPSHOT version exists.
+     */
+    private void checkJahiaModulesAgainstStoreIndex() {
+        if (storeModuleIndex.isEmpty()) {
+            logger.warn("Store module index is empty — Jahia module update detection skipped. " +
+                    "Call refreshStoreIndex() to populate the index.");
+            return;
+        }
+        VersionScheme vs = new GenericVersionScheme();
+        int found = 0;
+        for (Bundle bundle : bundleContext.getBundles()) {
+            if (bundle.getState() != Bundle.ACTIVE) {
+                continue;
+            }
+            if (!BundleUtils.isJahiaModuleBundle(bundle)) {
+                continue;
+            }
+            String symbolicName = bundle.getSymbolicName();
+            if (excludeModules.stream().anyMatch(p -> p.matcher(symbolicName + "/").matches())) {
+                logger.debug("Skipping excluded module: {}", symbolicName);
+                continue;
+            }
+            StoreModuleEntry entry = storeModuleIndex.get(symbolicName);
+            if (entry == null) {
+                logger.debug("Module {} not found in store index", symbolicName);
+                continue;
+            }
+            try {
+                Version installed = vs.parseVersion(bundle.getVersion().toString());
+                Version latestStore = null;
+                String latestVersionStr = null;
+                for (String vStr : entry.versions) {
+                    if (vStr.contains(SNAPSHOT)) {
+                        continue;
+                    }
+                    if (!isCompatibleWithJahia(entry.requiredVersions.get(vStr))) {
+                        logger.debug("Skipping {} {} — requires newer Jahia (required: {})",
+                                symbolicName, vStr, entry.requiredVersions.get(vStr));
+                        continue;
+                    }
+                    try {
+                        Version v = vs.parseVersion(vStr);
+                        if (latestStore == null || v.compareTo(latestStore) > 0) {
+                            latestStore = v;
+                            latestVersionStr = vStr;
+                        }
+                    } catch (InvalidVersionSpecificationException ignore) {
+                        logger.debug("Unparseable store version {} for {}", vStr, symbolicName);
+                    }
+                }
+                if (latestStore != null && latestVersionStr != null
+                        && latestStore.compareTo(installed) > 0) {
+                    String key = symbolicName + "/" + bundle.getVersion() + " : " + latestVersionStr;
+                    // Prefer the direct download URL; fall back to an mvn: coordinate
+                    String url = entry.downloadUrls.getOrDefault(
+                            latestVersionStr,
+                            "mvn:" + entry.groupId + "/" + symbolicName + "/" + latestVersionStr);
+                    modulesWithUpdates.put(key, url);
+                    found++;
+                    logger.debug("Store update found: {} {} → {}", symbolicName, bundle.getVersion(), latestVersionStr);
+                }
+            } catch (InvalidVersionSpecificationException e) {
+                logger.debug("Cannot parse installed version for {}: {}", symbolicName, e.getMessage());
+            }
+        }
+        logger.info("Store index check complete: {} update(s) found across Jahia modules", found);
+    }
+
+    @Override
+    public void refreshStoreIndex() {
+        logger.info("Refreshing store module index from {}", storeModuleListUrl);
+        try {
+            HttpURLConnection conn = (HttpURLConnection) new URL(storeModuleListUrl).openConnection();
+            conn.setConnectTimeout(10_000);
+            conn.setReadTimeout(60_000);
+            conn.setRequestProperty("Accept", "application/json");
+            String json;
+            try (InputStream in = new BufferedInputStream(conn.getInputStream())) {
+                json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+            Map<String, StoreModuleEntry> newIndex = buildStoreIndex(json);
+            storeModuleIndex = Collections.unmodifiableMap(newIndex);
+            storeIndexLastFetched = Instant.now();
+            modulesWithUpdates = null; // invalidate update cache
+            lastUpdateTime = null;
+            logger.info("Store module index refreshed from URL: {} modules indexed", storeModuleIndex.size());
+        } catch (Exception e) {
+            logger.warn("Failed to fetch store module index from URL ({}): {} — trying bundled fallback",
+                    storeModuleListUrl, e.getMessage());
+            loadBundledStoreIndex();
+        }
+    }
+
+    /** Load the bundled (classpath) copy of the store module list as an offline fallback. */
+    private void loadBundledStoreIndex() {
+        URL resource = getClass().getClassLoader().getResource("modules-repository.moduleList.json");
+        if (resource == null) {
+            logger.warn("Bundled store module list not found in classpath — update index will remain empty");
+            return;
+        }
+        try (InputStream in = resource.openStream()) {
+            String json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            Map<String, StoreModuleEntry> newIndex = buildStoreIndex(json);
+            storeModuleIndex = Collections.unmodifiableMap(newIndex);
+            storeIndexLastFetched = Instant.now();
+            modulesWithUpdates = null;
+            lastUpdateTime = null;
+            logger.info("Store module index loaded from bundled classpath resource: {} modules indexed",
+                    storeModuleIndex.size());
+        } catch (Exception e) {
+            logger.error("Failed to load bundled store module list", e);
+        }
+    }
+
+    /**
+     * Parse the store module-list JSON into a map keyed by OSGi symbolic name.
+     * Each version entry's {@code requiredVersion} (e.g. {@code "version-8.1.6.0"})
+     * is stored after stripping the {@code "version-"} prefix so it can be compared
+     * directly against {@link #jahiaVersion}.
+     */
+    private Map<String, StoreModuleEntry> buildStoreIndex(String json) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode root = mapper.readTree(json);
+        Map<String, StoreModuleEntry> index = new HashMap<>();
+        Iterable<JsonNode> repositories = root.isArray() ? root : Collections.singletonList(root);
+        for (JsonNode repo : repositories) {
+            JsonNode modulesNode = repo.get("modules");
+            if (modulesNode == null || !modulesNode.isArray()) {
+                continue;
+            }
+            for (JsonNode mod : modulesNode) {
+                String name = mod.path("name").asText(null);
+                String groupId = mod.path("groupId").asText(null);
+                if (name == null || groupId == null) {
+                    continue;
+                }
+                // Module-level store page URL (same for all versions of this module)
+                String storeUrl = mod.path("remoteUrl").asText(null);
+                JsonNode versionsNode = mod.path("versions");
+                if (!versionsNode.isArray() || versionsNode.isEmpty()) {
+                    continue;
+                }
+                List<String> versions = new ArrayList<>();
+                Map<String, String> downloadUrls = new LinkedHashMap<>();
+                Map<String, String> requiredVersions = new LinkedHashMap<>();
+                for (JsonNode vEntry : versionsNode) {
+                    String version = vEntry.path("version").asText(null);
+                    if (version == null || version.isEmpty()) {
+                        continue;
+                    }
+                    String downloadUrl = vEntry.path("downloadUrl").asText(null);
+                    String requiredVersion = vEntry.path("requiredVersion").asText(null);
+                    versions.add(version);
+                    if (downloadUrl != null && !downloadUrl.isEmpty()) {
+                        downloadUrls.put(version, downloadUrl);
+                    }
+                    if (requiredVersion != null && requiredVersion.startsWith("version-")) {
+                        requiredVersions.put(version,
+                                StringUtils.substringAfter(requiredVersion, "version-"));
+                    }
+                }
+                if (!versions.isEmpty()) {
+                    index.put(name, new StoreModuleEntry(name, groupId, storeUrl,
+                            versions, downloadUrls, requiredVersions));
+                }
+            }
+        }
+        return index;
     }
 
     private void checkBundleUpdates(String bundleKey, BundleService.BundleInformation bundleInfo, MavenResolver resolver) {
@@ -803,7 +1048,85 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         if (!uninstalled.isEmpty()) {
             result += ". Removed old version(s): " + String.join(", ", uninstalled);
         }
+        invalidateUpdatesCache();
         return result;
+    }
+
+    @Override
+    public List<Map<String, String>> getStoreVersionsForBundle(String symbolicName) {
+        StoreModuleEntry entry = storeModuleIndex.get(symbolicName);
+        if (entry == null) {
+            return Collections.emptyList();
+        }
+        VersionScheme vs = new GenericVersionScheme();
+        return entry.versions.stream()
+                .filter(v -> !v.contains(SNAPSHOT))
+                .filter(v -> isCompatibleWithJahia(entry.requiredVersions.get(v)))
+                .map(v -> {
+                    Map<String, String> info = new LinkedHashMap<>();
+                    info.put("version", v);
+                    info.put("storeUrl", entry.storeUrl != null ? entry.storeUrl : "");
+                    info.put("downloadUrl", entry.downloadUrls.getOrDefault(v, ""));
+                    return info;
+                })
+                // Sort newest-first (gracefully degrade for unparseable versions)
+                .sorted((a, b) -> {
+                    try {
+                        return vs.parseVersion(b.get("version")).compareTo(vs.parseVersion(a.get("version")));
+                    } catch (InvalidVersionSpecificationException e) {
+                        return b.get("version").compareTo(a.get("version"));
+                    }
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns {@code true} when the current Jahia version satisfies the given minimum required
+     * version string (already stripped of the {@code "version-"} prefix, e.g. {@code "8.1.6.0"}).
+     * Returns {@code true} unconditionally when {@code requiredVersion} is {@code null} or empty,
+     * or when parsing fails.
+     */
+    private boolean isCompatibleWithJahia(String requiredVersionStr) {
+        if (requiredVersionStr == null || requiredVersionStr.isEmpty()) {
+            return true;
+        }
+        try {
+            final org.osgi.framework.Version required = new org.osgi.framework.Version(requiredVersionStr);
+            return required.compareTo(jahiaVersion) <= 0 && required.getMajor() == jahiaVersion.getMajor();
+        } catch (IllegalArgumentException e) {
+            logger.debug("Could not parse requiredVersion '{}' — including version anyway", requiredVersionStr);
+            return true;
+        }
+    }
+
+    @Override
+    public String installBundleVersionFromStore(String symbolicName, String version) throws IOException {
+        StoreModuleEntry entry = storeModuleIndex.get(symbolicName);
+        if (entry == null) {
+            throw new DataFetchingException("Module '" + symbolicName + "' not found in store index — " +
+                    "call refreshStoreIndex() to populate the catalogue");
+        }
+        if (!entry.versions.contains(version)) {
+            throw new DataFetchingException("Version '" + version + "' of module '" + symbolicName +
+                    "' not found in store index");
+        }
+        // Prefer the direct download URL; fall back to a Maven coordinate
+        String url = entry.downloadUrls.getOrDefault(
+                version,
+                "mvn:" + entry.groupId + "/" + symbolicName + "/" + version);
+
+        String yamlScript = "- installOrUpgradeBundle:\n" +
+                "  - url: '" + url + "'\n" +
+                "  autoStart: true\n" +
+                "  uninstallPreviousVersion: true\n" +
+                "  ignoreChecks: true\n" +
+                "- karafCommand: \"log:log 'Bundle " + symbolicName + " " + version +
+                " installed from store catalogue'\"\n";
+
+        logger.info("Installing {} {} from store via provisioning YAML (url: {})", symbolicName, version, url);
+        provisioningManager.executeScript(yamlScript, "yaml");
+        invalidateUpdatesCache();
+        return "Bundle " + symbolicName + " " + version + " installed successfully from store catalogue";
     }
 
     @Override
@@ -830,10 +1153,21 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
             provisioningManager.executeScript(yamlScript, "yaml");
             logger.info("Module {} deployed successfully via upload", fileName);
+            invalidateUpdatesCache();
             return "Module " + fileName + " deployed successfully";
         } finally {
             FileUtils.deleteQuietly(tempFile);
         }
+    }
+
+    /**
+     * Invalidate the in-memory updates cache so the next {@link #listAvailableUpdates} call
+     * recomputes against the store index. Call this after any install or deploy operation.
+     */
+    private void invalidateUpdatesCache() {
+        modulesWithUpdates = null;
+        lastUpdateTime = null;
+        logger.debug("Updates cache invalidated — will recompute on next listAvailableUpdates() call");
     }
 
     // -------------------------------------------------------------------------

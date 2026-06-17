@@ -39,6 +39,9 @@ import PropTypes from 'prop-types';
 
 // ── GraphQL documents ────────────────────────────────────────────────────────
 
+/** Module types that are "Jahia modules" as opposed to plain OSGi bundles. */
+const JAHIA_MODULE_TYPES = ['module', 'system', 'templatesSet'];
+
 const INSTALLED_MODULES_QUERY = gql`query {
     admin { modulesManagement { installedModules installedBundleTypes clustered } }
 }`;
@@ -99,7 +102,9 @@ const ModuleManagementCommunityApp = () => {
     const [modules, setModules] = useState([]);
     const [filter, setFilter] = useState('');
     const [debouncedFilter, setDebouncedFilter] = useState('');
-    const [typeFilter, setTypeFilter] = useState('');
+    // Default: show only Jahia module types (module / system / templatesSet).
+    // The special value 'jahia' means "all Jahia module types"; '' means truly all (includes bundles).
+    const [typeFilter, setTypeFilter] = useState('jahia');
     const [bundleTypes, setBundleTypes] = useState({});
     const [dependentUpdates, setDependentUpdates] = useState({});
     const [currentPage, setCurrentPage] = useState(1);
@@ -307,7 +312,13 @@ const ModuleManagementCommunityApp = () => {
             }
         }
 
-        if (typeFilter) {
+        if (typeFilter === 'jahia') {
+            // Show only Jahia module types; hide plain OSGi bundles
+            const knownType = bundleTypes[m.name];
+            if (knownType && !JAHIA_MODULE_TYPES.includes(knownType)) {
+                return false;
+            }
+        } else if (typeFilter) {
             const knownType = bundleTypes[m.name];
             if (knownType && knownType !== typeFilter) {
                 return false;
@@ -483,6 +494,7 @@ const ModuleManagementCommunityApp = () => {
                                                 setCurrentPage(1);
                                             }}
                                     >
+                                        <option value="jahia">{t('label.input.filterByType.jahia')}</option>
                                         <option value="">{t('label.input.filterByType.all')}</option>
                                         <option value="module">module</option>
                                         <option value="system">system</option>
@@ -576,6 +588,7 @@ const ModuleManagementCommunityApp = () => {
                                     setIsUploadOpen(false);
                                     notificationContext.notify(t('label.upload.deploySuccess'), ['closeButton', 'closeAfter5s']);
                                     refreshAllModules();
+                                    refetch(); // Re-check available updates for the newly deployed module
                                 }}/>
             <ExportModulesDialog isOpen={isExportOpen} onClose={() => setIsExportOpen(false)}/>
             <GenerateScriptDialog

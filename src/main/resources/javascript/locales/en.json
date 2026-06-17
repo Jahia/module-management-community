@@ -61,12 +61,19 @@
           "proceed": "Downgrade module",
           "title": "Confirm module downgrade"
         },
+        "current": "● current",
         "downgrade": "↓ downgrade",
         "hint": "These are all versions of this bundle available in the module management store (/module-management/bundles) that are not currently installed.",
         "install": "Install this version",
         "installError": "An error occurred while installing the selected version",
-        "installSuccess": "Bundle version installed successfully",
-        "upgrade": "↑ upgrade"
+        "installSuccess": "Bundle version installed successfully via provisioning",
+        "inJcr": "in JCR",
+        "jcrHint": "These versions are stored in JCR but not listed in the store catalogue.",
+        "jcrSection": "JCR stored versions",
+        "storeHint": "Compatible store catalogue versions. Versions stored in JCR can be installed; others link to the store.",
+        "storeSection": "Store catalogue versions",
+        "upgrade": "↑ upgrade",
+        "viewOnStore": "View on store"
       }
     },
     "cancel": "Cancel",
@@ -115,7 +122,8 @@
       "dryRunDesc": "Simulate the update without applying any changes. The provisioning script will be shown for review.",
       "filterBySymbolicName": "Filter by bundle symbolic name",
       "filterByType": {
-        "all": "All types"
+        "jahia": "Jahia modules",
+        "all": "All types (inc. bundles)"
       },
       "group": {
         "display": "Display",

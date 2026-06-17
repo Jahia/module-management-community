@@ -10,7 +10,6 @@ import org.quartz.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.text.ParseException;
 import java.util.Map;
 
@@ -45,13 +44,14 @@ public class RefreshModuleUpdatesInBackground extends BackgroundJob {
 
     @Override
     public void executeJahiaJob(JobExecutionContext jobExecutionContext) throws Exception {
-        try {
-            ModuleManagementCommunityService moduleManagementService = BundleUtils.getOsgiService(ModuleManagementCommunityService.class, null);
-            logger.info("Starting background job to refresh module updates");
-            moduleManagementService.listAvailableUpdates(true, null, true);
-            logger.info("Finished background job to refresh module updates");
-        } catch (IOException e) {
-            logger.error("Error while refreshing module updates in background", e);
+        ModuleManagementCommunityService moduleManagementService =
+                BundleUtils.getOsgiService(ModuleManagementCommunityService.class, null);
+        if (moduleManagementService == null) {
+            logger.warn("ModuleManagementCommunityService not available — skipping store index refresh");
+            return;
         }
+        logger.info("Starting background job: refreshing store module index");
+        moduleManagementService.refreshStoreIndex();
+        logger.info("Finished background job: store module index refreshed");
     }
 }

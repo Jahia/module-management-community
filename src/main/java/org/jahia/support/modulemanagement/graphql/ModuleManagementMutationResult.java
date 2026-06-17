@@ -61,6 +61,16 @@ public class ModuleManagementMutationResult {
     }
 
     @GraphQLField
+    @GraphQLName("installBundleFromStore")
+    @GraphQLDescription("Install a specific version of a Jahia module from the store catalogue. " +
+            "Generates and executes a server-side provisioning YAML script — no direct download link is used.")
+    public String installBundleFromStore(
+            @GraphQLName("symbolicName") String symbolicName,
+            @GraphQLName("version") String version) throws IOException {
+        return moduleManagementCommunityService.installBundleVersionFromStore(symbolicName, version);
+    }
+
+    @GraphQLField
     @GraphQLName("cleanupJcrVersions")
     @GraphQLDescription("Remove old module versions from the JCR module-management store, keeping only the " +
             "currently-installed version(s) and one previous version per module. " +

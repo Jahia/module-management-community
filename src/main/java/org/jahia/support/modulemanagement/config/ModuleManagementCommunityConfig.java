@@ -38,4 +38,11 @@ public @interface ModuleManagementCommunityConfig {
     )
     String refreshModuleUpdatesInBackgroundCron() default "0 0 2 * * ?"; // Default to every day at 2 AM
 
+    @AttributeDefinition(
+            name = "Store Module List URL",
+            description = "URL of the Jahia store module catalogue JSON used to detect available updates " +
+                    "for Jahia modules without requiring Maven metadata resolution."
+    )
+    String storeModuleListUrl() default "https://store.jahia.com/en/sites/private-app-store/contents/modules-repository.moduleList.json";
+
 }

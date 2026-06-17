@@ -84,6 +84,28 @@ public interface ModuleManagementCommunityService {
     String installBundleVersionFromJcr(String jcrPath) throws IOException;
 
     /**
+     * Return all non-SNAPSHOT versions of the given module that are listed in the store
+     * catalogue index, sorted newest-first.
+     *
+     * @param symbolicName OSGi bundle symbolic name
+     * @return ordered list of maps containing {@code version} and {@code downloadUrl} keys;
+     *         empty list when the module is not found in the store index
+     */
+    List<Map<String, String>> getStoreVersionsForBundle(String symbolicName);
+
+    /**
+     * Install a specific version of a Jahia module from the store catalogue by executing a
+     * server-side provisioning YAML script.  The download URL is resolved from the in-memory
+     * store index (falling back to a {@code mvn:} coordinate when no direct URL is available).
+     *
+     * @param symbolicName OSGi bundle symbolic name
+     * @param version      exact version string (must exist in the store index)
+     * @return human-readable result message
+     * @throws IOException if the module/version is not in the index or execution fails
+     */
+    String installBundleVersionFromStore(String symbolicName, String version) throws IOException;
+
+    /**
      * Remove old module versions from the JCR module-management store
      * ({@code /module-management/bundles/…}), retaining for each module:
      * <ol>
@@ -105,4 +127,13 @@ public interface ModuleManagementCommunityService {
      * @return YAML provisioning script string
      */
     String generateProvisioningScript(List<String> symbolicNames);
+
+    /**
+     * Refresh the in-memory store module index by fetching the latest module list from
+     * {@code https://store.jahia.com/…/modules-repository.moduleList.json}.
+     * Falls back to the bundled classpath copy if the URL is unreachable.
+     * Invalidates the {@link #listAvailableUpdates} cache so the next call recomputes
+     * against the fresh index.
+     */
+    void refreshStoreIndex();
 }

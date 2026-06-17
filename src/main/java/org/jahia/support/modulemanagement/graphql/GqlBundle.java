@@ -243,6 +243,42 @@ public class GqlBundle {
         }
     }
 
+    @GraphQLField
+    @GraphQLName("storeVersions")
+    public List<GqlStoreVersion> getStoreVersions() {
+        return moduleManagementCommunityService.getStoreVersionsForBundle(bundle.getSymbolicName())
+                .stream().map(GqlStoreVersion::new).collect(Collectors.toList());
+    }
+
+    @GraphQLName("GqlStoreVersion")
+    public static class GqlStoreVersion {
+        private final Map<String, String> data;
+
+        public GqlStoreVersion(Map<String, String> data) {
+            this.data = data;
+        }
+
+        @GraphQLField
+        @GraphQLName("version")
+        public String getVersion() {
+            return data.get("version");
+        }
+
+        /** Jahia store page URL for this module (same for all versions). */
+        @GraphQLField
+        @GraphQLName("storeUrl")
+        public String getStoreUrl() {
+            return data.get("storeUrl");
+        }
+
+        /** Direct download URL from the store catalogue — resolved server-side during install. */
+        @GraphQLField
+        @GraphQLName("downloadUrl")
+        public String getDownloadUrl() {
+            return data.get("downloadUrl");
+        }
+    }
+
     @GraphQLName("GqlBundleVersion")
     public static class GqlBundleVersion {
         private final Map<String, Object> data;

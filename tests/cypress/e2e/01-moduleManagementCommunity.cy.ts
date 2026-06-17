@@ -69,8 +69,8 @@ describe('Module Management Community', () => {
             cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).should('be.visible');
         });
 
-        it('renders the type filter select defaulting to "All types"', () => {
-            cy.contains('select', 'All types').should('be.visible').and('have.value', '');
+        it('renders the type filter select defaulting to "Jahia modules"', () => {
+            cy.contains('select', 'Jahia modules').should('be.visible').and('have.value', 'jahia');
         });
 
         it('renders the pagination info line', () => {
@@ -142,24 +142,25 @@ describe('Module Management Community', () => {
         });
 
         it('filtering by type "module" keeps the known module row visible', () => {
-            cy.contains('select', 'All types').select('module');
+            cy.get('select').first().select('module');
             cy.contains(testBundle).should('be.visible');
         });
 
         it('filtering by type "bundle" hides the known module (whose type is "module")', () => {
-            cy.contains('select', 'All types').select('bundle');
+            cy.get('select').first().select('bundle');
             cy.get('tbody').should('not.contain', testBundle);
         });
 
         it('resetting the type filter to "All types" reveals the module again', () => {
-            cy.contains('select', 'All types').select('bundle');
+            cy.get('select').first().select('bundle');
             cy.get('tbody').should('not.contain', testBundle);
-            cy.contains('select', 'All types').select('');
+            cy.get('select').first().select('jahia');
             cy.contains(testBundle).should('be.visible');
         });
 
-        it('type filter has all four type options: module, system, bundle, templatesSet', () => {
-            cy.contains('select', 'All types').within(() => {
+        it('type filter has all expected options: jahia, module, system, bundle, templatesSet', () => {
+            cy.get('select').first().within(() => {
+                cy.get('option[value="jahia"]').should('exist');
                 cy.get('option[value="module"]').should('exist');
                 cy.get('option[value="system"]').should('exist');
                 cy.get('option[value="bundle"]').should('exist');

@@ -34,6 +34,7 @@ const BUNDLE_QUERY = gql`query ($module: String!, $version: String!) {
                 clusterDeployment { nodeId bundles { key state } }
                 clusterState
                 previousVersions { version jcrPath fileName size lastModified }
+                storeVersions { version storeUrl }
             }
         }
     }
