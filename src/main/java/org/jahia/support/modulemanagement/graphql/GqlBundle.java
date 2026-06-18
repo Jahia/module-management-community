@@ -350,8 +350,11 @@ public class GqlBundle {
 
                 for (Map.Entry<String, BundleService.BundleInformation> bundleEntry : nodeEntry.getValue().entrySet()) {
                     String bundleKey = bundleEntry.getKey();
-                    if (bundleKey.startsWith("org.jahia.modules/")) {
-                        bundleKey = bundleKey.substring("org.jahia.modules/".length());
+                    // Strip groupId prefix (groupId/symbolicName/version → symbolicName/version)
+                    // only when there are at least two slashes; plain symbolicName/version keys are left as-is
+                    int firstSlash = bundleKey.indexOf('/');
+                    if (firstSlash >= 0 && bundleKey.indexOf('/', firstSlash + 1) >= 0) {
+                        bundleKey = bundleKey.substring(firstSlash + 1);
                     }
                     BundleService.BundleInformation bundleInfo = bundleEntry.getValue();
 
