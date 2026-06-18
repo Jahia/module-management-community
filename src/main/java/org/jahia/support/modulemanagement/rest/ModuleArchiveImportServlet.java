@@ -4,7 +4,9 @@ import org.apache.commons.fileupload.FileItemIterator;
 import org.apache.commons.fileupload.FileItemStream;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
+import org.jahia.params.valves.AuthValveContext;
 import org.jahia.services.content.JCRSessionFactory;
+import org.jahia.services.securityfilter.PermissionService;
 import org.jahia.services.usermanager.JahiaUser;
 import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
@@ -13,6 +15,7 @@ import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.jcr.RepositoryException;
 import javax.servlet.Servlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -42,6 +45,9 @@ public class ModuleArchiveImportServlet extends HttpServlet {
     @Reference
     private ModuleManagementCommunityService moduleManagementCommunityService;
 
+    @Reference
+    private PermissionService permissionService;
+
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
         response.setContentType("application/json;charset=UTF-8");
@@ -57,7 +63,20 @@ public class ModuleArchiveImportServlet extends HttpServlet {
 
         // --- Authentication check ---
         JahiaUser currentUser = JCRSessionFactory.getInstance().getCurrentUser();
-        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser)) {
+        AuthValveContext ctx = (AuthValveContext) request.getAttribute(AuthValveContext.class.getName());
+        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser) || ctx == null || ctx.isAuthRetrievedFromSession()) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            writer.write("{\"error\":\"Authentication required\"}");
+            return;
+        }
+
+        try {
+            if(!permissionService.hasPermission("module-management-community.import")) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                writer.write("{\"error\":\"Authentication required\"}");
+                return;
+            }
+        } catch (RepositoryException e) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             writer.write("{\"error\":\"Authentication required\"}");
             return;

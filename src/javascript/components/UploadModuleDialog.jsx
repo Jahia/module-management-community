@@ -19,7 +19,7 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
     const {t} = useTranslation('module-management-community');
     const fileInputRef = useRef(null);
 
-    // 'jar' = deploy single module | 'zip' = import snapshot archive
+    // 'jar' = deploy single module | 'zip' = import snapshot archive | 'yaml' = apply provisioning script
     const [mode, setMode] = useState('jar');
     const [selectedFile, setSelectedFile] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -28,6 +28,7 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
     const [statusMessage, setStatusMessage] = useState('');
 
     const isZipMode = mode === 'zip';
+    const isYamlMode = mode === 'yaml';
 
     const resetState = () => {
         setSelectedFile(null);
@@ -55,6 +56,10 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
         if (isZipMode) {
             if (!name.endsWith('.zip')) {
                 return t('label.import.validation.notZip');
+            }
+        } else if (isYamlMode) {
+            if (!name.endsWith('.yaml') && !name.endsWith('.yml')) {
+                return t('label.yaml.validation.notYaml');
             }
         } else if (!name.endsWith('.jar')) {
             return t('label.upload.validation.notJar');
@@ -149,21 +154,26 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
 
     const dropzoneLabel = isZipMode ?
         t('label.import.dialog.dropzone') :
-        t('label.upload.dialog.dropzone');
+        isYamlMode ? t('label.yaml.dialog.dropzone') :
+            t('label.upload.dialog.dropzone');
 
     const deployLabel = isZipMode ?
         t('label.import.dialog.import') :
-        t('label.upload.dialog.deploy');
+        isYamlMode ? t('label.yaml.dialog.apply') :
+            t('label.upload.dialog.deploy');
 
     const uploadingLabel = isZipMode ?
         t('label.import.dialog.importing') :
-        t('label.upload.dialog.deploying');
+        isYamlMode ? t('label.yaml.dialog.applying') :
+            t('label.upload.dialog.deploying');
 
     const hintLabel = isZipMode ?
         t('label.import.dialog.hint') :
-        t('label.upload.dialog.hint');
+        isYamlMode ? t('label.yaml.dialog.hint') :
+            t('label.upload.dialog.hint');
 
-    const fileIcon = isZipMode ? '🗜️' : '📦';
+    const fileIcon = isZipMode ? '🗜️' : isYamlMode ? '📄' : '📦';
+    const acceptAttr = isZipMode ? '.zip' : isYamlMode ? '.yaml,.yml' : '.jar';
 
     return (
         <Dialog
@@ -198,6 +208,12 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                         control={<Radio color="primary" disabled={isUploading}/>}
                         label={<Typography variant="body">{t('label.upload.mode.zip')}</Typography>}
                     />
+                    <FormControlLabel
+                        className={styles.typeControl}
+                        value="yaml"
+                        control={<Radio color="primary" disabled={isUploading}/>}
+                        label={<Typography variant="body">{t('label.upload.mode.yaml')}</Typography>}
+                    />
                 </RadioGroup>
 
                 {/* Drop zone */}
@@ -212,7 +228,7 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                         <input
                             ref={fileInputRef}
                             type="file"
-                            accept={isZipMode ? '.zip' : '.jar'}
+                            accept={acceptAttr}
                             className={styles.hiddenInput}
                             onChange={handleFileInputChange}
                         />

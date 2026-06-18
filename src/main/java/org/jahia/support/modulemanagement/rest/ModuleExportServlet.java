@@ -1,7 +1,9 @@
 package org.jahia.support.modulemanagement.rest;
 
 import org.apache.commons.io.FileUtils;
+import org.jahia.params.valves.AuthValveContext;
 import org.jahia.services.content.JCRSessionFactory;
+import org.jahia.services.securityfilter.PermissionService;
 import org.jahia.services.usermanager.JahiaUser;
 import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.jahia.support.modulemanagement.ExportOptions;
@@ -11,6 +13,7 @@ import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.jcr.RepositoryException;
 import javax.servlet.Servlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -47,12 +50,30 @@ public class ModuleExportServlet extends HttpServlet {
     @Reference
     private ModuleManagementCommunityService moduleManagementCommunityService;
 
+    @Reference
+    private PermissionService permissionService;
+
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
 
-        // --- Authentication check (before any binary output) ---
+        // --- Authentication check ---
         JahiaUser currentUser = JCRSessionFactory.getInstance().getCurrentUser();
-        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser)) {
+        AuthValveContext ctx = (AuthValveContext) request.getAttribute(AuthValveContext.class.getName());
+        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser) || ctx == null || ctx.isAuthRetrievedFromSession()) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getOutputStream().write("{\"error\":\"Authentication required\"}".getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+
+        try {
+            if(!permissionService.hasPermission("module-management-community.export")) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getOutputStream().write("{\"error\":\"Authentication required\"}".getBytes(StandardCharsets.UTF_8));
+                return;
+            }
+        } catch (RepositoryException e) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json;charset=UTF-8");
             response.getOutputStream().write("{\"error\":\"Authentication required\"}".getBytes(StandardCharsets.UTF_8));

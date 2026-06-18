@@ -26,6 +26,16 @@ public interface ModuleManagementCommunityService {
     String deployUploadedModule(InputStream fileStream, String fileName) throws IOException;
 
     /**
+     * Execute an uploaded provisioning YAML script directly via the provisioning manager.
+     *
+     * @param yamlStream stream of the {@code .yaml} / {@code .yml} file
+     * @param fileName   the original file name (used for logging)
+     * @return a human-readable result message
+     * @throws IOException if execution fails
+     */
+    String applyProvisioningYaml(InputStream yamlStream, String fileName) throws IOException;
+
+    /**
      * Export deployed Jahia bundles (module / system / templatesSet types only) as a
      * self-contained ZIP archive with an embedded {@code provisioning.yaml}.
      * Maven-resolvable bundles are referenced by their {@code mvn:} URL; bundles only

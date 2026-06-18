@@ -319,6 +319,7 @@
       "deploySuccess": "Module deployed successfully. The module list has been refreshed.",
       "mode": {
         "jar": "Deploy single module (.jar)",
+        "yaml": "Apply provisioning script (.yaml / .yml)",
         "zip": "Import snapshot archive (.zip)"
       },
       "dialog": {
@@ -335,6 +336,17 @@
       "validation": {
         "noFile": "Please select a file",
         "notJar": "Only .jar files are accepted"
+      }
+    },
+    "yaml": {
+      "dialog": {
+        "apply": "Apply script",
+        "applying": "Executing provisioning script…",
+        "dropzone": "Drag & drop a .yaml or .yml file here, or click to select",
+        "hint": "Upload a Jahia provisioning YAML script. It will be executed immediately on this server."
+      },
+      "validation": {
+        "notYaml": "Only .yaml or .yml files are accepted"
       }
     },
     "generateScript": {

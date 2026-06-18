@@ -1,8 +1,11 @@
 upload_modules:
   description: Can upload modules in the module management
   auto_apply:
-    - origin: hosted
+    - always: true
   constraints:
-    - privileged_user: true
+    - user_permission: provisioningAccess
+      path: /
   grants:
     - api: module-management-community.upload
+    - api: module-management-community.import
+    - api: module-management-community.export

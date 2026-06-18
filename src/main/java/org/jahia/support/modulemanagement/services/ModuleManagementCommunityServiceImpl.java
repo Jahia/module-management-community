@@ -1130,8 +1130,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     }
 
     @Override
-    public String deployUploadedModule(InputStream fileStream, String fileName) throws IOException {
-        SettingsBean settingsBean = SettingsBean.getInstance();
+    public String deployUploadedModule(InputStream fileStream, String fileName) throws IOException {        SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             throw new IOException(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
         }
@@ -1158,6 +1157,41 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         } finally {
             FileUtils.deleteQuietly(tempFile);
         }
+    }
+
+    @Override
+    public String applyProvisioningYaml(InputStream yamlStream, String fileName) throws IOException {
+        SettingsBean settingsBean = SettingsBean.getInstance();
+        if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
+            throw new IOException(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
+        }
+        if (!settingsBean.isProcessingServer()) {
+            throw new IOException("Provisioning is only available on processing servers");
+        }
+
+        String yamlContent = new String(yamlStream.readAllBytes(), StandardCharsets.UTF_8);
+        if (yamlContent.isBlank()) {
+            throw new IOException("Uploaded YAML file is empty");
+        }
+
+        logger.info("Applying provisioning YAML from uploaded file: {}", fileName);
+        try {
+            provisioningManager.executeScript(yamlContent, "yaml");
+        } catch (Exception e) {
+            // Translate low-level parse / execution errors into a clear user message.
+            // A Jahia provisioning script must be a YAML *list* of operation objects,
+            // e.g.:  - installOrUpgradeBundle: ...
+            //        - karafCommand: "..."
+            // A YAML map (plain key: value document) is not valid and will cause a
+            // Jackson MismatchedInputException inside the provisioning manager.
+            String rootCause = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            throw new IOException(
+                    "Invalid provisioning script '" + fileName + "': " + rootCause +
+                    ". A Jahia provisioning YAML must be a list of operation objects (starting with '- ').",
+                    e);
+        }
+        invalidateUpdatesCache();
+        return "Provisioning script '" + fileName + "' executed successfully";
     }
 
     /**

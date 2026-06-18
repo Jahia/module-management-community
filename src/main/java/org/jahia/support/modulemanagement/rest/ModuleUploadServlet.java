@@ -4,7 +4,9 @@ import org.apache.commons.fileupload.FileItemIterator;
 import org.apache.commons.fileupload.FileItemStream;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
+import org.jahia.params.valves.AuthValveContext;
 import org.jahia.services.content.JCRSessionFactory;
+import org.jahia.services.securityfilter.PermissionService;
 import org.jahia.services.usermanager.JahiaUser;
 import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
@@ -13,6 +15,7 @@ import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.jcr.RepositoryException;
 import javax.servlet.Servlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -22,7 +25,8 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 
 /**
- * HTTP servlet that handles JAR file uploads for module deployment.
+ * HTTP servlet that handles JAR file uploads for module deployment
+ * and YAML provisioning script uploads for direct execution.
  * Registered at /module-management-community/upload via OSGi HTTP Service.
  */
 @Component(
@@ -37,6 +41,9 @@ public class ModuleUploadServlet extends HttpServlet {
 
     @Reference
     private ModuleManagementCommunityService moduleManagementCommunityService;
+
+    @Reference
+    private PermissionService permissionService;
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -53,7 +60,20 @@ public class ModuleUploadServlet extends HttpServlet {
 
         // --- Authentication check ---
         JahiaUser currentUser = JCRSessionFactory.getInstance().getCurrentUser();
-        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser)) {
+        AuthValveContext ctx = (AuthValveContext) request.getAttribute(AuthValveContext.class.getName());
+        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser) || ctx == null || ctx.isAuthRetrievedFromSession()) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            writer.write("{\"error\":\"Authentication required\"}");
+            return;
+        }
+
+        try {
+            if(!permissionService.hasPermission("module-management-community.upload")) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                writer.write("{\"error\":\"Authentication required\"}");
+                return;
+            }
+        } catch (RepositoryException e) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             writer.write("{\"error\":\"Authentication required\"}");
             return;
@@ -76,10 +96,16 @@ public class ModuleUploadServlet extends HttpServlet {
                 FileItemStream item = iterator.next();
                 if (!item.isFormField() && "file".equals(item.getFieldName())) {
                     String fileName = sanitizeFileName(item.getName());
-                    logger.info("Received module upload request for file: {} by user: {}", fileName, currentUser.getName());
+                    String lowerName = fileName.toLowerCase();
+                    logger.info("Received upload request for file: {} by user: {}", fileName, currentUser.getName());
 
                     try (InputStream stream = item.openStream()) {
-                        String result = moduleManagementCommunityService.deployUploadedModule(stream, fileName);
+                        String result;
+                        if (lowerName.endsWith(".yaml") || lowerName.endsWith(".yml")) {
+                            result = moduleManagementCommunityService.applyProvisioningYaml(stream, fileName);
+                        } else {
+                            result = moduleManagementCommunityService.deployUploadedModule(stream, fileName);
+                        }
                         writer.write("{\"message\":" + toJsonString(result) + "}");
                     }
                     return;
@@ -94,7 +120,13 @@ public class ModuleUploadServlet extends HttpServlet {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             writer.write("{\"error\":" + toJsonString(e.getMessage()) + "}");
         } catch (IOException e) {
-            logger.error("Error deploying uploaded module", e);
+            String lowerMsg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+            boolean isYamlError = lowerMsg.contains("provisioning") || lowerMsg.contains("yaml");
+            if (isYamlError) {
+                logger.error("Error executing provisioning YAML upload", e);
+            } else {
+                logger.error("Error deploying uploaded module", e);
+            }
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             writer.write("{\"error\":" + toJsonString(e.getMessage()) + "}");
         }
