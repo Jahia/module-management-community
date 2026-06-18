@@ -129,6 +129,28 @@ public interface ModuleManagementCommunityService {
     String cleanupJcrVersions() throws RepositoryException;
 
     /**
+     * Return store modules that are <em>not</em> currently installed on this server,
+     * filtered to only those compatible with the running Jahia version and having at
+     * least one non-SNAPSHOT release.
+     *
+     * @param searchTerm optional substring filter on the symbolic name (null = all)
+     * @return sorted list of maps with keys {@code symbolicName}, {@code latestVersion},
+     *         {@code storeUrl}, {@code groupId}
+     */
+    List<Map<String, String>> getStoreModulesNotInstalled(String searchTerm);
+
+    /**
+     * Install one or more modules from the store catalogue in a single provisioning
+     * script execution.  For each symbolic name the latest compatible non-SNAPSHOT
+     * version is resolved from the in-memory store index.
+     *
+     * @param symbolicNames list of OSGi symbolic names to install
+     * @return human-readable summary message
+     * @throws IOException if execution fails or no valid modules are found
+     */
+    String installStoreModules(List<String> symbolicNames) throws IOException;
+
+    /**
      * Generate a provisioning YAML script to replay the given modules on another server.
      * Only bundles whose version does NOT contain "SNAPSHOT" are included.
      *

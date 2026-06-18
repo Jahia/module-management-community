@@ -86,4 +86,14 @@ public class ModuleManagementMutationResult {
             @GraphQLName("symbolicNames") List<String> symbolicNames) {
         return moduleManagementCommunityService.generateProvisioningScript(symbolicNames);
     }
+
+    @GraphQLField
+    @GraphQLName("installStoreModules")
+    @GraphQLDescription("Install one or more modules from the store catalogue. " +
+            "The latest compatible non-SNAPSHOT version of each module is resolved and installed " +
+            "via a single provisioning script execution.")
+    public String installStoreModules(
+            @GraphQLName("symbolicNames") List<String> symbolicNames) throws java.io.IOException {
+        return moduleManagementCommunityService.installStoreModules(symbolicNames);
+    }
 }

@@ -349,8 +349,23 @@
         "notYaml": "Only .yaml or .yml files are accepted"
       }
     },
-    "generateScript": {
-      "menuItem": "Generate provisioning script",
+    "installFromStore": {
+      "error": "An error occurred while installing the selected modules",
+      "install": "Install selected ({{count}})",
+      "installing": "Installing…",
+      "loadError": "Failed to load the store module catalogue. Please try again.",
+      "menuItem": "Install from store",
+      "noResults": "No modules match your search.",
+      "noneAvailable": "All store modules compatible with this Jahia version are already installed.",
+      "searchPlaceholder": "Search modules by symbolic name…",
+      "success": "{{count}} module(s) submitted for installation. The list will refresh shortly.",
+      "subtitle": "Browse modules available on the Jahia Store that are not yet installed on this server. Select one or more and click Install.",
+      "successNotification": "Store module installation started. The module list has been refreshed.",
+      "summary": "{{selected}} of {{total}} shown selected · {{totalStore}} total uninstalled compatible modules",
+      "title": "Install from store",
+      "viewOnStore": "View on Jahia Store"
+    },
+    "generateScript": {      "menuItem": "Generate provisioning script",
       "title": "Generate provisioning script",
       "subtitle": "Select the modules to include. Only stable (non-SNAPSHOT) versions are available. Drop the generated YAML into any Jahia server's patches/provisioning folder to replay this module set.",
       "includeTypes": "Include types:",

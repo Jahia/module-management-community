@@ -120,6 +120,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         final String name;       // OSGi symbolic name
         final String groupId;    // Maven groupId
         final String storeUrl;   // Jahia store page URL (module-level remoteUrl)
+        final String title;      // Human-readable display title
+        final String icon;       // Icon image URL
         /**
          * All known version strings (may include SNAPSHOTs).
          */
@@ -133,12 +135,14 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
          */
         final Map<String, String> requiredVersions;
 
-        StoreModuleEntry(String name, String groupId, String storeUrl,
+        StoreModuleEntry(String name, String groupId, String storeUrl, String title, String icon,
                          List<String> versions, Map<String, String> downloadUrls,
                          Map<String, String> requiredVersions) {
             this.name = name;
             this.groupId = groupId;
             this.storeUrl = storeUrl;
+            this.title = title;
+            this.icon = icon;
             this.versions = versions;
             this.downloadUrls = downloadUrls;
             this.requiredVersions = requiredVersions;
@@ -559,6 +563,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     private static void parseModules(JsonNode modulesNode, Map<String, StoreModuleEntry> index) {
         for (JsonNode mod : modulesNode) {
+            // Only index proper Jahia forge modules — skip content nodes of other types
+            if (!"jnt:forgeModule".equals(mod.path("jcrprimarytype").asText(null))) {
+                continue;
+            }
             String name = mod.path("name").asText(null);
             String groupId = mod.path("groupId").asText(null);
             if (name == null || groupId == null) {
@@ -566,6 +574,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             }
             // Module-level store page URL (same for all versions of this module)
             String storeUrl = mod.path("remoteUrl").asText(null);
+            String title = mod.path("title").asText(null);
+            String icon = mod.path("icon").asText(null);
             JsonNode versionsNode = mod.path("versions");
             if (!versionsNode.isArray() || versionsNode.isEmpty()) {
                 continue;
@@ -575,7 +585,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             Map<String, String> requiredVersions = new LinkedHashMap<>();
             parseVersionsNode(versionsNode, versions, downloadUrls, requiredVersions);
             if (!versions.isEmpty()) {
-                index.put(name, new StoreModuleEntry(name, groupId, storeUrl,
+                index.put(name, new StoreModuleEntry(name, groupId, storeUrl, title, icon,
                         versions, downloadUrls, requiredVersions));
             }
         }
@@ -1117,6 +1127,128 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     }
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Map<String, String>> getStoreModulesNotInstalled(String searchTerm) {
+        if (storeModuleIndex.isEmpty()) {
+            refreshStoreIndex();
+        }
+
+        // Collect currently installed symbolic names
+        Set<String> installed = Arrays.stream(bundleContext.getBundles())
+                .map(Bundle::getSymbolicName)
+                .collect(Collectors.toSet());
+
+        VersionScheme vs = new GenericVersionScheme();
+        String lowerSearch = searchTerm != null ? searchTerm.toLowerCase() : "";
+
+        return storeModuleIndex.values().stream()
+                .filter(e -> !installed.contains(e.name))
+                .filter(e -> lowerSearch.isEmpty() || e.name.toLowerCase().contains(lowerSearch))
+                .map(e -> {
+                    // Find the latest compatible non-SNAPSHOT version
+                    String latestVersion = e.versions.stream()
+                            .filter(v -> !v.contains(SNAPSHOT))
+                            .filter(v -> isCompatibleWithJahia(e.requiredVersions.get(v)))
+                            .max((a, b) -> {
+                                try {
+                                    return vs.parseVersion(a).compareTo(vs.parseVersion(b));
+                                } catch (InvalidVersionSpecificationException ex) {
+                                    return a.compareTo(b);
+                                }
+                            })
+                            .orElse(null);
+
+                    if (latestVersion == null) {
+                        return null; // no compatible release — skip
+                    }
+
+                    Map<String, String> result = new LinkedHashMap<>();
+                    result.put("symbolicName", e.name);
+                    result.put("title", e.title != null ? e.title : e.name);
+                    result.put("icon", e.icon != null ? e.icon : "");
+                    result.put("latestVersion", latestVersion);
+                    result.put("storeUrl", e.storeUrl != null ? e.storeUrl : "");
+                    result.put("groupId", e.groupId != null ? e.groupId : "");
+                    return result;
+                })
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(m -> m.get("symbolicName")))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public String installStoreModules(List<String> symbolicNames) throws IOException {
+        SettingsBean settingsBean = SettingsBean.getInstance();
+        if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
+            throw new IOException(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
+        }
+        if (!settingsBean.isProcessingServer()) {
+            throw new IOException("Module installation is only available on processing servers");
+        }
+        if (symbolicNames == null || symbolicNames.isEmpty()) {
+            throw new IOException("No modules selected for installation");
+        }
+
+        VersionScheme vs = new GenericVersionScheme();
+        StringBuilder sb = new StringBuilder();
+        sb.append("- installOrUpgradeBundle:\n");
+
+        List<String> included = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
+
+        for (String name : symbolicNames) {
+            StoreModuleEntry entry = storeModuleIndex.get(name);
+            if (entry == null) {
+                skipped.add(name + " (not in store index)");
+                continue;
+            }
+
+            String version = entry.versions.stream()
+                    .filter(v -> !v.contains(SNAPSHOT))
+                    .filter(v -> isCompatibleWithJahia(entry.requiredVersions.get(v)))
+                    .max((a, b) -> {
+                        try {
+                            return vs.parseVersion(a).compareTo(vs.parseVersion(b));
+                        } catch (InvalidVersionSpecificationException e) {
+                            return a.compareTo(b);
+                        }
+                    })
+                    .orElse(null);
+
+            if (version == null) {
+                skipped.add(name + " (no compatible version)");
+                continue;
+            }
+
+            String url = entry.downloadUrls.getOrDefault(
+                    version,
+                    "mvn:" + entry.groupId + "/" + name + "/" + version
+            );
+            sb.append("  - url: '").append(url).append("'\n");
+            included.add(name + "@" + version);
+        }
+
+        sb.append("  autoStart: true\n");
+        sb.append("  uninstallPreviousVersion: false\n");
+        sb.append("  ignoreChecks: false\n");
+
+        if (included.isEmpty()) {
+            throw new IOException("No valid store modules found to install. Skipped: " + String.join(", ", skipped));
+        }
+
+        logger.info("Installing {} module(s) from store: {}", included.size(), included);
+        provisioningManager.executeScript(sb.toString(), "yaml");
+        invalidateUpdatesCache();
+
+        StringBuilder result = new StringBuilder("Successfully installed ")
+                .append(included.size()).append(" module(s): ")
+                .append(String.join(", ", included));
+        if (!skipped.isEmpty()) {
+            result.append(". Skipped: ").append(String.join(", ", skipped));
+        }
+        return result.toString();
     }
 
     /**

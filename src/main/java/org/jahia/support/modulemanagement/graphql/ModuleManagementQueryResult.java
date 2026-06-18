@@ -17,8 +17,10 @@ import org.osgi.framework.FrameworkUtil;
 import javax.inject.Inject;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -121,6 +123,58 @@ public class ModuleManagementQueryResult {
     @GraphQLDescription("Return true if the Jahia instance is clustered")
     public boolean isClustered() {
         return settingsBean.isClusterActivated();
+    }
+
+    @GraphQLField
+    @GraphQLName("storeModules")
+    @GraphQLDescription("Return store modules that are not currently installed on this server, " +
+            "compatible with the running Jahia version, sorted by symbolic name.")
+    public List<GqlAvailableStoreModule> getStoreModules(
+            @GraphQLName("searchTerm") String searchTerm) {
+        return getModuleManagementCommunityService()
+                .getStoreModulesNotInstalled(searchTerm)
+                .stream()
+                .map(GqlAvailableStoreModule::new)
+                .collect(Collectors.toList());
+    }
+
+    @GraphQLName("GqlAvailableStoreModule")
+    public static class GqlAvailableStoreModule {
+        private final Map<String, String> data;
+
+        public GqlAvailableStoreModule(Map<String, String> data) {
+            this.data = data;
+        }
+
+        @GraphQLField
+        @GraphQLName("symbolicName")
+        public String getSymbolicName() {
+            return data.get("symbolicName");
+        }
+
+        @GraphQLField
+        @GraphQLName("title")
+        public String getTitle() {
+            return data.get("title");
+        }
+
+        @GraphQLField
+        @GraphQLName("icon")
+        public String getIcon() {
+            return data.get("icon");
+        }
+
+        @GraphQLField
+        @GraphQLName("latestVersion")
+        public String getLatestVersion() {
+            return data.get("latestVersion");
+        }
+
+        @GraphQLField
+        @GraphQLName("storeUrl")
+        public String getStoreUrl() {
+            return data.get("storeUrl");
+        }
     }
 
     public class GqlFeature {

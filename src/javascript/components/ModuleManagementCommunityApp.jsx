@@ -35,6 +35,7 @@ import {ExportModulesDialog} from './ExportModulesDialog';
 import {DryRunResultDialog} from './DryRunResultDialog';
 import {UpdateOptionsPopover} from './UpdateOptionsPopover';
 import {GenerateScriptDialog} from './GenerateScriptDialog';
+import {InstallFromStoreDialog} from './InstallFromStoreDialog';
 import PropTypes from 'prop-types';
 
 // ── GraphQL documents ────────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ const ModuleManagementCommunityApp = () => {
     const [isUploadOpen, setIsUploadOpen] = useState(false);
     const [isExportOpen, setIsExportOpen] = useState(false);
     const [isGenerateScriptOpen, setIsGenerateScriptOpen] = useState(false);
+    const [isInstallFromStoreOpen, setIsInstallFromStoreOpen] = useState(false);
     const [menuAnchor, setMenuAnchor] = useState(null);
     const [dryRunResult, setDryRunResult] = useState(null);
 
@@ -413,6 +415,12 @@ const ModuleManagementCommunityApp = () => {
                                           setMenuAnchor(null);
                                           setIsGenerateScriptOpen(true);
                                       }}/>
+                            <MenuItem label={t('label.installFromStore.menuItem')}
+                                      iconStart={<Upload/>}
+                                      onClick={() => {
+                                          setMenuAnchor(null);
+                                          setIsInstallFromStoreOpen(true);
+                                      }}/>
                             <Divider/>
                             <MenuItem label={t('label.cleanup.jcr')}
                                       iconStart={<DeletePermanently/>}
@@ -601,6 +609,16 @@ const ModuleManagementCommunityApp = () => {
                                 modules={dryRunResult?.modules}
                                 yamlScript={dryRunResult?.yamlScript}
                                 onClose={() => setDryRunResult(null)}/>
+            <InstallFromStoreDialog
+                isOpen={isInstallFromStoreOpen}
+                onClose={() => setIsInstallFromStoreOpen(false)}
+                onInstallSuccess={() => {
+                    setIsInstallFromStoreOpen(false);
+                    notificationContext.notify(t('label.installFromStore.successNotification'), ['closeButton', 'closeAfter5s']);
+                    refreshAllModules();
+                    refetch();
+                }}
+            />
         </Card>
     );
 };
