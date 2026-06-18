@@ -1,7 +1,6 @@
 package org.jahia.support.modulemanagement;
 
 import org.apache.karaf.features.Feature;
-import org.jahia.support.modulemanagement.UpdateModulesResult;
 import org.osgi.framework.Bundle;
 
 import javax.jcr.RepositoryException;

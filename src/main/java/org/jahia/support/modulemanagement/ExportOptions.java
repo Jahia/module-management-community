@@ -66,9 +66,4 @@ public class ExportOptions {
         }
         return new ExportOptions(parsed, embedAll);
     }
-
-    /** @deprecated use {@link #fromParams(String, boolean)} */
-    public static ExportOptions fromTypeParam(String typeParam) {
-        return fromParams(typeParam, true);
-    }
 }

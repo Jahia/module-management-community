@@ -6,7 +6,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.felix.utils.collections.MapToDictionary;
-import java.util.ArrayList;
 import org.apache.karaf.features.Feature;
 import org.apache.karaf.features.FeaturesService;
 import org.apache.maven.artifact.repository.metadata.Versioning;
@@ -41,6 +40,7 @@ import org.jahia.services.templates.JahiaTemplateManagerService;
 import org.jahia.services.usermanager.JahiaUser;
 import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.jahia.settings.SettingsBean;
+import org.jahia.support.modulemanagement.ExportOptions;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.jahia.support.modulemanagement.UpdateModulesResult;
 import org.jahia.support.modulemanagement.config.ModuleManagementCommunityConfig;
@@ -59,15 +59,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.jcr.Node;
 import javax.jcr.RepositoryException;
 import javax.jcr.query.Query;
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -77,13 +73,12 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
-import org.jahia.support.modulemanagement.ExportOptions;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 @Component(service = ModuleManagementCommunityService.class, immediate = true, configurationPid = "org.jahia.support.modulemanagement.services.ModuleManagementCommunityService", configurationPolicy = ConfigurationPolicy.REQUIRE)
 @Designate(ocd = ModuleManagementCommunityConfig.class)
@@ -94,19 +89,27 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     public static final String CLUSTER_SYNCHRONIZED_YAML_SKIPPED = "module-management-community.clusterSynchronized.yaml.skipped"; // We need to use skipped suffix to avoid execution on startup before cluster is ready
     public static final String CLUSTER_SYNCHRONIZED_YAML = "module-management-community.clusterSynchronized.yaml";
 
-    /** URL of the Jahia store module catalogue — configurable, refreshed periodically by the background job. */
+    /**
+     * URL of the Jahia store module catalogue — configurable, refreshed periodically by the background job.
+     */
     private static final String STORE_MODULE_LIST_URL =
             "https://store.jahia.com/en/sites/private-app-store/contents/modules-repository.moduleList.json";
 
     private final Logger logger = LoggerFactory.getLogger(ModuleManagementCommunityServiceImpl.class);
 
     // ── Store index (replaces Maven for Jahia module update checks) ──────────────
-    /** Immutable snapshot; replaced atomically on every refresh. */
+    /**
+     * Immutable snapshot; replaced atomically on every refresh.
+     */
     private volatile Map<String, StoreModuleEntry> storeModuleIndex = Collections.emptyMap();
     private volatile Instant storeIndexLastFetched = null;
-    /** Effective URL read from OSGi config at activation time. */
+    /**
+     * Effective URL read from OSGi config at activation time.
+     */
     private String storeModuleListUrl = STORE_MODULE_LIST_URL;
-    /** Current Jahia version, parsed once at activation for store compatibility checks. */
+    /**
+     * Current Jahia version, parsed once at activation for store compatibility checks.
+     */
     private org.osgi.framework.Version jahiaVersion;
 
     /**
@@ -117,11 +120,17 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         final String name;       // OSGi symbolic name
         final String groupId;    // Maven groupId
         final String storeUrl;   // Jahia store page URL (module-level remoteUrl)
-        /** All known version strings (may include SNAPSHOTs). */
+        /**
+         * All known version strings (may include SNAPSHOTs).
+         */
         final List<String> versions;
-        /** version → direct download URL (may be empty for some versions). */
+        /**
+         * version → direct download URL (may be empty for some versions).
+         */
         final Map<String, String> downloadUrls;
-        /** version → minimum Jahia version string required (e.g. {@code "8.1.6.0"}). */
+        /**
+         * version → minimum Jahia version string required (e.g. {@code "8.1.6.0"}).
+         */
         final Map<String, String> requiredVersions;
 
         StoreModuleEntry(String name, String groupId, String storeUrl,
@@ -325,8 +334,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * <p><strong>Slow path (non-Jahia bundles)</strong>: still uses Maven metadata lookup, but
      * only executed when {@code jahiaOnly = false} is explicitly requested.
      *
-     * @param jahiaOnly If true, only Jahia modules (module / system / templatesSet) are checked.
-     * @param filters   Optional regex patterns to restrict which modules are checked.
+     * @param jahiaOnly   If true, only Jahia modules (module / system / templatesSet) are checked.
+     * @param filters     Optional regex patterns to restrict which modules are checked.
      * @param forceUpdate When true, bypass the 2-hour result cache.
      * @return Set of update keys in the form {@code symbolicName/currentVersion : latestVersion}.
      */
@@ -356,26 +365,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
         // ── Slow path: Maven for plain OSGi bundles (only when caller asks) ───────
         if (!jahiaOnly) {
-            MavenResolver resolver = BundleUtils.getOsgiService(MavenResolver.class, null);
-            if (resolver != null) {
-                ModuleManager moduleManager = BundleUtils.getOsgiService(ModuleManager.class, null);
-                if (moduleManager != null) {
-                    moduleManager.getAllLocalInfos().forEach((key, bundleInfo) -> {
-                        if (bundleInfo.getOsgiState() == BundleState.ACTIVE) {
-                            String bKey = getBundleKey(key);
-                            Bundle bundle = BundleUtils.getBundle(
-                                    StringUtils.substringBeforeLast(bKey, "/"),
-                                    StringUtils.substringAfterLast(bKey, "/"));
-                            // Only check non-Jahia bundles here; Jahia modules are handled above
-                            if (bundle != null && !BundleUtils.isJahiaModuleBundle(bundle)) {
-                                checkBundleUpdates(key, bundleInfo, resolver);
-                            }
-                        }
-                    });
-                }
-            } else {
-                logger.warn("Maven resolver not available — non-Jahia bundle updates cannot be checked");
-            }
+            checkMaven();
         }
 
         lastUpdateTime = Instant.now();
@@ -399,6 +389,29 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return availableUpdates;
     }
 
+    private void checkMaven() {
+        MavenResolver resolver = BundleUtils.getOsgiService(MavenResolver.class, null);
+        if (resolver != null) {
+            ModuleManager moduleManager = BundleUtils.getOsgiService(ModuleManager.class, null);
+            if (moduleManager != null) {
+                moduleManager.getAllLocalInfos().forEach((key, bundleInfo) -> {
+                    if (bundleInfo.getOsgiState() == BundleState.ACTIVE) {
+                        String bKey = getBundleKey(key);
+                        Bundle bundle = BundleUtils.getBundle(
+                                StringUtils.substringBeforeLast(bKey, "/"),
+                                StringUtils.substringAfterLast(bKey, "/"));
+                        // Only check non-Jahia bundles here; Jahia modules are handled above
+                        if (bundle != null && !BundleUtils.isJahiaModuleBundle(bundle)) {
+                            checkBundleUpdates(key, bundleInfo, resolver);
+                        }
+                    }
+                });
+            }
+        } else {
+            logger.warn("Maven resolver not available — non-Jahia bundle updates cannot be checked");
+        }
+    }
+
     // ── Store index management ─────────────────────────────────────────────────────
 
     /**
@@ -414,10 +427,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         VersionScheme vs = new GenericVersionScheme();
         int found = 0;
         for (Bundle bundle : bundleContext.getBundles()) {
-            if (bundle.getState() != Bundle.ACTIVE) {
-                continue;
-            }
-            if (!BundleUtils.isJahiaModuleBundle(bundle)) {
+            if (bundle.getState() != Bundle.ACTIVE || !BundleUtils.isJahiaModuleBundle(bundle)) {
                 continue;
             }
             String symbolicName = bundle.getSymbolicName();
@@ -425,50 +435,57 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 logger.debug("Skipping excluded module: {}", symbolicName);
                 continue;
             }
-            StoreModuleEntry entry = storeModuleIndex.get(symbolicName);
-            if (entry == null) {
-                logger.debug("Module {} not found in store index", symbolicName);
-                continue;
-            }
-            try {
-                Version installed = vs.parseVersion(bundle.getVersion().toString());
-                Version latestStore = null;
-                String latestVersionStr = null;
-                for (String vStr : entry.versions) {
-                    if (vStr.contains(SNAPSHOT)) {
-                        continue;
-                    }
-                    if (!isCompatibleWithJahia(entry.requiredVersions.get(vStr))) {
-                        logger.debug("Skipping {} {} — requires newer Jahia (required: {})",
-                                symbolicName, vStr, entry.requiredVersions.get(vStr));
-                        continue;
-                    }
-                    try {
-                        Version v = vs.parseVersion(vStr);
-                        if (latestStore == null || v.compareTo(latestStore) > 0) {
-                            latestStore = v;
-                            latestVersionStr = vStr;
-                        }
-                    } catch (InvalidVersionSpecificationException ignore) {
-                        logger.debug("Unparseable store version {} for {}", vStr, symbolicName);
-                    }
-                }
-                if (latestStore != null && latestVersionStr != null
-                        && latestStore.compareTo(installed) > 0) {
-                    String key = symbolicName + "/" + bundle.getVersion() + " : " + latestVersionStr;
-                    // Prefer the direct download URL; fall back to an mvn: coordinate
-                    String url = entry.downloadUrls.getOrDefault(
-                            latestVersionStr,
-                            "mvn:" + entry.groupId + "/" + symbolicName + "/" + latestVersionStr);
-                    modulesWithUpdates.put(key, url);
-                    found++;
-                    logger.debug("Store update found: {} {} → {}", symbolicName, bundle.getVersion(), latestVersionStr);
-                }
-            } catch (InvalidVersionSpecificationException e) {
-                logger.debug("Cannot parse installed version for {}: {}", symbolicName, e.getMessage());
+            if (lookupBundle(bundle, symbolicName, vs)) {
+                found++;
             }
         }
         logger.info("Store index check complete: {} update(s) found across Jahia modules", found);
+    }
+
+    private boolean lookupBundle(Bundle bundle, String symbolicName, VersionScheme vs) {
+        boolean found = false;
+        StoreModuleEntry entry = storeModuleIndex.get(symbolicName);
+        if (entry == null) {
+            logger.debug("Module {} not found in store index", symbolicName);
+            return found;
+        }
+        try {
+            Version installed = vs.parseVersion(bundle.getVersion().toString());
+            Version latestStore = null;
+            String latestVersionStr = null;
+            for (String vStr : entry.versions) {
+                if (vStr.contains(SNAPSHOT)) {
+                    continue;
+                }
+                if (!isCompatibleWithJahia(entry.requiredVersions.get(vStr))) {
+                    logger.debug("Skipping {} {} — requires newer Jahia (required: {})",
+                            symbolicName, vStr, entry.requiredVersions.get(vStr));
+                    continue;
+                }
+                try {
+                    Version v = vs.parseVersion(vStr);
+                    if (latestStore == null || v.compareTo(latestStore) > 0) {
+                        latestStore = v;
+                        latestVersionStr = vStr;
+                    }
+                } catch (InvalidVersionSpecificationException ignore) {
+                    logger.debug("Unparseable store version {} for {}", vStr, symbolicName);
+                }
+            }
+            if (latestStore != null && latestStore.compareTo(installed) > 0) {
+                String key = symbolicName + "/" + bundle.getVersion() + " : " + latestVersionStr;
+                // Prefer the direct download URL; fall back to an mvn: coordinate
+                String url = entry.downloadUrls.getOrDefault(
+                        latestVersionStr,
+                        "mvn:" + entry.groupId + "/" + symbolicName + "/" + latestVersionStr);
+                modulesWithUpdates.put(key, url);
+                found = true;
+                logger.debug("Store update found: {} {} → {}", symbolicName, bundle.getVersion(), latestVersionStr);
+            }
+        } catch (InvalidVersionSpecificationException e) {
+            logger.debug("Cannot parse installed version for {}: {}", symbolicName, e.getMessage());
+        }
+        return found;
     }
 
     @Override
@@ -496,7 +513,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
     }
 
-    /** Load the bundled (classpath) copy of the store module list as an offline fallback. */
+    /**
+     * Load the bundled (classpath) copy of the store module list as an offline fallback.
+     */
     private void loadBundledStoreIndex() {
         URL resource = getClass().getClassLoader().getResource("modules-repository.moduleList.json");
         if (resource == null) {
@@ -533,44 +552,52 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             if (modulesNode == null || !modulesNode.isArray()) {
                 continue;
             }
-            for (JsonNode mod : modulesNode) {
-                String name = mod.path("name").asText(null);
-                String groupId = mod.path("groupId").asText(null);
-                if (name == null || groupId == null) {
-                    continue;
-                }
-                // Module-level store page URL (same for all versions of this module)
-                String storeUrl = mod.path("remoteUrl").asText(null);
-                JsonNode versionsNode = mod.path("versions");
-                if (!versionsNode.isArray() || versionsNode.isEmpty()) {
-                    continue;
-                }
-                List<String> versions = new ArrayList<>();
-                Map<String, String> downloadUrls = new LinkedHashMap<>();
-                Map<String, String> requiredVersions = new LinkedHashMap<>();
-                for (JsonNode vEntry : versionsNode) {
-                    String version = vEntry.path("version").asText(null);
-                    if (version == null || version.isEmpty()) {
-                        continue;
-                    }
-                    String downloadUrl = vEntry.path("downloadUrl").asText(null);
-                    String requiredVersion = vEntry.path("requiredVersion").asText(null);
-                    versions.add(version);
-                    if (downloadUrl != null && !downloadUrl.isEmpty()) {
-                        downloadUrls.put(version, downloadUrl);
-                    }
-                    if (requiredVersion != null && requiredVersion.startsWith("version-")) {
-                        requiredVersions.put(version,
-                                StringUtils.substringAfter(requiredVersion, "version-"));
-                    }
-                }
-                if (!versions.isEmpty()) {
-                    index.put(name, new StoreModuleEntry(name, groupId, storeUrl,
-                            versions, downloadUrls, requiredVersions));
-                }
-            }
+            parseModules(modulesNode, index);
         }
         return index;
+    }
+
+    private static void parseModules(JsonNode modulesNode, Map<String, StoreModuleEntry> index) {
+        for (JsonNode mod : modulesNode) {
+            String name = mod.path("name").asText(null);
+            String groupId = mod.path("groupId").asText(null);
+            if (name == null || groupId == null) {
+                continue;
+            }
+            // Module-level store page URL (same for all versions of this module)
+            String storeUrl = mod.path("remoteUrl").asText(null);
+            JsonNode versionsNode = mod.path("versions");
+            if (!versionsNode.isArray() || versionsNode.isEmpty()) {
+                continue;
+            }
+            List<String> versions = new ArrayList<>();
+            Map<String, String> downloadUrls = new LinkedHashMap<>();
+            Map<String, String> requiredVersions = new LinkedHashMap<>();
+            parseVersionsNode(versionsNode, versions, downloadUrls, requiredVersions);
+            if (!versions.isEmpty()) {
+                index.put(name, new StoreModuleEntry(name, groupId, storeUrl,
+                        versions, downloadUrls, requiredVersions));
+            }
+        }
+    }
+
+    private static void parseVersionsNode(JsonNode versionsNode, List<String> versions, Map<String, String> downloadUrls, Map<String, String> requiredVersions) {
+        for (JsonNode vEntry : versionsNode) {
+            String version = vEntry.path("version").asText(null);
+            if (version == null || version.isEmpty()) {
+                continue;
+            }
+            String downloadUrl = vEntry.path("downloadUrl").asText(null);
+            String requiredVersion = vEntry.path("requiredVersion").asText(null);
+            versions.add(version);
+            if (downloadUrl != null && !downloadUrl.isEmpty()) {
+                downloadUrls.put(version, downloadUrl);
+            }
+            if (requiredVersion != null && requiredVersion.startsWith("version-")) {
+                requiredVersions.put(version,
+                        StringUtils.substringAfter(requiredVersion, "version-"));
+            }
+        }
     }
 
     private void checkBundleUpdates(String bundleKey, BundleService.BundleInformation bundleInfo, MavenResolver resolver) {
@@ -887,32 +914,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     while (versionFolders.hasNext()) {
                         javax.jcr.Node versionFolder = versionFolders.nextNode();
                         if (versionFolder.isNodeType("jnt:moduleManagementBundleFolder")) {
-                            javax.jcr.NodeIterator jarNodes = versionFolder.getNodes();
-                            while (jarNodes.hasNext()) {
-                                javax.jcr.Node jarNode = jarNodes.nextNode();
-                                if (jarNode.isNodeType("jnt:moduleManagementBundle")) {
-                                    Map<String, Object> info = new HashMap<>();
-                                    info.put("version", versionFolder.getName());
-                                    info.put("jcrPath", jarNode.getPath());
-                                    info.put("fileName", jarNode.getName());
-                                    try {
-                                        if (jarNode.hasNode("jcr:content")) {
-                                            javax.jcr.Node content = jarNode.getNode("jcr:content");
-                                            if (content.hasProperty("jcr:data")) {
-                                                javax.jcr.Binary bin = content.getProperty("jcr:data").getBinary();
-                                                info.put("size", bin.getSize());
-                                                bin.dispose();
-                                            }
-                                            if (content.hasProperty("jcr:lastModified")) {
-                                                info.put("lastModified", content.getProperty("jcr:lastModified").getDate().toInstant().toString());
-                                            }
-                                        }
-                                    } catch (Exception e) {
-                                        logger.warn("Error reading metadata for {} version {}", bundle.getSymbolicName(), versionFolder.getName(), e);
-                                    }
-                                    versions.add(info);
-                                }
-                            }
+                            parseJARNodes(bundle, versionFolder, versions);
                         }
                     }
                     versions.sort((a, b) -> {
@@ -939,6 +941,39 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 });
     }
 
+    private void parseJARNodes(Bundle bundle, Node versionFolder, List<Map<String, Object>> versions) throws RepositoryException {
+        javax.jcr.NodeIterator jarNodes = versionFolder.getNodes();
+        while (jarNodes.hasNext()) {
+            Node jarNode = jarNodes.nextNode();
+            if (jarNode.isNodeType("jnt:moduleManagementBundle")) {
+                Map<String, Object> info = new HashMap<>();
+                info.put("version", versionFolder.getName());
+                info.put("jcrPath", jarNode.getPath());
+                info.put("fileName", jarNode.getName());
+                getJARBinaryInfo(bundle, versionFolder, jarNode, info);
+                versions.add(info);
+            }
+        }
+    }
+
+    private void getJARBinaryInfo(Bundle bundle, Node versionFolder, Node jarNode, Map<String, Object> info) throws RepositoryException {
+        try {
+            if (jarNode.hasNode("jcr:content")) {
+                Node content = jarNode.getNode("jcr:content");
+                if (content.hasProperty("jcr:data")) {
+                    javax.jcr.Binary bin = content.getProperty("jcr:data").getBinary();
+                    info.put("size", bin.getSize());
+                    bin.dispose();
+                }
+                if (content.hasProperty("jcr:lastModified")) {
+                    info.put("lastModified", content.getProperty("jcr:lastModified").getDate().toInstant().toString());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error reading metadata for {} version {}", bundle.getSymbolicName(), versionFolder.getName(), e);
+        }
+    }
+
     @Override
     public String installBundleVersionFromJcr(String jcrPath) throws IOException {
         // Derive symbolicName and targetVersion from the JCR path structure:
@@ -963,30 +998,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         File tempFile = File.createTempFile("bundle-rollback-", ".jar", new File(settingsBean.getTmpContentDiskPath()));
         final String[] fileNameHolder = {null};
 
-        try {
-            // Stream JCR binary directly to disk — never holds the full JAR in memory
-            jcrTemplate.doExecuteWithSystemSessionAsUser(
-                    jahiaUserManagerService.lookupRootUser().getJahiaUser(),
-                    Constants.EDIT_WORKSPACE, null,
-                    session -> {
-                        javax.jcr.Node jarNode = session.getNode(jcrPath);
-                        fileNameHolder[0] = jarNode.getName();
-                        javax.jcr.Node content = jarNode.getNode("jcr:content");
-                        javax.jcr.Binary binary = content.getProperty("jcr:data").getBinary();
-                        try (java.io.InputStream in = new java.io.BufferedInputStream(binary.getStream(), 64 * 1024);
-                             java.io.OutputStream out = new java.io.BufferedOutputStream(new java.io.FileOutputStream(tempFile), 64 * 1024)) {
-                            org.apache.commons.io.IOUtils.copy(in, out);
-                        } catch (IOException e) {
-                            throw new RepositoryException("Error streaming JAR binary to disk", e);
-                        } finally {
-                            binary.dispose();
-                        }
-                        return null;
-                    });
-        } catch (RepositoryException e) {
-            FileUtils.deleteQuietly(tempFile);
-            throw new IOException("Error reading bundle from JCR path: " + jcrPath, e);
-        }
+        copyJARToTmpFile(jcrPath, fileNameHolder, tempFile);
 
         String fileName = fileNameHolder[0];
         try {
@@ -1050,6 +1062,33 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
         invalidateUpdatesCache();
         return result;
+    }
+
+    private void copyJARToTmpFile(String jcrPath, String[] fileNameHolder, File tempFile) throws IOException {
+        try {
+            // Stream JCR binary directly to disk — never holds the full JAR in memory
+            jcrTemplate.doExecuteWithSystemSessionAsUser(
+                    jahiaUserManagerService.lookupRootUser().getJahiaUser(),
+                    Constants.EDIT_WORKSPACE, null,
+                    session -> {
+                        Node jarNode = session.getNode(jcrPath);
+                        fileNameHolder[0] = jarNode.getName();
+                        Node content = jarNode.getNode("jcr:content");
+                        javax.jcr.Binary binary = content.getProperty("jcr:data").getBinary();
+                        try (InputStream in = new BufferedInputStream(binary.getStream(), 64 * 1024);
+                             OutputStream out = new BufferedOutputStream(new FileOutputStream(tempFile), 64 * 1024)) {
+                            org.apache.commons.io.IOUtils.copy(in, out);
+                        } catch (IOException e) {
+                            throw new RepositoryException("Error streaming JAR binary to disk", e);
+                        } finally {
+                            binary.dispose();
+                        }
+                        return null;
+                    });
+        } catch (RepositoryException e) {
+            FileUtils.deleteQuietly(tempFile);
+            throw new IOException("Error reading bundle from JCR path: " + jcrPath, e);
+        }
     }
 
     @Override
@@ -1130,7 +1169,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     }
 
     @Override
-    public String deployUploadedModule(InputStream fileStream, String fileName) throws IOException {        SettingsBean settingsBean = SettingsBean.getInstance();
+    public String deployUploadedModule(InputStream fileStream, String fileName) throws IOException {
+        SettingsBean settingsBean = SettingsBean.getInstance();
         if (settingsBean.isMaintenanceMode() || settingsBean.isReadOnlyMode() || settingsBean.isFullReadOnlyMode()) {
             throw new IOException(SERVICE_IS_NOT_AVAILABLE_IN_READ_ONLY_MODE);
         }
@@ -1187,7 +1227,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             String rootCause = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             throw new IOException(
                     "Invalid provisioning script '" + fileName + "': " + rootCause +
-                    ". A Jahia provisioning YAML must be a list of operation objects (starting with '- ').",
+                            ". A Jahia provisioning YAML must be a list of operation objects (starting with '- ').",
                     e);
         }
         invalidateUpdatesCache();
@@ -1354,7 +1394,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * @param mavenFallbacks zipEntryName → mvn: URL for bundles where embedAll=true but JAR could not be resolved
      */
     private String buildExportYamlString(List<Bundle> bundles, Map<String, File> embeddedJars,
-                                          boolean embedAll, Map<String, String> mavenFallbacks) {
+                                         boolean embedAll, Map<String, String> mavenFallbacks) {
         int defaultStartLevel = SettingsBean.getInstance().getModuleStartLevel();
         StringBuilder sb = new StringBuilder();
         sb.append("# Generated by Module Management Community\n");
@@ -1369,32 +1409,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             String mavenUrl = resolveMavenUrl(bundle);
             int sl = getBundleStartLevel(bundle);
 
-            if (!embedAll && mavenUrl != null) {
-                // Maven-only mode: emit mvn: URL directly
-                sb.append("  - url: '").append(mavenUrl).append("'\n");
-                if (sl != defaultStartLevel) {
-                    sb.append("    startLevel: ").append(sl).append("\n");
-                }
-                included++;
-            } else {
-                // Embed mode (or non-Maven bundle)
-                boolean isEmbedded = (embeddedJars == null) || embeddedJars.containsKey(entryName);
-                if (isEmbedded) {
-                    sb.append("  - url: '${archiveRoot}/").append(entryName).append("'\n");
-                    if (sl != defaultStartLevel) {
-                        sb.append("    startLevel: ").append(sl).append("\n");
-                    }
-                    included++;
-                } else if (mavenFallbacks != null && mavenFallbacks.containsKey(entryName)) {
-                    // JAR not in local cache — fall back to mvn: URL with a comment
-                    sb.append("  - url: '").append(mavenFallbacks.get(entryName)).append("' # JAR not found locally\n");
-                    if (sl != defaultStartLevel) {
-                        sb.append("    startLevel: ").append(sl).append("\n");
-                    }
-                    included++;
-                }
-                // else: skipped — already warned during first pass
-            }
+            included = getIncludedBundles(embeddedJars, embedAll, mavenFallbacks, mavenUrl, sb, sl, defaultStartLevel, included, entryName);
         }
 
         sb.append("  autoStart: true\n");
@@ -1405,7 +1420,39 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return sb.toString();
     }
 
-    /** Preview / simple overload — no fallbacks map needed. */
+    private static int getIncludedBundles(Map<String, File> embeddedJars, boolean embedAll, Map<String, String> mavenFallbacks, String mavenUrl, StringBuilder sb, int sl, int defaultStartLevel, int included, String entryName) {
+        if (!embedAll && mavenUrl != null) {
+            // Maven-only mode: emit mvn: URL directly
+            sb.append("  - url: '").append(mavenUrl).append("'\n");
+            if (sl != defaultStartLevel) {
+                sb.append("    startLevel: ").append(sl).append("\n");
+            }
+            included++;
+        } else {
+            // Embed mode (or non-Maven bundle)
+            boolean isEmbedded = (embeddedJars == null) || embeddedJars.containsKey(entryName);
+            if (isEmbedded) {
+                sb.append("  - url: '${archiveRoot}/").append(entryName).append("'\n");
+                if (sl != defaultStartLevel) {
+                    sb.append("    startLevel: ").append(sl).append("\n");
+                }
+                included++;
+            } else if (mavenFallbacks != null && mavenFallbacks.containsKey(entryName)) {
+                // JAR not in local cache — fall back to mvn: URL with a comment
+                sb.append("  - url: '").append(mavenFallbacks.get(entryName)).append("' # JAR not found locally\n");
+                if (sl != defaultStartLevel) {
+                    sb.append("    startLevel: ").append(sl).append("\n");
+                }
+                included++;
+            }
+            // else: skipped — already warned during first pass
+        }
+        return included;
+    }
+
+    /**
+     * Preview / simple overload — no fallbacks map needed.
+     */
     private String buildExportYamlString(List<Bundle> bundles, Map<String, File> embeddedJars, boolean embedAll) {
         return buildExportYamlString(bundles, embeddedJars, embedAll, Collections.emptyMap());
     }
@@ -1517,13 +1564,17 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return null;
     }
 
-    /** @deprecated kept for backward compatibility — use {@link #resolveJarFromJcr}/{@link #resolveJarFromDisk} */
+    /**
+     * @deprecated kept for backward compatibility — use {@link #resolveJarFromJcr}/{@link #resolveJarFromDisk}
+     */
     private File resolveAnyJarFile(Bundle bundle, MavenResolver resolver) {
         File jar = resolveJarFromJcr(bundle);
         return jar != null ? jar : resolveJarFromDisk(bundle);
     }
 
-    /** @deprecated use {@link #resolveAnyJarFile} */
+    /**
+     * @deprecated use {@link #resolveAnyJarFile}
+     */
     private File resolveJarFileForEmbed(Bundle bundle, MavenResolver resolver) {
         return resolveAnyJarFile(bundle, resolver);
     }
@@ -1622,7 +1673,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         final Map<String, Set<String>> osgiVersions = new HashMap<>();
         for (Bundle b : bundleContext.getBundles()) {
             osgiVersions.computeIfAbsent(b.getSymbolicName(), k -> new HashSet<>())
-                        .add(b.getVersion().toString());
+                    .add(b.getVersion().toString());
         }
 
         final int[] removed = {0};
@@ -1649,54 +1700,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                             continue; // Nothing to clean up for this module
                         }
 
-                        // Derive the symbolic name from the module folder path
-                        String moduleFolderPath = entry.getKey();
-                        String symbolicName = moduleFolderPath.substring(moduleFolderPath.lastIndexOf('/') + 1);
-
-                        // Sort descending (newest version first)
-                        List<javax.jcr.Node> sorted = new ArrayList<>(versionFolders);
-                        sorted.sort((a, b) -> {
-                            try {
-                                return vs.parseVersion(b.getName()).compareTo(vs.parseVersion(a.getName()));
-                            } catch (Exception e) {
-                                try {
-                                    return b.getName().compareTo(a.getName());
-                                } catch (Exception ex) {
-                                    return 0;
-                                }
-                            }
-                        });
-
-                        // Determine which version names to retain
-                        Set<String> keep = new LinkedHashSet<>();
-                        // 1) Always keep every version that is currently in OSGi
-                        keep.addAll(osgiVersions.getOrDefault(symbolicName, Collections.emptySet()));
-                        // 2) Keep the most-recent JCR version
-                        if (!sorted.isEmpty()) {
-                            try { keep.add(sorted.get(0).getName()); } catch (RepositoryException ignored) {}
-                        }
-                        // 3) Keep one additional "previous" version
-                        for (javax.jcr.Node vf : sorted) {
-                            if (keep.size() >= 2) break;
-                            try { keep.add(vf.getName()); } catch (RepositoryException ignored) {}
-                        }
-
-                        // Remove everything not in the keep set
-                        for (javax.jcr.Node vf : versionFolders) {
-                            try {
-                                String versionName = vf.getName();
-                                if (!keep.contains(versionName)) {
-                                    freedBytes[0] += computeVersionFolderSize(vf);
-                                    vf.remove();
-                                    removed[0]++;
-                                    logger.info("JCR cleanup: removed {} v{}", symbolicName, versionName);
-                                }
-                            } catch (RepositoryException ex) {
-                                try {
-                                    logger.warn("JCR cleanup: could not remove a version of {}: {}", symbolicName, ex.getMessage());
-                                } catch (Exception ignored) {}
-                            }
-                        }
+                        cleanupModule(entry, versionFolders, vs, osgiVersions, freedBytes, removed);
                     }
 
                     session.save();
@@ -1708,6 +1712,68 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 removed[0], freedBytes[0] / (1024.0 * 1024.0));
         logger.info(summary);
         return summary;
+    }
+
+    private void cleanupModule(Map.Entry<String, List<Node>> entry, List<Node> versionFolders, VersionScheme vs, Map<String, Set<String>> osgiVersions, long[] freedBytes, int[] removed) {
+        // Derive the symbolic name from the module folder path
+        String moduleFolderPath = entry.getKey();
+        String symbolicName = moduleFolderPath.substring(moduleFolderPath.lastIndexOf('/') + 1);
+
+        // Sort descending (newest version first)
+        List<Node> sorted = new ArrayList<>(versionFolders);
+        sorted.sort((a, b) -> {
+            try {
+                return vs.parseVersion(b.getName()).compareTo(vs.parseVersion(a.getName()));
+            } catch (Exception e) {
+                try {
+                    return b.getName().compareTo(a.getName());
+                } catch (Exception ex) {
+                    return 0;
+                }
+            }
+        });
+
+        // Determine which version names to retain
+        Set<String> keep = new LinkedHashSet<>();
+        // 1) Always keep every version that is currently in OSGi
+        keep.addAll(osgiVersions.getOrDefault(symbolicName, Collections.emptySet()));
+        // 2) Keep the most-recent JCR version
+        if (!sorted.isEmpty()) {
+            try {
+                keep.add(sorted.get(0).getName());
+            } catch (RepositoryException ignored) {
+            }
+        }
+        // 3) Keep one additional "previous" version
+        for (Node vf : sorted) {
+            if (keep.size() >= 2) break;
+            try {
+                keep.add(vf.getName());
+            } catch (RepositoryException ignored) {
+            }
+        }
+
+        removeUnneededVersions(versionFolders, freedBytes, removed, keep, symbolicName);
+    }
+
+    private void removeUnneededVersions(List<Node> versionFolders, long[] freedBytes, int[] removed, Set<String> keep, String symbolicName) {
+        // Remove everything not in the keep set
+        for (Node vf : versionFolders) {
+            try {
+                String versionName = vf.getName();
+                if (!keep.contains(versionName)) {
+                    freedBytes[0] += computeVersionFolderSize(vf);
+                    vf.remove();
+                    removed[0]++;
+                    logger.info("JCR cleanup: removed {} v{}", symbolicName, versionName);
+                }
+            } catch (RepositoryException ex) {
+                try {
+                    logger.warn("JCR cleanup: could not remove a version of {}: {}", symbolicName, ex.getMessage());
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     /**
@@ -1727,13 +1793,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         for (String symbolicName : symbolicNames) {
             // Find the currently active bundle by symbolic name (version-agnostic lookup)
             Bundle bundle = null;
-            for (Bundle b : bundleContext.getBundles()) {
-                if (symbolicName.equals(b.getSymbolicName())) {
-                    if (bundle == null || b.getState() == Bundle.ACTIVE) {
-                        bundle = b;
-                    }
-                }
-            }
+            bundle = getBundle(symbolicName, bundle);
 
             if (bundle == null) {
                 skipped.add(symbolicName + " (not found)");
@@ -1744,7 +1804,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             org.osgi.framework.Version v = bundle.getVersion();
             String version = v.getMajor() + "." + v.getMinor() + "." + v.getMicro();
             if (v.getQualifier() != null && !v.getQualifier().isEmpty()
-                    && !v.getQualifier().equalsIgnoreCase("SNAPSHOT")) {
+                    && !v.getQualifier().equalsIgnoreCase(SNAPSHOT)) {
                 version = version + "." + v.getQualifier();
             }
 
@@ -1753,31 +1813,12 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 continue;
             }
 
-            // Determine Maven groupId — same logic as listAvailableUpdates
-            String groupId = null;
-            String location = bundle.getLocation();
-            if (location != null && location.startsWith("mvn:")) {
-                String[] parts = StringUtils.substringAfter(location, "mvn:").split("/");
-                if (parts.length >= 2) {
-                    groupId = parts[0];
-                }
-            }
-
-            if (groupId == null) {
-                Dictionary<String, String> headers = bundle.getHeaders();
-                if (headers.get("Jahia-GroupId") != null) {
-                    groupId = headers.get("Jahia-GroupId");
-                }
-            }
-
-            if (groupId == null) {
-                skipped.add(symbolicName + " (groupId unknown)");
-                continue;
-            }
+            String groupId = getGroupId(symbolicName, bundle, skipped);
+            if (groupId == null) continue;
 
             // 4-space indent so the list is unambiguously the value of installOrUpgradeBundle
             sb.append("    - url: 'mvn:").append(groupId).append("/")
-              .append(symbolicName).append("/").append(version).append("'\n");
+                    .append(symbolicName).append("/").append(version).append("'\n");
             included.add(symbolicName);
         }
 
@@ -1787,7 +1828,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
         if (!included.isEmpty()) {
             sb.append("- karafCommand: \"log:log 'Provisioning script applied: ")
-              .append(String.join(", ", included)).append("'\"\n");
+                    .append(String.join(", ", included)).append("'\"\n");
         }
 
         if (!skipped.isEmpty()) {
@@ -1795,6 +1836,43 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
 
         return sb.toString();
+    }
+
+    private Bundle getBundle(String symbolicName, Bundle bundle) {
+        for (Bundle b : bundleContext.getBundles()) {
+            if (symbolicName.equals(b.getSymbolicName())) {
+                if (bundle == null || b.getState() == Bundle.ACTIVE) {
+                    bundle = b;
+                }
+            }
+        }
+        return bundle;
+    }
+
+    @Nullable
+    private static String getGroupId(String symbolicName, Bundle bundle, List<String> skipped) {
+        // Determine Maven groupId — same logic as listAvailableUpdates
+        String groupId = null;
+        String location = bundle.getLocation();
+        if (location != null && location.startsWith("mvn:")) {
+            String[] parts = StringUtils.substringAfter(location, "mvn:").split("/");
+            if (parts.length >= 2) {
+                groupId = parts[0];
+            }
+        }
+
+        if (groupId == null) {
+            Dictionary<String, String> headers = bundle.getHeaders();
+            if (headers.get("Jahia-GroupId") != null) {
+                groupId = headers.get("Jahia-GroupId");
+            }
+        }
+
+        if (groupId == null) {
+            skipped.add(symbolicName + " (groupId unknown)");
+            return null;
+        }
+        return groupId;
     }
 
     /**
@@ -1806,7 +1884,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * Its parent is treated as the symbolic-name folder.
      */
     private void collectVersionFolders(javax.jcr.Node folder,
-                                       Map<String, List<javax.jcr.Node>> result) throws RepositoryException {        javax.jcr.NodeIterator children = folder.getNodes();
+                                       Map<String, List<javax.jcr.Node>> result) throws RepositoryException {
+        javax.jcr.NodeIterator children = folder.getNodes();
         while (children.hasNext()) {
             javax.jcr.Node child = children.nextNode();
             if (!child.isNodeType("jnt:moduleManagementBundleFolder")) {
@@ -1822,7 +1901,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
     }
 
-    /** Returns {@code true} if {@code folder} has at least one {@code jnt:moduleManagementBundle} child. */
+    /**
+     * Returns {@code true} if {@code folder} has at least one {@code jnt:moduleManagementBundle} child.
+     */
     private boolean hasModuleBundleChild(javax.jcr.Node folder) throws RepositoryException {
         javax.jcr.NodeIterator it = folder.getNodes();
         while (it.hasNext()) {
