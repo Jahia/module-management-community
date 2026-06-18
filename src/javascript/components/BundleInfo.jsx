@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {useTranslation} from 'react-i18next';
-import {Button, Chip, Separator, Typography} from '@jahia/moonstone';
+import {Button, Chip, Separator, Typography, Warning} from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
 import styles from './BundleDetails.scss';
 
@@ -35,8 +35,8 @@ const SectionTitle = ({children}) => (
 
 SectionTitle.propTypes = {children: PropTypes.node};
 
-const ChipGroup = ({items, color = 'default', getTitle}) => (
-    <div className={styles.chipGroup}>
+const ChipGroup = ({items, color = 'default', getTitle, column = false}) => (
+    <div className={column ? styles.chipGroupColumn : styles.chipGroup}>
         {items.map(item => (
             <Chip key={item}
                   variant="outlined"
@@ -50,7 +50,8 @@ const ChipGroup = ({items, color = 'default', getTitle}) => (
 ChipGroup.propTypes = {
     items: PropTypes.arrayOf(PropTypes.string),
     color: PropTypes.string,
-    getTitle: PropTypes.func
+    getTitle: PropTypes.func,
+    column: PropTypes.bool
 };
 
 const BundleInfo = ({bundle}) => {
@@ -74,8 +75,13 @@ const BundleInfo = ({bundle}) => {
     const moduleDeps = toArray(bundle.moduleDependencies);
     const nodeTypeDeps = toArray(bundle.nodeTypesDependencies);
 
+    const mandatoryUnresolved = (bundle.unresolvedRequirements || []).filter(r => !r.optional);
+    const missingCount = mandatoryUnresolved.filter(r => !r.hasProviders).length;
+    const conflictCount = mandatoryUnresolved.filter(r => r.hasProviders).length;
+
     const identityFields = [
         {label: t('label.bundle.details.identity.name'), value: mf['Bundle-Name']},
+        {label: t('label.bundle.details.identity.symbolicName'), value: bundle.symbolicName},
         {label: t('label.bundle.details.identity.description'), value: mf['Bundle-Description']},
         {label: t('label.bundle.details.identity.vendor'), value: mf['Bundle-Vendor']},
         {label: t('label.bundle.details.identity.version'), value: bundle.version},
@@ -89,6 +95,24 @@ const BundleInfo = ({bundle}) => {
 
     return (
         <div className={styles.bundleInfo}>
+
+            {/* ── Unresolved requirements banner ── */}
+            {missingCount > 0 && (
+                <div className={styles.unresolvedBannerDanger}>
+                    <Warning/>
+                    <Typography variant="body">
+                        {t('label.bundle.unresolvedReqs.bannerMissing', {count: missingCount})}
+                    </Typography>
+                </div>
+            )}
+            {missingCount === 0 && conflictCount > 0 && (
+                <div className={styles.unresolvedBannerWarning}>
+                    <Warning/>
+                    <Typography variant="body">
+                        {t('label.bundle.unresolvedReqs.bannerConflict', {count: conflictCount})}
+                    </Typography>
+                </div>
+            )}
 
             {/* ── Identity ── */}
             <section className={styles.infoSection}>
@@ -112,7 +136,7 @@ const BundleInfo = ({bundle}) => {
                                     {t('label.bundle.details.services.provides')}
                                 </Typography>
                                 {services.length > 0 ? (
-                                    <ChipGroup items={services} color="accent"/>
+                                    <ChipGroup items={services} color="accent" column/>
                                 ) : (
                                     <Typography variant="caption" className={styles.emptyState}>
                                         {t('label.bundle.details.services.none')}
@@ -124,7 +148,7 @@ const BundleInfo = ({bundle}) => {
                                     {t('label.bundle.details.services.consumes')}
                                 </Typography>
                                 {servicesInUse.length > 0 ? (
-                                    <ChipGroup items={servicesInUse} color="default"/>
+                                    <ChipGroup items={servicesInUse} color="default" column/>
                                 ) : (
                                     <Typography variant="caption" className={styles.emptyState}>
                                         {t('label.bundle.details.services.none')}

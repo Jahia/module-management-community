@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import mermaid from 'mermaid';
 import elkLayouts from '@mermaid-js/layout-elk';
 import PropTypes from 'prop-types';
@@ -8,37 +8,39 @@ let instanceCount = 0;
 const Mermaid = ({className, children, onError}) => {
     const [element, setElement] = useState();
     const [renderResult, setRenderResult] = useState();
-    if (instanceCount === undefined) {
-        instanceCount = 0;
+
+    // Stable ID: assigned once on mount, never changes on re-renders.
+    // Using a ref guard prevents instanceCount from incrementing on every render,
+    // which would make containerId a new value each render and trigger an infinite
+    // useEffect loop (containerId in deps → setRenderResult → re-render → new ID → …).
+    const containerIdRef = useRef(null);
+    if (containerIdRef.current === null) {
+        containerIdRef.current = `d${instanceCount++}-mermaid`;
     }
 
-    const containerId = `d${instanceCount++}-mermaid`;
+    const containerId = containerIdRef.current;
     const diagramText = children;
-    const renderJS = true;
 
-    // Initialize mermaid here, but beware that it gets called once for every instance of the component
+    // Initialize mermaid once on mount
     useEffect(() => {
-        // Wait for page to load before initializing mermaid
-        if (renderJS) {
-            mermaid.registerLayoutLoaders(elkLayouts);
-            mermaid.initialize({
-                startOnLoad: true,
-                securityLevel: 'strict',
-                theme: 'neutral',
-                logLevel: 0,
-                layout: 'elk',
-                elk: {
-                    mergeEdges: true,
-                    edgeRouting: 'LINEAR_SEGMENTS'
-                },
-                flowchart: {
-                    defaultRenderer: 'elk'
-                }
-            });
-        }
-    }, [renderJS]);
+        mermaid.registerLayoutLoaders(elkLayouts);
+        mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: 'strict',
+            theme: 'neutral',
+            logLevel: 0,
+            layout: 'elk',
+            elk: {
+                mergeEdges: true,
+                edgeRouting: 'LINEAR_SEGMENTS'
+            },
+            flowchart: {
+                defaultRenderer: 'elk'
+            }
+        });
+    }, []);
 
-    // Hook to track updates to the component ref, compatible with useEffect unlike useRef
+    // Track the container DOM element via a stable callback ref
     const updateDiagramRef = useCallback(elem => {
         if (!elem) {
             return;
@@ -47,50 +49,38 @@ const Mermaid = ({className, children, onError}) => {
         setElement(elem);
     }, []);
 
-    // Hook to update the component when either the element or the rendered diagram changes
+    // Inject the rendered SVG into the container whenever either changes
     useEffect(() => {
-        if (!element) {
-            return;
-        }
-
-        if (!renderResult?.svg) {
+        if (!element || !renderResult?.svg) {
             return;
         }
 
         element.innerHTML = renderResult.svg;
         renderResult.bindFunctions?.(element);
-    }, [
-        element,
-        renderResult
-    ]);
+    }, [element, renderResult]);
 
-    // Hook to handle the diagram rendering
+    // Re-render the diagram whenever the diagram text changes
     useEffect(() => {
-        if (!diagramText && diagramText.length === 0) {
+        if (!diagramText || diagramText.length === 0) {
             return;
         }
 
-        // Create async function inside useEffect to cope with async mermaid.run
-        if (renderJS) {
-            (async () => {
-                try {
-                    const rr = await mermaid.render(`${containerId}-svg`, diagramText);
-                    setRenderResult(rr);
-                } catch (e) {
-                    onError?.(e);
-                }
-            })();
-        }
-    }, [containerId, diagramText, onError, renderJS]);
+        (async () => {
+            try {
+                const rr = await mermaid.render(`${containerId}-svg`, diagramText);
+                setRenderResult(rr);
+            } catch (e) {
+                onError?.(e);
+            }
+        })();
+    // ContainerId is stable (ref) — safe to include; diagramText drives re-renders
+    }, [containerId, diagramText, onError]);
 
-    // Render container (div) to hold diagram (nested SVG)
     return (
         <div ref={updateDiagramRef}
              className={className}
              id={containerId}
-        >
-            {renderJS}
-        </div>
+        />
     );
 };
 

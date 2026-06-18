@@ -8,6 +8,7 @@ import * as PropTypes from 'prop-types';
 import styles from './BundleDetails.scss';
 import Mermaid from './Mermaid';
 import BundleInfo from './BundleInfo';
+import UnresolvedRequirementsTab from './UnresolvedRequirementsTab';
 
 const BUNDLE_TYPE_COLOR = {
     module: 'success',
@@ -20,8 +21,23 @@ const TABS = [
     {id: 'details', labelKey: 'label.bundle.tab.details'},
     {id: 'sites', labelKey: 'label.bundle.tab.sites', condition: b => b.type === 'module' && b.sitesDeployment?.length > 0},
     {id: 'versions', labelKey: 'label.bundle.tab.versions', condition: b => b.storeVersions?.length > 0 || b.previousVersions?.length > 0},
-    {id: 'bundleDeps', labelKey: 'label.bundle.tab.bundleDeps', condition: b => b.dependenciesGraph?.length > 0},
-    {id: 'moduleDeps', labelKey: 'label.bundle.tab.moduleDeps', condition: b => b.moduleDependencies?.length > 0}
+    // Only show graph tabs when the mermaid output contains actual edges ('-->')
+    // An INSTALLED (unresolved) bundle always produces the mermaid header but no edges
+    {id: 'bundleDeps', labelKey: 'label.bundle.tab.bundleDeps', condition: b => b.dependenciesGraph?.includes('-->')},
+    {id: 'moduleDeps', labelKey: 'label.bundle.tab.moduleDeps', condition: b => b.moduleDependenciesGraph?.includes('-->')},
+    {
+        id: 'unresolvedReqs',
+        labelKey: 'label.bundle.tab.unresolvedReqs',
+        condition: b => b.unresolvedRequirements?.some(r => !r.optional),
+        // Danger when any mandatory requirement is completely missing; warning when providers exist but won't wire
+        getColor: (b, isActive) => {
+            if (isActive) {
+                return 'accent';
+            }
+
+            return b.unresolvedRequirements?.some(r => !r.optional && !r.hasProviders) ? 'danger' : 'warning';
+        }
+    }
 ];
 
 /**
@@ -168,11 +184,14 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
 
     const visibleTabs = TABS.filter(tab => !tab.condition || tab.condition(bundle));
 
+    // Prefer the human-readable Bundle-Name from the manifest; fall back to symbolic name
+    const bundleDisplayName = bundle.manifest?.find(e => e.key === 'Bundle-Name')?.value || bundle.symbolicName;
+
     return (
         <DialogContent className={styles.bundleDetailsContainer}>
             <div className={styles.bundleDetailsHeader}>
                 <div className={styles.bundleDetailsTitle}>
-                    <Typography variant="title">{bundle.symbolicName}</Typography>
+                    <Typography variant="title">{bundleDisplayName}</Typography>
                     <Badge label={'v' + bundle.version} color="accent"/>
                     <Badge label={bundle.type || 'bundle'}
                            color={BUNDLE_TYPE_COLOR[bundle.type] || 'default'}/>
@@ -229,7 +248,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                     <Button key={tab.id}
                             variant={activeTab === tab.id ? 'outlined' : 'ghost'}
                             size="small"
-                            color={activeTab === tab.id ? 'accent' : 'default'}
+                            color={tab.getColor ? tab.getColor(bundle, activeTab === tab.id) : (activeTab === tab.id ? 'accent' : 'default')}
                             label={t(tab.labelKey)}
                             onClick={() => setActiveTab(tab.id)}/>
                 ))}
@@ -446,6 +465,10 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
 
                 {activeTab === 'moduleDeps' && (
                     <Mermaid>{bundle.moduleDependenciesGraph}</Mermaid>
+                )}
+
+                {activeTab === 'unresolvedReqs' && (
+                    <UnresolvedRequirementsTab bundle={bundle}/>
                 )}
             </div>
 

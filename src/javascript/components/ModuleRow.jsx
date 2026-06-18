@@ -30,6 +30,7 @@ const BUNDLE_QUERY = gql`query ($module: String!, $version: String!) {
                 moduleDependenciesGraph
                 nodeTypesDependencies
                 license services servicesInUse
+                unresolvedRequirements { namespace filter optional hasProviders }
                 sitesDeployment { siteKey deployed }
                 clusterDeployment { nodeId bundles { key state } }
                 clusterState

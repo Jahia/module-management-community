@@ -6,15 +6,16 @@
           "modules": "Module dependencies",
           "nodeTypes": "Node type dependencies"
         },
-        "identity": {
-          "builtAt": "Built at",
-          "bundleId": "Bundle ID",
-          "description": "Description",
-          "license": "License",
-          "name": "Name",
-          "vendor": "Vendor",
-          "version": "Version"
-        },
+          "identity": {
+            "builtAt": "Built at",
+            "bundleId": "Bundle ID",
+            "description": "Description",
+            "license": "License",
+            "name": "Name",
+            "symbolicName": "Symbolic name",
+            "vendor": "Vendor",
+            "version": "Version"
+          },
         "manifest": {
           "hide": "Hide full manifest",
           "show": "Show full manifest"
@@ -43,18 +44,51 @@
         "disabled": "Disabled",
         "enabled": "Enabled"
       },
-      "tab": {
-        "bundleDeps": "Bundle dependencies",
-        "details": "Details",
-        "moduleDeps": "Module dependencies",
-        "sites": "Sites",
-        "versions": "Version history"
-      },
-      "type": {
-        "bundle": "Bundle",
-        "module": "Module",
-        "system": "System"
-      },
+        "tab": {
+          "bundleDeps": "Bundle dependencies",
+          "details": "Details",
+          "moduleDeps": "Module dependencies",
+          "sites": "Sites",
+          "unresolvedReqs": "Unresolved requirements",
+          "versions": "Version history"
+        },
+        "type": {
+          "bundle": "Bundle",
+          "module": "Module",
+          "system": "System"
+        },
+        "unresolvedReqs": {
+          "alertMissing": "{{count}} mandatory dependency/dependencies completely absent from this server — install the missing bundle(s) to resolve.",
+          "alertConflict": "{{count}} mandatory dependency/dependencies found on this server but cannot be wired — check for version conflicts or circular dependencies.",
+          "bannerMissing": "{{count}} missing mandatory dependency/dependencies — see 'Unresolved requirements' tab for details.",
+          "bannerConflict": "{{count}} wiring conflict(s) detected — see 'Unresolved requirements' tab for details.",
+          "col": {
+            "namespace": "Type",
+            "requirement": "Requirement",
+            "status": "Status"
+          },
+          "filter": {
+            "allStatuses": "All statuses",
+            "allTypes": "All types",
+            "clear": "Clear filters",
+            "noResults": "No requirements match the current filters.",
+            "searchReq": "Search requirement…",
+            "showing": "{{count}} of {{total}}"
+          },
+          "ns": {
+            "bundle": "Bundle",
+            "host": "Fragment host",
+            "module": "Jahia module",
+            "nodeType": "Node type",
+            "package": "Package"
+          },
+          "status": {
+            "conflict": "⚠ Version conflict",
+            "conflictHint": "A bundle providing this capability exists but cannot be wired — check for version mismatch or circular dependency.",
+            "missing": "❌ Missing",
+            "missingHint": "No bundle in this server exports a capability matching this requirement. Install the missing dependency."
+          }
+        },
       "versions": {
         "confirm": {
           "message": "Module downgrade is not officially supported. The module will be installed in stopped state — you can start it manually. Do you want to continue?",

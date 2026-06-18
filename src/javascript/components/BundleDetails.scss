@@ -112,6 +112,13 @@
     align-items: flex-start;
 }
 
+.chipGroupColumn {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+
 .depsGroup {
     display: flex;
     flex-direction: column;
@@ -265,5 +272,180 @@
 .versionMeta {
     color: var(--color-gray60);
     font-size: 12px;
+}
+
+/* ── Unresolved requirements banner (BundleInfo details tab) ── */
+
+@mixin unresolvedBanner($bg, $border, $color) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border-radius: 4px;
+    border-left: 4px solid $border;
+    background-color: $bg;
+    color: $color;
+    font-size: 13px;
+}
+
+.unresolvedBannerDanger {
+    @include unresolvedBanner(var(--color-danger_light, #fff0f0), var(--color-danger, #d32f2f), var(--color-danger_dark, #b71c1c));
+}
+
+.unresolvedBannerWarning {
+    @include unresolvedBanner(var(--color-warning_light, #fffbe6), var(--color-warning, #f9a825), var(--color-warning_dark, #e65100));
+}
+
+/* ── BundleDetails — Unresolved requirements tab ── */
+
+.unresolvedReqsTab {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.unresolvedAlertDanger {
+    @include unresolvedBanner(var(--color-danger_light, #fff0f0), var(--color-danger, #d32f2f), var(--color-danger_dark, #b71c1c));
+}
+
+.unresolvedAlertWarning {
+    @include unresolvedBanner(var(--color-warning_light, #fffbe6), var(--color-warning, #f9a825), var(--color-warning_dark, #e65100));
+}
+
+.unresolvedTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    border: 1px solid var(--color-gray_light);
+    border-radius: 4px;
+    overflow: hidden;
+
+    thead tr {
+        background-color: var(--color-gray_light_hover, rgba(0,0,0,0.04));
+    }
+}
+
+.unresolvedThNs,
+.unresolvedThReq,
+.unresolvedThStatus {
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-gray60);
+    border-bottom: 1px solid var(--color-gray_light);
+    white-space: nowrap;
+}
+
+.unresolvedThNs    { width: 130px; }
+.unresolvedThStatus { width: 140px; }
+
+.unresolvedRow {
+    border-bottom: 1px solid var(--color-gray_light);
+
+    &:last-child { border-bottom: none; }
+    &:nth-child(even) { background-color: var(--color-gray_light_hover, rgba(0,0,0,0.02)); }
+    &:hover { background-color: rgba(0,0,0,0.05); }
+}
+
+.unresolvedCellNs,
+.unresolvedCellReq,
+.unresolvedCellStatus {
+    padding: 8px 12px;
+    vertical-align: middle;
+}
+
+.unresolvedCellReq {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.unresolvedReqName {
+    font-weight: 600;
+    color: var(--color-gray_dark);
+    word-break: break-all;
+}
+
+.unresolvedReqVersion {
+    font-size: 12px;
+    color: var(--color-gray60);
+}
+
+.unresolvedFilter {
+    font-family: monospace;
+    font-size: 10px;
+    color: var(--color-gray60);
+    word-break: break-all;
+    white-space: pre-wrap;
+    opacity: 0.8;
+}
+
+/* ── Unresolved requirements — filter bar ── */
+
+.unresolvedFilterBar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 0 10px;
+    border-bottom: 1px solid var(--color-gray_light);
+    margin-bottom: 4px;
+}
+
+.unresolvedFilterSelect {
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--color-gray_light);
+    border-radius: 4px;
+    background: white;
+    font-size: 13px;
+    color: var(--color-gray_dark);
+    cursor: pointer;
+
+    &:focus {
+        outline: none;
+        border-color: var(--color-accent, #0077b6);
+    }
+}
+
+.unresolvedFilterSearch {
+    flex: 1 1 200px;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--color-gray_light);
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--color-gray_dark);
+
+    &:focus {
+        outline: none;
+        border-color: var(--color-accent, #0077b6);
+    }
+
+    &::placeholder { color: var(--color-gray60); }
+}
+
+.unresolvedFilterClear {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--color-gray_light);
+    border-radius: 4px;
+    background: white;
+    font-size: 13px;
+    color: var(--color-gray60);
+    cursor: pointer;
+
+    &:hover { background: var(--color-gray_light_hover, rgba(0,0,0,0.06)); }
+}
+
+.unresolvedFilterCount {
+    margin-left: auto;
+    color: var(--color-gray60);
+    font-size: 12px;
+    white-space: nowrap;
 }
 

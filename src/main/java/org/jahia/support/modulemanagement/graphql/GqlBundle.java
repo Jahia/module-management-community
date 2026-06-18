@@ -11,7 +11,12 @@ import org.jahia.services.modulemanager.BundleBucketInfo;
 import org.jahia.services.modulemanager.spi.BundleService;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.FrameworkUtil;
 import org.osgi.framework.ServiceReference;
+import org.osgi.framework.wiring.BundleRequirement;
+import org.osgi.framework.wiring.BundleRevision;
+import org.osgi.framework.wiring.FrameworkWiring;
 import org.osgi.framework.wiring.BundleWire;
 import org.osgi.framework.wiring.BundleWiring;
 
@@ -119,10 +124,20 @@ public class GqlBundle {
     @GraphQLName("dependencies")
     public SortedSet<String> getDependencies() {
         SortedSet<String> wiring = new TreeSet<>();
-        if (bundle.adapt(BundleWiring.class) != null) {
-            BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
-            for (BundleWire revision : bundleWiring.getRequiredWires("osgi.wiring.package")) {
-                wiring.add(revision.getProviderWiring().toString());
+        BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
+        if (bundleWiring != null) {
+            // Bundle is resolved/active — return actual runtime wires
+            for (BundleWire wire : bundleWiring.getRequiredWires("osgi.wiring.package")) {
+                wiring.add(wire.getProviderWiring().toString());
+            }
+        } else {
+            // Bundle is unresolved (e.g. INSTALLED) — fall back to declared manifest requirements
+            BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
+            if (bundleRevision != null) {
+                for (BundleRequirement req : bundleRevision.getDeclaredRequirements("osgi.wiring.package")) {
+                    String filter = req.getDirectives().get("filter");
+                    if (filter != null) wiring.add(filter);
+                }
             }
         }
         return wiring;
@@ -141,10 +156,20 @@ public class GqlBundle {
     @GraphQLName("moduleDependencies")
     public SortedSet<String> getModuleDependencies() {
         SortedSet<String> wiring = new TreeSet<>();
-        if (bundle.adapt(BundleWiring.class) != null) {
-            BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
-            for (BundleWire revision : bundleWiring.getRequiredWires("com.jahia.modules.dependencies")) {
-                wiring.add(revision.getProviderWiring().toString());
+        BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
+        if (bundleWiring != null) {
+            // Bundle is resolved/active — return actual runtime wires
+            for (BundleWire wire : bundleWiring.getRequiredWires("com.jahia.modules.dependencies")) {
+                wiring.add(wire.getProviderWiring().toString());
+            }
+        } else {
+            // Bundle is unresolved (e.g. INSTALLED) — fall back to declared manifest requirements
+            BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
+            if (bundleRevision != null) {
+                for (BundleRequirement req : bundleRevision.getDeclaredRequirements("com.jahia.modules.dependencies")) {
+                    String filter = req.getDirectives().get("filter");
+                    if (filter != null) wiring.add(filter);
+                }
             }
         }
         return wiring;
@@ -187,13 +212,124 @@ public class GqlBundle {
     @GraphQLName("nodeTypesDependencies")
     public SortedSet<String> getNodeTypeDependencies() {
         SortedSet<String> wiring = new TreeSet<>();
-        if (bundle.adapt(BundleWiring.class) != null) {
-            BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
-            for (BundleWire revision : bundleWiring.getRequiredWires("com.jahia.services.content")) {
-                wiring.add(SimpleFilter.parse(revision.getRequirement().getDirectives().get("filter")).getValue().toString());
+        BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
+        if (bundleWiring != null) {
+            // Bundle is resolved/active — extract value from actual runtime wires
+            for (BundleWire wire : bundleWiring.getRequiredWires("com.jahia.services.content")) {
+                wiring.add(SimpleFilter.parse(wire.getRequirement().getDirectives().get("filter")).getValue().toString());
+            }
+        } else {
+            // Bundle is unresolved (e.g. INSTALLED) — fall back to declared manifest requirements
+            BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
+            if (bundleRevision != null) {
+                for (BundleRequirement req : bundleRevision.getDeclaredRequirements("com.jahia.services.content")) {
+                    String filter = req.getDirectives().get("filter");
+                    if (filter != null) wiring.add(SimpleFilter.parse(filter).getValue().toString());
+                }
             }
         }
         return wiring;
+    }
+
+    /**
+     * Returns all requirements that are declared in the bundle manifest but not currently wired.
+     * For each unresolved requirement, {@code hasProviders} indicates whether at least one bundle
+     * in the framework could satisfy it — helping distinguish "missing dependency" from
+     * "dependency present but unresolvable due to a conflict or ordering issue".
+     */
+    @GraphQLField
+    @GraphQLName("unresolvedRequirements")
+    public List<GqlUnresolvedRequirement> getUnresolvedRequirements() {
+        List<GqlUnresolvedRequirement> result = new ArrayList<>();
+
+        BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
+        if (bundleRevision == null) return result;
+
+        // Collect requirements that are already satisfied via active wires
+        Set<BundleRequirement> wiredRequirements = new HashSet<>();
+        BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
+        if (bundleWiring != null) {
+            for (BundleWire wire : bundleWiring.getRequiredWires(null)) {
+                wiredRequirements.add(wire.getRequirement());
+            }
+        }
+
+        // Use our own class's bundle context to reach the system bundle.
+        // We must NOT use bundle.getBundleContext() here: it returns null for bundles
+        // in INSTALLED or RESOLVED state, which is precisely when this method matters most.
+        BundleContext ownContext = FrameworkUtil.getBundle(GqlBundle.class).getBundleContext();
+        FrameworkWiring frameworkWiring = ownContext != null
+                ? ownContext.getBundle(0).adapt(FrameworkWiring.class)
+                : null;
+
+        for (BundleRequirement req : bundleRevision.getDeclaredRequirements(null)) {
+            if (wiredRequirements.contains(req)) continue; // already satisfied
+
+            // Skip service requirements entirely: OSGi services are managed through the
+            // service registry, not through bundle wiring. getRequiredWires(null) never
+            // returns service wires, so service requirements would always appear "unresolved"
+            // even for a perfectly healthy ACTIVE bundle — producing false positives.
+            if ("osgi.service".equals(req.getNamespace())) continue;
+
+            String filter = req.getDirectives().get("filter");
+            String resolution = req.getDirectives().get("resolution");
+            boolean optional = "optional".equals(resolution);
+
+            // Check whether any bundle in the framework could satisfy this requirement
+            boolean hasProviders = frameworkWiring != null && !frameworkWiring.findProviders(req).isEmpty();
+
+            result.add(new GqlUnresolvedRequirement(req.getNamespace(), filter, optional, hasProviders));
+        }
+
+        return result;
+    }
+
+    @GraphQLName("GqlUnresolvedRequirement")
+    public static class GqlUnresolvedRequirement {
+        private final String namespace;
+        private final String filter;
+        private final boolean optional;
+        private final boolean hasProviders;
+
+        public GqlUnresolvedRequirement(String namespace, String filter, boolean optional, boolean hasProviders) {
+            this.namespace = namespace;
+            this.filter = filter;
+            this.optional = optional;
+            this.hasProviders = hasProviders;
+        }
+
+        /** OSGi namespace of the requirement, e.g. {@code osgi.wiring.package}, {@code com.jahia.modules.dependencies}. */
+        @GraphQLField
+        @GraphQLName("namespace")
+        public String getNamespace() {
+            return namespace;
+        }
+
+        /** Raw OSGi filter string from the manifest, e.g. {@code (&(osgi.wiring.package=com.example)(version>=1.0.0))}. */
+        @GraphQLField
+        @GraphQLName("filter")
+        public String getFilter() {
+            return filter;
+        }
+
+        /** {@code true} if the requirement is declared optional — the bundle can still start without it. */
+        @GraphQLField
+        @GraphQLName("optional")
+        public boolean isOptional() {
+            return optional;
+        }
+
+        /**
+         * {@code true} if at least one bundle in the framework exports a capability matching this requirement.
+         * When {@code false} the dependency is completely absent and must be installed.
+         * When {@code true} but the bundle is still unresolved, there is likely a version conflict or
+         * a circular dependency preventing resolution.
+         */
+        @GraphQLField
+        @GraphQLName("hasProviders")
+        public boolean isHasProviders() {
+            return hasProviders;
+        }
     }
 
     @GraphQLField
