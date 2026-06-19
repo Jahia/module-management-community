@@ -5,7 +5,7 @@ import PropTypes from 'prop-types';
 
 let instanceCount = 0;
 
-const Mermaid = ({className, children, onError}) => {
+const Mermaid = ({className, children, onError, ariaLabel}) => {
     const [element, setElement] = useState();
     const [renderResult, setRenderResult] = useState();
 
@@ -77,9 +77,13 @@ const Mermaid = ({className, children, onError}) => {
     }, [containerId, diagramText, onError]);
 
     return (
+        /* A11y C-013 / D-005: role="img", keyboard focus, localised label via ariaLabel prop */
         <div ref={updateDiagramRef}
              className={className}
              id={containerId}
+             role="img"
+             tabIndex={0}
+             aria-label={ariaLabel || 'Dependency graph'}
         />
     );
 };
@@ -87,7 +91,8 @@ const Mermaid = ({className, children, onError}) => {
 Mermaid.propTypes = {
     className: PropTypes.string,
     children: PropTypes.any.isRequired,
-    onError: PropTypes.func
+    onError: PropTypes.func,
+    ariaLabel: PropTypes.string
 };
 
 export default Mermaid;

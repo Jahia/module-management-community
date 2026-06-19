@@ -191,7 +191,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
         <DialogContent className={styles.bundleDetailsContainer}>
             <div className={styles.bundleDetailsHeader}>
                 <div className={styles.bundleDetailsTitle}>
-                    <Typography variant="title">{bundleDisplayName}</Typography>
+                    <Typography variant="title" component="h2">{bundleDisplayName}</Typography>
                     <Badge label={'v' + bundle.version} color="accent"/>
                     <Badge label={bundle.type || 'bundle'}
                            color={BUNDLE_TYPE_COLOR[bundle.type] || 'default'}/>
@@ -204,7 +204,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                 <div className={styles.bundleDetailsHeaderActions}>
                     {(bundle.type === 'module' || bundle.type === 'templatesSet') && (
                         <Button variant="ghost"
-                                size="small"
+                                size="default"
                                 color="default"
                                 icon={<CloudUpload/>}
                                 label={t('label.importModule.button')}
@@ -212,13 +212,13 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                 onClick={handleForceImport}/>
                     )}
                     <Button variant="ghost"
-                            size="small"
+                            size="default"
                             color="default"
                             icon={<Reload/>}
                             label={t('label.refresh')}
                             onClick={() => refetch()}/>
                     <Button variant="ghost"
-                            size="small"
+                            size="default"
                             color="default"
                             icon={<Close/>}
                             label={t('label.close')}
@@ -226,8 +226,12 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                 </div>
             </div>
 
+            {/* A11y A-009: import result as live alert region */}
             {importResult && (
                 <div
+                    role={importResult.success ? 'status' : 'alert'}
+                    aria-live={importResult.success ? 'polite' : 'assertive'}
+                    aria-atomic="true"
                     style={{
                         padding: '8px 16px',
                         margin: '4px 0',
@@ -243,20 +247,61 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
 
             <Separator variant="horizontal" spacing="none"/>
 
-            <div className={styles.bundleDetailsTabs}>
-                {visibleTabs.map(tab => (
-                    <Button key={tab.id}
-                            variant={activeTab === tab.id ? 'outlined' : 'ghost'}
-                            size="small"
-                            color={tab.getColor ? tab.getColor(bundle, activeTab === tab.id) : (activeTab === tab.id ? 'accent' : 'default')}
-                            label={t(tab.labelKey)}
-                            onClick={() => setActiveTab(tab.id)}/>
-                ))}
+            {/* A11y A-007 / C-007 / C-012: ARIA tablist with native <button> (guaranteed attr forwarding)
+                 and Arrow-key / Home / End keyboard navigation (roving tabindex) */}
+            <div role="tablist"
+                 aria-label={t('label.bundle.tabs.label', 'Bundle detail sections')}
+                 className={styles.bundleDetailsTabs}
+                 onKeyDown={e => {
+                     const idx = visibleTabs.findIndex(tab => tab.id === activeTab);
+                     if (e.key === 'ArrowRight') {
+                         e.preventDefault();
+                         setActiveTab(visibleTabs[(idx + 1) % visibleTabs.length].id);
+                     } else if (e.key === 'ArrowLeft') {
+                         e.preventDefault();
+                         setActiveTab(visibleTabs[(idx - 1 + visibleTabs.length) % visibleTabs.length].id);
+                     } else if (e.key === 'Home') {
+                         e.preventDefault();
+                         setActiveTab(visibleTabs[0].id);
+                     } else if (e.key === 'End') {
+                         e.preventDefault();
+                         setActiveTab(visibleTabs[visibleTabs.length - 1].id);
+                     }
+                 }}
+            >
+                {visibleTabs.map(tab => {
+                    const isActive = activeTab === tab.id;
+                    const color = tab.getColor ?
+                        tab.getColor(bundle, isActive) :
+                        (isActive ? 'accent' : 'default');
+                    const colorClass = color === 'accent' ? styles.tabBtnAccent :
+                        color === 'danger' ? styles.tabBtnDanger :
+                        color === 'warning' ? styles.tabBtnWarning : '';
+                    return (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            role="tab"
+                            tabIndex={isActive ? 0 : -1}
+                            aria-selected={isActive}
+                            aria-controls={`tabpanel-${tab.id}`}
+                            id={`tab-${tab.id}`}
+                            className={`${styles.tabBtn} ${colorClass} ${isActive ? styles.tabBtnActive : ''}`}
+                            onClick={() => setActiveTab(tab.id)}
+                        >
+                            {t(tab.labelKey)}
+                        </button>
+                    );
+                })}
             </div>
 
             <Separator variant="horizontal" spacing="none"/>
 
-            <div className={styles.bundleDetailsContent}>
+            {/* A11y A-007: tabpanel role with labelledby */}
+            <div id={`tabpanel-${activeTab}`}
+                 role="tabpanel"
+                 aria-labelledby={`tab-${activeTab}`}
+                 className={styles.bundleDetailsContent}>
                 {activeTab === 'details' && (
                     <BundleInfo bundle={bundle}/>
                 )}
@@ -321,8 +366,12 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
 
                     return (
                         <div className={styles.versionsTab}>
+                            {/* A11y A-009: install result as live alert region */}
                             {installVersionResult && (
                                 <div
+                                    role={installVersionResult.success ? 'status' : 'alert'}
+                                    aria-live={installVersionResult.success ? 'polite' : 'assertive'}
+                                    aria-atomic="true"
                                     style={{
                                         padding: '8px 16px',
                                         marginBottom: '12px',
@@ -460,11 +509,11 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                 })()}
 
                 {activeTab === 'bundleDeps' && (
-                    <Mermaid>{bundle.dependenciesGraph}</Mermaid>
+                    <Mermaid ariaLabel={t('label.bundle.tab.bundleDeps.ariaLabel', 'Bundle dependency graph')}>{bundle.dependenciesGraph}</Mermaid>
                 )}
 
                 {activeTab === 'moduleDeps' && (
-                    <Mermaid>{bundle.moduleDependenciesGraph}</Mermaid>
+                    <Mermaid ariaLabel={t('label.bundle.tab.moduleDeps.ariaLabel', 'Module dependency graph')}>{bundle.moduleDependenciesGraph}</Mermaid>
                 )}
 
                 {activeTab === 'unresolvedReqs' && (
@@ -472,14 +521,18 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                 )}
             </div>
 
-            <Dialog open={Boolean(confirmInstall)} onClose={() => setConfirmInstall(null)}>
-                <DialogTitle>
+            {/* A11y A-023: aria-labelledby/describedby on downgrade confirm dialog */}
+            <Dialog open={Boolean(confirmInstall)}
+                    aria-labelledby="confirm-install-title"
+                    aria-describedby="confirm-install-desc"
+                    onClose={() => setConfirmInstall(null)}>
+                <DialogTitle id="confirm-install-title">
                     <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                        <Warning color="var(--color-warning)"/>
+                        <Warning color="var(--color-warning)" aria-hidden="true"/>
                         {t('label.bundle.versions.confirm.title')}
                     </div>
                 </DialogTitle>
-                <DialogContent>
+                <DialogContent id="confirm-install-desc">
                     <Typography variant="body">
                         {t('label.bundle.versions.confirm.message')}
                     </Typography>

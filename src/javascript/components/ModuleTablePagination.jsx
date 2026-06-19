@@ -33,8 +33,14 @@ export const ModuleTablePagination = ({
                         label={t('label.pagination.previous')}
                         isDisabled={currentPage === 1}
                         onClick={() => onPageChange(p => Math.max(p - 1, 1))}/>
-                <select value={itemsPerPage}
+                {/* A11y A-005: programmatic label for items-per-page selector */}
+                <label htmlFor="items-per-page" className={styles.srOnly}>
+                    {t('label.pagination.itemsPerPage', 'Items per page')}
+                </label>
+                <select id="items-per-page"
+                        value={itemsPerPage}
                         className={styles.itemsPerPageSelect}
+                        aria-label={t('label.pagination.itemsPerPage', 'Items per page')}
                         onChange={e => {
                             onItemsPerPageChange(Number(e.target.value));
                             onPageChange(1);
@@ -61,4 +67,3 @@ ModuleTablePagination.propTypes = {
     onPageChange: PropTypes.func.isRequired,
     onItemsPerPageChange: PropTypes.func.isRequired
 };
-

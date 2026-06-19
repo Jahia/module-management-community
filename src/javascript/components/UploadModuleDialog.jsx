@@ -216,11 +216,15 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                     />
                 </RadioGroup>
 
-                {/* Drop zone */}
+                {/* A11y A-004: drop zone is keyboard accessible */}
                 {!isSuccess && (
                     <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={t('label.upload.dropzone.ariaLabel', 'Select or drop a file')}
                         className={`${styles.dropZone} ${isDragging ? styles.dropZoneDragging : ''} ${selectedFile ? styles.dropZoneSelected : ''}`}
                         onClick={() => fileInputRef.current?.click()}
+                        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && fileInputRef.current?.click()}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
@@ -235,7 +239,11 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                         {selectedFile ? (
                             <>
                                 <Typography variant="body" weight="semiBold" className={styles.fileName}>
-                                    {fileIcon} {selectedFile.name}
+                                    {/* A11y A-013: emoji with role="img" */}
+                                    <span role="img" aria-label={isZipMode ? 'ZIP archive' : isYamlMode ? 'YAML file' : 'JAR file'}>
+                                        {fileIcon}
+                                    </span>
+                                    {' '}{selectedFile.name}
                                 </Typography>
                                 <Typography variant="caption" className={styles.fileSize}>
                                     {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
@@ -249,23 +257,27 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                     </div>
                 )}
 
-                {/* Status feedback */}
+                {/* A11y A-009: status feedback as live regions; A-013: emoji with aria role */}
                 {isUploading && (
-                    <div className={styles.statusRow}>
+                    <div className={styles.statusRow} role="status" aria-live="polite">
                         <Loader size="small"/>
                         <Typography variant="body">{uploadingLabel}</Typography>
                     </div>
                 )}
 
                 {status === 'success' && (
-                    <div className={`${styles.statusRow} ${styles.statusSuccess}`}>
-                        <Typography variant="body">✅ {statusMessage}</Typography>
+                    <div className={`${styles.statusRow} ${styles.statusSuccess}`} role="status" aria-live="polite">
+                        <Typography variant="body">
+                            <span role="img" aria-label="Success">✅</span> {statusMessage}
+                        </Typography>
                     </div>
                 )}
 
                 {status === 'error' && (
-                    <div className={`${styles.statusRow} ${styles.statusError}`}>
-                        <Typography variant="body">⚠️ {statusMessage}</Typography>
+                    <div className={`${styles.statusRow} ${styles.statusError}`} role="alert" aria-live="assertive">
+                        <Typography variant="body">
+                            <span role="img" aria-label="Warning">⚠️</span> {statusMessage}
+                        </Typography>
                     </div>
                 )}
 

@@ -15,6 +15,7 @@ import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import javax.jcr.RepositoryException;
 import javax.servlet.Servlet;
 import javax.servlet.http.HttpServlet;
@@ -61,33 +62,8 @@ public class ModuleArchiveImportServlet extends HttpServlet {
 
         PrintWriter writer = response.getWriter();
 
-        // --- Authentication check ---
-        JahiaUser currentUser = JCRSessionFactory.getInstance().getCurrentUser();
-        AuthValveContext ctx = (AuthValveContext) request.getAttribute(AuthValveContext.class.getName());
-        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser) || ctx == null || ctx.isAuthRetrievedFromSession()) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            writer.write("{\"error\":\"Authentication required\"}");
-            return;
-        }
-
-        try {
-            if(!permissionService.hasPermission("module-management-community.import")) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                writer.write("{\"error\":\"Authentication required\"}");
-                return;
-            }
-        } catch (RepositoryException e) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            writer.write("{\"error\":\"Authentication required\"}");
-            return;
-        }
-
-        // --- Multipart check ---
-        if (!ServletFileUpload.isMultipartContent(request)) {
-            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            writer.write("{\"error\":\"Multipart request required\"}");
-            return;
-        }
+        JahiaUser currentUser = securityChecks(request, response, writer);
+        if (currentUser == null) return;
 
         try {
             ServletFileUpload upload = new ServletFileUpload();
@@ -128,6 +104,38 @@ public class ModuleArchiveImportServlet extends HttpServlet {
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             writer.write("{\"error\":" + toJsonString(e.getMessage()) + "}");
         }
+    }
+
+    @Nullable
+    private JahiaUser securityChecks(HttpServletRequest request, HttpServletResponse response, PrintWriter writer) {
+        // --- Authentication check ---
+        JahiaUser currentUser = JCRSessionFactory.getInstance().getCurrentUser();
+        AuthValveContext ctx = (AuthValveContext) request.getAttribute(AuthValveContext.class.getName());
+        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser) || ctx == null || ctx.isAuthRetrievedFromSession()) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            writer.write("{\"error\":\"Authentication required\"}");
+            return null;
+        }
+
+        try {
+            if(!permissionService.hasPermission("module-management-community.import")) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                writer.write("{\"error\":\"Authentication required\"}");
+                return null;
+            }
+        } catch (RepositoryException e) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            writer.write("{\"error\":\"Authentication required\"}");
+            return null;
+        }
+
+        // --- Multipart check ---
+        if (!ServletFileUpload.isMultipartContent(request)) {
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            writer.write("{\"error\":\"Multipart request required\"}");
+            return null;
+        }
+        return currentUser;
     }
 
     @Override

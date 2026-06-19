@@ -4,11 +4,11 @@ import {Button, Chip, Separator, Typography, Warning} from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
 import styles from './BundleDetails.scss';
 
-// Renders a label + value pair inside the identity grid (two adjacent grid children)
+// A11y B-018: use definition list for name/value pairs
 const InfoRow = ({label, value}) => (
     <>
-        <Typography variant="caption" className={styles.infoLabel}>{label}</Typography>
-        <Typography variant="body" className={styles.infoValue}>{value}</Typography>
+        <dt className={styles.infoLabel}>{label}</dt>
+        <dd className={styles.infoValue}>{value}</dd>
     </>
 );
 
@@ -27,10 +27,11 @@ const toArray = val => {
     return String(val).split(/[,\n]/).map(s => s.trim()).filter(Boolean);
 };
 
+// A11y B-006: use real heading element instead of styled Typography
 const SectionTitle = ({children}) => (
-    <Typography variant="subheading" weight="bold" className={styles.sectionTitle}>
+    <h3 className={styles.sectionTitle}>
         {children}
-    </Typography>
+    </h3>
 );
 
 SectionTitle.propTypes = {children: PropTypes.node};
@@ -96,18 +97,18 @@ const BundleInfo = ({bundle}) => {
     return (
         <div className={styles.bundleInfo}>
 
-            {/* ── Unresolved requirements banner ── */}
+            {/* A11y B-020: warning banners as alert regions */}
             {missingCount > 0 && (
-                <div className={styles.unresolvedBannerDanger}>
-                    <Warning/>
+                <div role="alert" className={styles.unresolvedBannerDanger}>
+                    <Warning aria-hidden="true"/>
                     <Typography variant="body">
                         {t('label.bundle.unresolvedReqs.bannerMissing', {count: missingCount})}
                     </Typography>
                 </div>
             )}
             {missingCount === 0 && conflictCount > 0 && (
-                <div className={styles.unresolvedBannerWarning}>
-                    <Warning/>
+                <div role="alert" className={styles.unresolvedBannerWarning}>
+                    <Warning aria-hidden="true"/>
                     <Typography variant="body">
                         {t('label.bundle.unresolvedReqs.bannerConflict', {count: conflictCount})}
                     </Typography>
@@ -117,11 +118,15 @@ const BundleInfo = ({bundle}) => {
             {/* ── Identity ── */}
             <section className={styles.infoSection}>
                 <SectionTitle>{t('label.bundle.details.section.identity')}</SectionTitle>
-                <div className={styles.identityGrid}>
+                {/* A11y B-018 / C-010: dl with explicit div wrappers — works across all AT/browser combos */}
+                <dl className={styles.identityGrid}>
                     {identityFields.map(({label, value}) => (
-                        <InfoRow key={label} label={label} value={value}/>
+                        <div key={label} className={styles.identityRow}>
+                            <dt className={styles.infoLabel}>{label}</dt>
+                            <dd className={styles.infoValue}>{value}</dd>
+                        </div>
                     ))}
-                </div>
+                </dl>
             </section>
 
             {/* ── Runtime Services ── */}
@@ -198,15 +203,27 @@ const BundleInfo = ({bundle}) => {
                 <>
                     <Separator variant="horizontal" spacing="small"/>
                     <section className={styles.infoSection}>
+                        {/* A11y B-023: aria-expanded + aria-controls on manifest toggle */}
                         <Button variant="ghost"
                                 size="small"
                                 color="default"
+                                aria-expanded={showManifest}
+                                aria-controls="manifest-table"
                                 label={showManifest ?
                                     t('label.bundle.details.manifest.hide') :
                                     t('label.bundle.details.manifest.show')}
                                 onClick={() => setShowManifest(v => !v)}/>
+                        {/* A11y B-009: table with aria-label and scope="col" headers */}
                         {showManifest && (
-                            <table className={styles.manifestTable}>
+                            <table id="manifest-table"
+                                   className={styles.manifestTable}
+                                   aria-label={t('label.bundle.details.manifest.tableLabel', 'Bundle manifest')}>
+                                <thead>
+                                    <tr>
+                                        <th scope="col">{t('label.bundle.details.manifest.col.key', 'Key')}</th>
+                                        <th scope="col">{t('label.bundle.details.manifest.col.value', 'Value')}</th>
+                                    </tr>
+                                </thead>
                                 <tbody>
                                     {bundle.manifest.map(({key, value}) => (
                                         <tr key={key} className={styles.manifestRow}>

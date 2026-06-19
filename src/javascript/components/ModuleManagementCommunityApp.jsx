@@ -123,7 +123,10 @@ const ModuleManagementCommunityApp = () => {
         data: initialData, error: initialError, loading: initialLoading,
         refetch: refreshAllModules
     } = useQuery(INSTALLED_MODULES_QUERY, {
-        fetchPolicy: 'cache-and-network', pollInterval: 30000, initialFetchPolicy: 'network-only'
+        fetchPolicy: 'cache-and-network',
+        // A11y B-005: only poll when user has auto-refresh enabled
+        pollInterval: preferences.autoRefresh ? 30000 : 0,
+        initialFetchPolicy: 'network-only'
     });
 
     const {data, error, loading, refetch} = useQuery(AVAILABLE_UPDATES_QUERY, {
@@ -298,8 +301,11 @@ const ModuleManagementCommunityApp = () => {
                         {t('label.table.title')}
                     </Typography>
                 }/>
+                {/* A11y A-010: announce loading state to screen readers */}
                 <CardContent className={styles.flexCenter}>
-                    <div className={styles.flex}><Loader size="big"/></div>
+                    <div className={styles.flex} role="status" aria-label={t('label.loading', 'Loading')}>
+                        <Loader size="big"/>
+                    </div>
                 </CardContent>
             </Card>
         );
@@ -366,6 +372,29 @@ const ModuleManagementCommunityApp = () => {
                             </span>
                         </Tooltip>
 
+                        {/* A11y B-005: user-controllable auto-refresh toggle */}
+                        <Tooltip
+                            title={preferences.autoRefresh ?
+                                t('label.autoRefresh.disable', 'Disable auto-refresh (currently refreshes every 30 s)') :
+                                t('label.autoRefresh.enable', 'Enable auto-refresh every 30 s')}
+                            placement="bottom"
+                        >
+                            <span>
+                                <Button variant={preferences.autoRefresh ? 'outlined' : 'ghost'}
+                                        size="big"
+                                        color={preferences.autoRefresh ? 'accent' : 'default'}
+                                        label={preferences.autoRefresh ?
+                                            t('label.autoRefresh.on', 'Auto') :
+                                            t('label.autoRefresh.off', 'Auto')}
+                                        aria-pressed={preferences.autoRefresh}
+                                        className={styles.button}
+                                        onClick={() => setPreferences({
+                                            ...preferences,
+                                            autoRefresh: !preferences.autoRefresh
+                                        })}/>
+                            </span>
+                        </Tooltip>
+
                         <Tooltip
                             title={preferences.dryRun ? t('label.updateAllDryRunTooltip') : t('label.updateAllLiveTooltip')}
                             placement="bottom"
@@ -383,12 +412,16 @@ const ModuleManagementCommunityApp = () => {
                             </span>
                         </Tooltip>
 
+                        {/* A11y A-014: aria-label, aria-haspopup, aria-expanded on ⋮ menu */}
                         <button className={styles.dotMenuBtn}
-                                title={t('label.menu.title')}
                                 type="button"
+                                aria-label={t('label.menu.title')}
+                                aria-haspopup="true"
+                                aria-expanded={Boolean(menuAnchor)}
                                 data-testid="more-actions-btn"
                                 onClick={e => setMenuAnchor(e.currentTarget)}
-                        >⋮
+                        >
+                            <span aria-hidden="true">⋮</span>
                         </button>
                         <Menu anchorEl={menuAnchor}
                               anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
@@ -466,10 +499,13 @@ const ModuleManagementCommunityApp = () => {
 
             <CardContent className={styles.marginBorder}>
                 <Separator variant="horizontal" spacing="none"/>
-                <Table>
+                {/* A11y A-017: table with accessible name */}
+                <Table aria-label={t('label.table.title')}>
                     <TableHead>
                         <TableRow>
-                            <TableHeadCell>
+                            <TableHeadCell
+                                aria-sort={orderBy === 'name' ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
+                            >
                                 <div className={styles.columnHeaderCell}>
                                     <div className={styles.columnHeaderRow}>
                                         <SortableHeader property="name"
@@ -478,10 +514,16 @@ const ModuleManagementCommunityApp = () => {
                                                         orderBy={orderBy}
                                                         onSort={handleSort}/>
                                     </div>
-                                    <input type="text"
+                                    {/* A11y A-005: visually-hidden label for name filter */}
+                                    <label htmlFor="filter-name" className={styles.srOnly}>
+                                        {t('label.input.filterBySymbolicName')}
+                                    </label>
+                                    <input id="filter-name"
+                                           type="text"
                                            placeholder={t('label.input.filterBySymbolicName')}
                                            value={filter}
                                            className={styles.columnFilterInput}
+                                           aria-label={t('label.input.filterBySymbolicName')}
                                            onChange={e => setFilter(e.target.value)}/>
                                 </div>
                             </TableHeadCell>
@@ -494,8 +536,10 @@ const ModuleManagementCommunityApp = () => {
                                         >{t('label.table.cells.type')}
                                         </Typography>
                                     </div>
+                                    {/* A11y A-022: aria-label on type filter select */}
                                     <select value={typeFilter}
                                             className={styles.columnFilterInput}
+                                            aria-label={t('label.table.cells.type')}
                                             style={{marginTop: '6px', marginBottom: '8px'}}
                                             onChange={e => {
                                                 setTypeFilter(e.target.value);
@@ -512,7 +556,9 @@ const ModuleManagementCommunityApp = () => {
                                 </div>
                             </TableHeadCell>
 
-                            <TableHeadCell>
+                            <TableHeadCell
+                                aria-sort={orderBy === 'version' ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
+                            >
                                 <SortableHeader property="version"
                                                 label={t('label.table.cells.version')}
                                                 order={order}
@@ -521,7 +567,9 @@ const ModuleManagementCommunityApp = () => {
                             </TableHeadCell>
 
                             {updates.length > 0 && (
-                                <TableHeadCell>
+                                <TableHeadCell
+                                    aria-sort={orderBy === 'available' ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                >
                                     <div className={styles.columnHeaderCell}>
                                         <div className={styles.columnHeaderRow}>
                                             <SortableHeader property="available"
@@ -530,19 +578,23 @@ const ModuleManagementCommunityApp = () => {
                                                             orderBy={orderBy}
                                                             onSort={handleSort}/>
                                         </div>
+                                        {/* A11y A-021: aria-label on updates-only switch */}
                                         <label className={styles.columnCheckboxLabel}>
-                                            <Switch checked={preferences.updatesOnly}
-                                                    onChange={(e, value, checked) => setPreferences({
-                                                        ...preferences,
-                                                        updatesOnly: checked
-                                                    })}/>
-                                            <Typography variant="caption">{t('label.input.updatesOnly')}</Typography>
-                                        </label>
+                                             <Switch checked={preferences.updatesOnly}
+                                                     aria-label={t('label.input.updatesOnly')}
+                                                     onChange={(e, value, checked) => setPreferences({
+                                                         ...preferences,
+                                                         updatesOnly: checked
+                                                     })}/>
+                                             <Typography variant="caption" aria-hidden="true">{t('label.input.updatesOnly')}</Typography>
+                                         </label>
                                     </div>
                                 </TableHeadCell>
                             )}
 
-                            <TableHeadCell>
+                            <TableHeadCell
+                                aria-sort={orderBy === 'state' ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
+                            >
                                 <SortableHeader property="state"
                                                 label={isClustered ? t('label.table.cells.clusterstate') : t('label.table.cells.state')}
                                                 order={order}

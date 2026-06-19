@@ -84,8 +84,11 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
     if (loading) {
         return (
             <TableRow>
+                {/* A11y A-010: announce row-level loading state */}
                 <TableBodyCell colSpan={5}>
-                    <div className={styles.flexCenter}><Loader size="small"/></div>
+                    <div className={styles.flexCenter} role="status" aria-label="Loading module data">
+                        <Loader size="small"/>
+                    </div>
                 </TableBodyCell>
             </TableRow>
         );

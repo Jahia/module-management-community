@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import * as PropTypes from 'prop-types';
 import {Button, Cancel, Check, Close, Typography, Warning} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
@@ -34,6 +34,8 @@ MessageRenderer.propTypes = {
 export const HealthStatus = ({status, probes, version}) => {
     const {t} = useTranslation('module-management-community');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const openBtnRef = useRef(null); // A11y A-001: track trigger for focus return
+    const dialogRef = useRef(null);
 
     const handleBadgeClick = () => {
         if (probes && probes.length > 0) {
@@ -41,13 +43,59 @@ export const HealthStatus = ({status, probes, version}) => {
         }
     };
 
-    const renderStatusBadge = s => {
+    const handleClose = () => {
+        setIsDialogOpen(false);
+        // A11y A-001: return focus to trigger button on close
+        setTimeout(() => openBtnRef.current?.focus(), 0);
+    };
+
+    // A11y C-002: keyboard focus trap — cycles Tab/Shift+Tab within the dialog
+    const handleDialogKeyDown = e => {
+        if (e.key === 'Escape') {
+            handleClose();
+            return;
+        }
+
+        if (e.key === 'Tab' && dialogRef.current) {
+            const focusable = Array.from(dialogRef.current.querySelectorAll(
+                'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            ));
+            if (focusable.length < 2) {
+                return;
+            }
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    };
+
+    // A11y A-001: move focus into dialog when it opens
+    useEffect(() => {
+        if (isDialogOpen && dialogRef.current) {
+            const firstFocusable = dialogRef.current.querySelector(
+                'button, [href], input, select, [tabindex]:not([tabindex="-1"])'
+            );
+            firstFocusable?.focus();
+        }
+    }, [isDialogOpen]);
+
+    const renderStatusBadge = (s, ref) => {
+        // A11y A-002: each status button has a descriptive aria-label
         if (s === 'GREEN') {
             return (
-                <Button variant="outlined"
+                <Button ref={ref}
+                        variant="outlined"
                         size="big"
                         label=""
                         icon={<Check/>}
+                        aria-label={t('label.sam.status.green', 'Server status: OK')}
                         className={`${styles.statusButton} ${styles.green}`}
                         onClick={handleBadgeClick}/>
             );
@@ -55,20 +103,24 @@ export const HealthStatus = ({status, probes, version}) => {
 
         if (s === 'YELLOW') {
             return (
-                <Button variant="outlined"
+                <Button ref={ref}
+                        variant="outlined"
                         size="big"
                         label=""
                         icon={<Warning/>}
+                        aria-label={t('label.sam.status.yellow', 'Server status: Warning')}
                         className={`${styles.statusButton} ${styles.yellow}`}
                         onClick={handleBadgeClick}/>
             );
         }
 
         return (
-            <Button variant="outlined"
+            <Button ref={ref}
+                    variant="outlined"
                     size="big"
                     label=""
                     icon={<Cancel/>}
+                    aria-label={t('label.sam.status.red', 'Server status: Error')}
                     className={`${styles.statusButton} ${styles.red}`}
                     onClick={handleBadgeClick}/>
         );
@@ -107,24 +159,40 @@ export const HealthStatus = ({status, probes, version}) => {
                         </>
                     )}
                 </div>
-                {renderStatusBadge(status)}
+                {/* pass the ref only to the top-level badge */}
+                {renderStatusBadge(status, openBtnRef)}
             </div>
 
             {isDialogOpen && (
-                <div className={styles.probeDialog}>
+                // A11y A-001 / C-002: proper dialog with focus trap via onKeyDown handler
+                <div ref={dialogRef}
+                     className={styles.probeDialog}
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="probe-dialog-title"
+                     onKeyDown={handleDialogKeyDown}
+                >
                     <div className={styles.probeDialogContent}>
                         <div className={styles.probeDialogHeader}>
-                            <Typography variant="title">{t('label.sam.probes.title')}</Typography>
-                            <Button variant="ghost" icon={<Close/>} onClick={() => setIsDialogOpen(false)}/>
+                            {/* A11y C-001: semantic h2 — dialog title is the top heading in this modal */}
+                            <Typography variant="title" component="h2">{t('label.sam.probes.title')}</Typography>
+                            {/* A11y A-027: close button with accessible label */}
+                            <Button variant="ghost"
+                                    icon={<Close/>}
+                                    aria-label={t('label.close', 'Close')}
+                                    onClick={handleClose}/>
                         </div>
                         <div className={styles.probeDialogBody}>
-                            <table className={styles.probeTable}>
+                            {/* A11y A-006: table with aria-label and scope="col" on headers */}
+                            <table className={styles.probeTable}
+                                   aria-label={t('label.sam.probes.title')}
+                            >
                                 <thead>
                                     <tr>
-                                        <th>{t('label.sam.probes.name')}</th>
-                                        <th>{t('label.sam.probes.description')}</th>
-                                        <th>{t('label.sam.probes.severity')}</th>
-                                        <th>{t('label.sam.probes.status')}</th>
+                                        <th scope="col">{t('label.sam.probes.name')}</th>
+                                        <th scope="col">{t('label.sam.probes.description')}</th>
+                                        <th scope="col">{t('label.sam.probes.severity')}</th>
+                                        <th scope="col">{t('label.sam.probes.status')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -144,7 +212,8 @@ export const HealthStatus = ({status, probes, version}) => {
                                                 </div>
                                             </td>
                                             <td>{probe.severity}</td>
-                                            <td>{renderStatusBadge(probe.status.health)}</td>
+                                            {/* A11y A-002: per-probe status badge with aria-label */}
+                                            <td>{renderStatusBadge(probe.status.health, null)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -155,7 +224,7 @@ export const HealthStatus = ({status, probes, version}) => {
                                     size="big"
                                     color="accent"
                                     label={t('label.close')}
-                                    onClick={() => setIsDialogOpen(false)}/>
+                                    onClick={handleClose}/>
                         </div>
                     </div>
                 </div>
@@ -181,4 +250,3 @@ HealthStatus.propTypes = {
         build: PropTypes.string
     })
 };
-

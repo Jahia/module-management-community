@@ -12,6 +12,8 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 16px;
+  max-height: 10rem;
+  overflow-y: auto;
 }
 
 .moduleChip {

@@ -1,3 +1,11 @@
+/* A11y D-007: semantic h2 dialog title */
+.dialogTitle {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--color-gray_dark);
+}
+
 .dialogContent {
     display: flex;
     flex-direction: column;
@@ -43,12 +51,12 @@
 }
 
 .embedHint {
-    color: #555 !important;
+    color: var(--color-gray_dark) !important;  /* A11y D-002: lifted from #555 for ≥7:1 */
     margin-top: 2px;
 }
 
 .hint {
-    color: #666 !important;
+    color: var(--color-gray_dark) !important;  /* A11y D-002: lifted from #666 (~5.2:1) for ≥7:1 */
     margin-top: 2px;
 }
 

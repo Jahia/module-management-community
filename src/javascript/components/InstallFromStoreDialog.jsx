@@ -107,7 +107,7 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
             onEnter={handleOpen}
         >
             <DialogTitle disableTypography>
-                <Typography variant="title">{t('label.installFromStore.title')}</Typography>
+                <Typography variant="title" component="h2">{t('label.installFromStore.title')}</Typography>
                 <Typography variant="body" className={styles.subtitle}>
                     {t('label.installFromStore.subtitle')}
                 </Typography>
@@ -116,7 +116,12 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
             <DialogContent className={styles.content}>
                 {/* Search + bulk actions */}
                 <div className={styles.searchRow}>
+                    {/* A11y A-016: programmatic label for search input */}
+                    <label htmlFor="store-search" className={styles.srOnly}>
+                        {t('label.installFromStore.searchPlaceholder')}
+                    </label>
                     <input
+                        id="store-search"
                         type="text"
                         className={styles.searchInput}
                         placeholder={t('label.installFromStore.searchPlaceholder')}
@@ -138,8 +143,11 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
 
                 {/* Module list */}
                 <div className={styles.moduleList}>
+                    {/* A11y C-005: loader with role="status" */}
                     {loading && (
-                        <div style={{display: 'flex', alignItems: 'center', gap: 8, padding: 16}}>
+                        <div style={{display: 'flex', alignItems: 'center', gap: 8, padding: 16}}
+                             role="status"
+                             aria-live="polite">
                             <Loader size="small"/>
                             <Typography variant="body">{t('label.loading')}</Typography>
                         </div>
@@ -171,6 +179,7 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
                                     disabled={isInstalling}
                                     onChange={() => toggleModule(m.symbolicName)}
                                 />
+                                {/* A11y A-013: decorative emoji hidden from AT */}
                                 {m.icon ? (
                                     <img
                                         src={m.icon}
@@ -179,7 +188,7 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
                                         onError={e => { e.target.style.display = 'none'; }}
                                     />
                                 ) : (
-                                    <span className={styles.moduleIconPlaceholder}>📦</span>
+                                    <span role="img" aria-hidden="true" className={styles.moduleIconPlaceholder}>📦</span>
                                 )}
                                 <span className={styles.moduleTitleBlock}>
                                     <Typography variant="body" className={styles.moduleTitle}>
@@ -192,16 +201,17 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
                                 <span className={`${styles.badge} ${styles.badge_module}`}>
                                     {m.latestVersion}
                                 </span>
+                                {/* A11y A-012: descriptive aria-label on store link */}
                                 {m.storeUrl && (
                                     <a
                                         href={m.storeUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className={styles.storeLink}
+                                        aria-label={t('label.installFromStore.viewOnStoreAriaLabel', {name: m.title || m.symbolicName, defaultValue: `View ${m.title || m.symbolicName} on store (opens in new window)`})}
                                         onClick={e => e.stopPropagation()}
-                                        title={t('label.installFromStore.viewOnStore')}
                                     >
-                                        ↗
+                                        <span aria-hidden="true">↗</span>
                                     </a>
                                 )}
                             </label>
@@ -209,16 +219,20 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
                     })}
                 </div>
 
-                {/* Status feedback */}
+                {/* A11y A-009: status feedback as live regions; A-013: emoji aria roles */}
                 {status === 'success' && (
-                    <div className={styles.statusSuccess}>
-                        <Typography variant="body">✅ {statusMessage}</Typography>
+                    <div className={styles.statusSuccess} role="status" aria-live="polite">
+                        <Typography variant="body">
+                            <span role="img" aria-label="Success">✅</span> {statusMessage}
+                        </Typography>
                     </div>
                 )}
 
                 {status === 'error' && (
-                    <div className={styles.statusError}>
-                        <Typography variant="body">⚠️ {statusMessage}</Typography>
+                    <div className={styles.statusError} role="alert" aria-live="assertive">
+                        <Typography variant="body">
+                            <span role="img" aria-label="Warning">⚠️</span> {statusMessage}
+                        </Typography>
                     </div>
                 )}
 

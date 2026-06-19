@@ -8,7 +8,7 @@ import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {HealthStatus} from './HealthStatus';
 
-const ModuleManagementCommunityEntry = () => {
+export const ModuleManagementCommunityEntry = () => {
     const {t} = useTranslation('module-management-community');
     const {data, error, loading} = useQuery(gql`
         query GetServerStatus {
@@ -30,7 +30,12 @@ const ModuleManagementCommunityEntry = () => {
     });
 
     return (
-        <Suspense fallback="loading ...">
+        /* A11y B-013: Suspense fallback as accessible live region */
+        <Suspense fallback={
+            <div role="status" aria-live="polite" aria-label="Loading">
+                <span className="srOnly">Loading…</span>
+            </div>
+        }>
             <div className={styles.root} id="module-management-community-root">
                 <div className={styles.headerRoot}>
                     <header className={styles.header}>
@@ -39,16 +44,18 @@ const ModuleManagementCommunityEntry = () => {
                             <Typography variant="subheading">{t('label.subtitle')}</Typography>
                         </div>
                         <div className={styles.actionBar}>
+                            {/* A11y B-011: indicate new window opens */}
                             <Button variant="ghost"
                                     size="big"
                                     color="default"
                                     label={t('label.help')}
                                     icon={<Help/>}
+                                    aria-label={`${t('label.help')} (opens in a new window)`}
                                     onClick={() => {
-                                        window.open(t('help.url'), 'Module Management Community - Help');
+                                        window.open(t('help.url'), '_blank', 'noopener,noreferrer');
                                     }}/>
                             {loading ? (
-                                <Typography variant="body" className={styles.status}>
+                                <Typography variant="body" className={styles.status} role="status" aria-live="polite">
                                     {t('label.sam.loadingStatus')}
                                 </Typography>
                             ) : error ? (
@@ -64,7 +71,7 @@ const ModuleManagementCommunityEntry = () => {
                             )}
                         </div>
                     </header>
-                    <Separator size="large" variant="horizontal" spacing="medium"/>
+                    <Separator size="large" variant="horizontal" spacing="medium" aria-hidden="true"/>
                 </div>
                 <div className={styles.content}>
                     <ModuleManagementCommunityApp/>

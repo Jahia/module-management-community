@@ -30,7 +30,7 @@ describe('Module Management Community', () => {
     };
 
     const waitForRowLoaded = () => {
-        cy.get('[title="Show details"]', {timeout: 20000}).first().should('be.visible');
+        cy.get('[aria-label="Show details"]', {timeout: 20000}).first().should('be.visible');
     };
 
     /** Open the ⋮ more-actions menu */
@@ -230,7 +230,7 @@ describe('Module Management Community', () => {
         });
 
         it('renders the "Show details" action button', () => {
-            cy.get('[title="Show details"]').should('have.length.at.least', 1);
+            cy.get('[aria-label="Show details"]').should('have.length.at.least', 1);
         });
     });
 
@@ -244,7 +244,7 @@ describe('Module Management Community', () => {
             filterByName(testBundle);
             cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
             waitForRowLoaded();
-            cy.get('[title="Show details"]').first().click();
+            cy.get('[aria-label="Show details"]').first().click();
             cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 
@@ -295,7 +295,7 @@ describe('Module Management Community', () => {
             filterByName(testBundle);
             cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
             waitForRowLoaded();
-            cy.get('[title="Show details"]').first().click();
+            cy.get('[aria-label="Show details"]').first().click();
             cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 
@@ -356,7 +356,7 @@ describe('Module Management Community', () => {
             filterByName(testBundle);
             cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
             waitForRowLoaded();
-            cy.get('[title="Show details"]').first().click();
+            cy.get('[aria-label="Show details"]').first().click();
             cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 

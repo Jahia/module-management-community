@@ -75,10 +75,11 @@ export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript, title}
 
                         {/* Header: view toggle + actions */}
                         <div className={styles.yamlHeader}>
-                            {/* YAML / cURL tab toggle */}
+                            {/* A11y A-015: aria-pressed communicates toggle state */}
                             <div className={styles.viewToggle}>
                                 <button
                                     type="button"
+                                    aria-pressed={viewMode === 'yaml'}
                                     className={`${styles.toggleBtn} ${viewMode === 'yaml' ? styles.toggleBtnActive : ''}`}
                                     onClick={() => setViewMode('yaml')}
                                 >
@@ -86,6 +87,7 @@ export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript, title}
                                 </button>
                                 <button
                                     type="button"
+                                    aria-pressed={viewMode === 'curl'}
                                     className={`${styles.toggleBtn} ${viewMode === 'curl' ? styles.toggleBtnActive : ''}`}
                                     onClick={() => setViewMode('curl')}
                                 >
@@ -119,7 +121,12 @@ export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript, title}
                             </Typography>
                         )}
 
-                        <pre className={styles.yaml}>{activeContent}</pre>
+                        {/* A11y A-028: labelled, keyboard-scrollable code block */}
+                        <pre className={styles.yaml}
+                             tabIndex={0}
+                             aria-label={viewMode === 'yaml' ? t('label.dryRun.dialog.yamlAriaLabel', 'Provisioning YAML script') : t('label.dryRun.dialog.curlAriaLabel', 'cURL deployment command')}
+                        >{activeContent}
+                        </pre>
                     </>
                 )}
             </DialogContent>

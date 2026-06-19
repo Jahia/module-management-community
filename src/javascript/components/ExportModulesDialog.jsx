@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {Button, Loader, Switch, Typography} from '@jahia/moonstone';
+import {useNotifications} from '@jahia/react-material';
 import {Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, FormGroup} from '@material-ui/core';
 import {useTranslation} from 'react-i18next';
 import styles from './ExportModulesDialog.scss';
@@ -11,6 +12,7 @@ const BUNDLE_TYPES = ['module', 'system', 'templatesSet'];
 
 export const ExportModulesDialog = ({isOpen, onClose}) => {
     const {t} = useTranslation('module-management-community');
+    const notificationContext = useNotifications(); // A11y B-027
 
     const [selectedTypes, setSelectedTypes] = useState(new Set(BUNDLE_TYPES));
     // EmbedAll=true (default): embed every JAR in the ZIP for a self-contained archive
@@ -102,13 +104,20 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
 
             const blob = await response.blob();
             const objectUrl = URL.createObjectURL(blob);
+            const fileName = `module-snapshot-${new Date().toISOString().split('T')[0]}.zip`;
             const a = document.createElement('a');
             a.href = objectUrl;
-            a.download = `module-snapshot-${new Date().toISOString().split('T')[0]}.zip`;
+            a.download = fileName;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+
+            // A11y B-027: notify screen readers the download has started
+            notificationContext.notify(
+                t('label.export.dialog.downloadStarted', {fileName, defaultValue: `Download started: ${fileName}`}),
+                ['closeButton', 'closeAfter5s']
+            );
 
             setStatus('idle');
             handleClose();
@@ -125,7 +134,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
     return (
         <Dialog fullWidth open={isOpen} maxWidth="md" data-testid="export-modules-dialog" onClose={handleClose}>
             <DialogTitle disableTypography>
-                <Typography variant="heading" weight="semiBold">
+                <Typography variant="heading" weight="semiBold" component="h2">
                     {t('label.export.dialog.title')}
                 </Typography>
             </DialogTitle>
@@ -153,12 +162,13 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                     ))}
                 </FormGroup>
 
-                {/* Embed toggle */}
+                {/* A11y B-012: embed toggle with programmatic label */}
                 <div className={styles.embedRow}>
                     <Switch
                         data-testid="embed-all-toggle"
                         checked={embedAll}
                         disabled={isBusy}
+                        aria-label={t('label.export.dialog.embedAll.label')}
                         onChange={(e, value, checked) => {
                             setEmbedAll(checked);
                             setPreviewYaml('');
@@ -180,34 +190,43 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                     {t('label.export.dialog.hint')}
                 </Typography>
 
-                {/* Status messages */}
+                {/* A11y C-004: loading spinners with role="status" */}
                 {isExporting && (
-                    <div className={styles.statusRow}>
+                    <div className={styles.statusRow} role="status" aria-live="polite">
                         <Loader size="small"/>
                         <Typography variant="body">{t('label.export.dialog.exporting')}</Typography>
                     </div>
                 )}
 
                 {isPreviewing && (
-                    <div className={styles.statusRow}>
+                    <div className={styles.statusRow} role="status" aria-live="polite">
                         <Loader size="small"/>
                         <Typography variant="body">{t('label.export.dialog.previewing')}</Typography>
                     </div>
                 )}
 
+                {/* A11y B-022: error as live alert region with emoji aria role */}
                 {status === 'error' && (
-                    <div className={`${styles.statusRow} ${styles.statusError}`}>
-                        <Typography variant="body">⚠️ {errorMessage}</Typography>
+                    <div className={`${styles.statusRow} ${styles.statusError}`}
+                         role="alert"
+                         aria-live="assertive">
+                        <Typography variant="body">
+                            <span role="img" aria-label="Warning">⚠️</span> {errorMessage}
+                        </Typography>
                     </div>
                 )}
 
-                {/* YAML preview */}
+                {/* YAML preview — A11y C-014: keyboard-scrollable pre block */}
                 {previewYaml && (
                     <div className={styles.previewContainer}>
                         <Typography variant="caption" weight="semiBold" className={styles.previewLabel}>
                             {t('label.export.dialog.preview.label')}
                         </Typography>
-                        <pre className={styles.yamlPreview}>{previewYaml}</pre>
+                        <pre className={styles.yamlPreview}
+                             tabIndex={0}
+                             aria-label={t('label.export.dialog.preview.ariaLabel', 'YAML provisioning preview')}>
+                            {previewYaml}
+                        </pre>
                     </div>
                 )}
             </DialogContent>

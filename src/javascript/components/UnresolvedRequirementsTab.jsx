@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Chip, Typography, Warning} from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
@@ -40,8 +40,19 @@ const extractVersion = filter => {
     return null;
 };
 
+// A11y C-006: stable counter-based ID — works in React 16/17/18, avoids duplicate IDs
+let reqTabIdCounter = 0;
+
 const UnresolvedRequirementsTab = ({bundle}) => {
     const {t} = useTranslation('module-management-community');
+
+    // Stable unique prefix for this component instance
+    const uidRef = useRef(null);
+    if (uidRef.current === null) {
+        uidRef.current = `req-${++reqTabIdCounter}`;
+    }
+
+    const uid = uidRef.current;
     const [nsFilter, setNsFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [reqSearch, setReqSearch] = useState('');
@@ -94,28 +105,34 @@ const UnresolvedRequirementsTab = ({bundle}) => {
 
     return (
         <div className={styles.unresolvedReqsTab}>
+            {/* A11y B-020: warning banners as alert regions */}
             {missing.length > 0 && (
-                <div className={styles.unresolvedAlertDanger}>
-                    <Warning/>
+                <div role="alert" className={styles.unresolvedAlertDanger}>
+                    <Warning aria-hidden="true"/>
                     <Typography variant="body">
                         {t('label.bundle.unresolvedReqs.alertMissing', {count: missing.length})}
                     </Typography>
                 </div>
             )}
             {conflicting.length > 0 && (
-                <div className={styles.unresolvedAlertWarning}>
-                    <Warning/>
+                <div role="alert" className={styles.unresolvedAlertWarning}>
+                    <Warning aria-hidden="true"/>
                     <Typography variant="body">
                         {t('label.bundle.unresolvedReqs.alertConflict', {count: conflicting.length})}
                     </Typography>
                 </div>
             )}
 
-            {/* ── Filter bar ── */}
+            {/* A11y B-008: all filter controls have programmatic labels with unique IDs */}
             <div className={styles.unresolvedFilterBar}>
+                <label htmlFor={`${uid}-ns-filter`} className={styles.srOnly}>
+                    {t('label.bundle.unresolvedReqs.filter.allTypes')}
+                </label>
                 <select
+                    id={`${uid}-ns-filter`}
                     className={styles.unresolvedFilterSelect}
                     value={nsFilter}
+                    aria-label={t('label.bundle.unresolvedReqs.filter.allTypes')}
                     onChange={e => setNsFilter(e.target.value)}
                 >
                     <option value="">{t('label.bundle.unresolvedReqs.filter.allTypes')}</option>
@@ -124,17 +141,27 @@ const UnresolvedRequirementsTab = ({bundle}) => {
                     ))}
                 </select>
 
+                <label htmlFor={`${uid}-search`} className={styles.srOnly}>
+                    {t('label.bundle.unresolvedReqs.filter.searchReq')}
+                </label>
                 <input
+                    id={`${uid}-search`}
                     type="text"
                     className={styles.unresolvedFilterSearch}
                     placeholder={t('label.bundle.unresolvedReqs.filter.searchReq')}
                     value={reqSearch}
+                    aria-label={t('label.bundle.unresolvedReqs.filter.searchReq')}
                     onChange={e => setReqSearch(e.target.value)}
                 />
 
+                <label htmlFor={`${uid}-status-filter`} className={styles.srOnly}>
+                    {t('label.bundle.unresolvedReqs.filter.allStatuses')}
+                </label>
                 <select
+                    id={`${uid}-status-filter`}
                     className={styles.unresolvedFilterSelect}
                     value={statusFilter}
+                    aria-label={t('label.bundle.unresolvedReqs.filter.allStatuses')}
                     onChange={e => setStatusFilter(e.target.value)}
                 >
                     <option value="">{t('label.bundle.unresolvedReqs.filter.allStatuses')}</option>
@@ -167,12 +194,14 @@ const UnresolvedRequirementsTab = ({bundle}) => {
                     {t('label.bundle.unresolvedReqs.filter.noResults')}
                 </Typography>
             ) : (
-                <table className={styles.unresolvedTable}>
+                /* A11y B-009: table with aria-label and scope="col" headers */
+                <table className={styles.unresolvedTable}
+                       aria-label={t('label.bundle.unresolvedReqs.tableLabel', 'Unresolved requirements')}>
                     <thead>
                         <tr>
-                            <th className={styles.unresolvedThNs}>{t('label.bundle.unresolvedReqs.col.namespace')}</th>
-                            <th className={styles.unresolvedThReq}>{t('label.bundle.unresolvedReqs.col.requirement')}</th>
-                            <th className={styles.unresolvedThStatus}>{t('label.bundle.unresolvedReqs.col.status')}</th>
+                            <th scope="col" className={styles.unresolvedThNs}>{t('label.bundle.unresolvedReqs.col.namespace')}</th>
+                            <th scope="col" className={styles.unresolvedThReq}>{t('label.bundle.unresolvedReqs.col.requirement')}</th>
+                            <th scope="col" className={styles.unresolvedThStatus}>{t('label.bundle.unresolvedReqs.col.status')}</th>
                         </tr>
                     </thead>
                     <tbody>

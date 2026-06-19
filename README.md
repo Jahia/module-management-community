@@ -6,10 +6,10 @@ Jahia modules.
 ## Features
 
 - GraphQL API for module management
-- UI extension for Jahia administration (TODO)
+- UI extension for Jahia administration with column filtering
 - Integration with Maven for module metadata resolution
 
-![UI-overview.png](docs/UI-overview.png)
+![column-filtering.png](docs/column-filtering.png)
 
 ## Technologies
 
@@ -44,7 +44,47 @@ mvn clean install jahia:deploy -Djahia.deploy.targetContainerName="jahia"
 
 - Deploy the built module to your Jahia instance.
 - Access the GraphQL API for module management operations.
-- Use the UI extension in Jahia's administration interface. (TODO)
+- Use the UI extension in Jahia's administration interface at `/jahia/administration/module-management-community`.
+
+## Column Filtering
+
+The modules table provides interactive, client-side column filters that narrow down the list without a page reload.
+
+### Module Name filter
+
+A free-text input in the **Module name** column header filters rows by bundle symbolic name (case-insensitive, substring match).
+
+```
+┌─────────────────────────────┐
+│ Module name ↑               │
+│ [Filter by symbolic name…]  │
+└─────────────────────────────┘
+```
+
+Typing `dashboard` will keep only rows whose symbolic name contains `dashboard`.
+
+### Type filter
+
+A dropdown in the **Type** column header filters rows by bundle type.
+
+| Option | Behaviour |
+|--------|-----------|
+| **Jahia modules** *(default)* | Shows only Jahia module types: `module`, `system`, `templatesSet`. Plain OSGi bundles are hidden. |
+| **All** | Shows every installed bundle regardless of type. |
+| **module** | Shows only bundles of type `module`. |
+| **system** | Shows only bundles of type `system`. |
+| **bundle** | Shows only plain OSGi bundles. |
+| **templatesSet** | Shows only bundles of type `templatesSet`. |
+
+Changing the type filter resets the pagination back to page 1.
+
+### Updates Only toggle
+
+When at least one update is available, the **Available version** column header displays a toggle switch labelled *Updates only*. Enabling it hides every module that has neither a direct update nor a dependent-module update available, making it easy to focus on what needs upgrading.
+
+> **Note:** All three filters (name, type, updates-only) are applied simultaneously, so only rows that satisfy every active filter are shown.
+
+![column-filtering.png](docs/column-filtering.png)
 
 ## GraphQL API
 The module provides a GraphQL API for managing Jahia modules. You can query and mutate module data using the provided endpoints.

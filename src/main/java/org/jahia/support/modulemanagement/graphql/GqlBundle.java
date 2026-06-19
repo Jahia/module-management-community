@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 
 
 public class GqlBundle {
+    public static final String FILTER_DIRECTIVES = "filter";
     protected final Bundle bundle;
 
     public GqlBundle(Bundle bundle) {
@@ -135,7 +136,7 @@ public class GqlBundle {
             BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
             if (bundleRevision != null) {
                 for (BundleRequirement req : bundleRevision.getDeclaredRequirements("osgi.wiring.package")) {
-                    String filter = req.getDirectives().get("filter");
+                    String filter = req.getDirectives().get(FILTER_DIRECTIVES);
                     if (filter != null) wiring.add(filter);
                 }
             }
@@ -167,7 +168,7 @@ public class GqlBundle {
             BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
             if (bundleRevision != null) {
                 for (BundleRequirement req : bundleRevision.getDeclaredRequirements("com.jahia.modules.dependencies")) {
-                    String filter = req.getDirectives().get("filter");
+                    String filter = req.getDirectives().get(FILTER_DIRECTIVES);
                     if (filter != null) wiring.add(filter);
                 }
             }
@@ -216,14 +217,14 @@ public class GqlBundle {
         if (bundleWiring != null) {
             // Bundle is resolved/active — extract value from actual runtime wires
             for (BundleWire wire : bundleWiring.getRequiredWires("com.jahia.services.content")) {
-                wiring.add(SimpleFilter.parse(wire.getRequirement().getDirectives().get("filter")).getValue().toString());
+                wiring.add(SimpleFilter.parse(wire.getRequirement().getDirectives().get(FILTER_DIRECTIVES)).getValue().toString());
             }
         } else {
             // Bundle is unresolved (e.g. INSTALLED) — fall back to declared manifest requirements
             BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
             if (bundleRevision != null) {
                 for (BundleRequirement req : bundleRevision.getDeclaredRequirements("com.jahia.services.content")) {
-                    String filter = req.getDirectives().get("filter");
+                    String filter = req.getDirectives().get(FILTER_DIRECTIVES);
                     if (filter != null) wiring.add(SimpleFilter.parse(filter).getValue().toString());
                 }
             }
@@ -263,15 +264,14 @@ public class GqlBundle {
                 : null;
 
         for (BundleRequirement req : bundleRevision.getDeclaredRequirements(null)) {
-            if (wiredRequirements.contains(req)) continue; // already satisfied
-
+            // already satisfied or
             // Skip service requirements entirely: OSGi services are managed through the
             // service registry, not through bundle wiring. getRequiredWires(null) never
             // returns service wires, so service requirements would always appear "unresolved"
             // even for a perfectly healthy ACTIVE bundle — producing false positives.
-            if ("osgi.service".equals(req.getNamespace())) continue;
+            if (wiredRequirements.contains(req) || "osgi.service".equals(req.getNamespace())) continue;
 
-            String filter = req.getDirectives().get("filter");
+            String filter = req.getDirectives().get(FILTER_DIRECTIVES);
             String resolution = req.getDirectives().get("resolution");
             boolean optional = "optional".equals(resolution);
 
@@ -307,7 +307,7 @@ public class GqlBundle {
 
         /** Raw OSGi filter string from the manifest, e.g. {@code (&(osgi.wiring.package=com.example)(version>=1.0.0))}. */
         @GraphQLField
-        @GraphQLName("filter")
+        @GraphQLName(FILTER_DIRECTIVES)
         public String getFilter() {
             return filter;
         }
@@ -339,7 +339,7 @@ public class GqlBundle {
         if (bundle.adapt(BundleWiring.class) != null) {
             BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
             for (BundleWire revision : bundleWiring.getRequiredWires("org.jahia.license")) {
-                license = SimpleFilter.parse(revision.getRequirement().getDirectives().get("filter")).getValue().toString();
+                license = SimpleFilter.parse(revision.getRequirement().getDirectives().get(FILTER_DIRECTIVES)).getValue().toString();
             }
         }
         return license;

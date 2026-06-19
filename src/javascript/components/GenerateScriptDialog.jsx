@@ -137,32 +137,43 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
                 onEnter={handleOpen}
             >
                 <DialogTitle disableTypography>
-                    <Typography variant="title">{t('label.generateScript.title')}</Typography>
+                    <Typography variant="title" component="h2">{t('label.generateScript.title')}</Typography>
                     <Typography variant="body" className={styles.subtitle}>
                         {t('label.generateScript.subtitle')}
                     </Typography>
                 </DialogTitle>
 
                 <DialogContent className={styles.content}>
+                    {/* A11y C-009: generating status live region */}
+                    <div role="status" aria-live="polite" aria-atomic="true">
+                        {isGenerating && t('label.generateScript.generating')}
+                    </div>
                     {/* Type filter row */}
                     <div className={styles.typeRow}>
                         <Typography variant="caption" className={styles.typeLabel}>
                             {t('label.generateScript.includeTypes')}
                         </Typography>
+                        {/* A11y A-008: aria-label associates each Switch with its label */}
                         {TYPE_OPTIONS.map(({key, labelKey}) => (
                             <label key={key} className={styles.typeChip}>
                                 <Switch
                                     checked={typeFilter.has(key)}
+                                    aria-label={t(labelKey)}
                                     onChange={() => toggleType(key)}
                                 />
-                                <Typography variant="body">{t(labelKey)}</Typography>
+                                <Typography variant="body" aria-hidden="true">{t(labelKey)}</Typography>
                             </label>
                         ))}
                     </div>
 
                     {/* Search + select all/none */}
                     <div className={styles.searchRow}>
+                        {/* A11y A-016: programmatic label for search input */}
+                        <label htmlFor="script-search" className={styles.srOnly}>
+                            {t('label.generateScript.searchPlaceholder')}
+                        </label>
                         <input
+                            id="script-search"
                             type="text"
                             className={styles.searchInput}
                             placeholder={t('label.generateScript.searchPlaceholder')}

@@ -1,3 +1,12 @@
+/**
+ * NOT IN USE — this component is not imported anywhere in the application.
+ * The active implementation is BundleInfo.jsx.
+ *
+ * A11y D-004: if this component is ever re-activated it needs:
+ *  - useTranslation() — all strings are hardcoded English
+ *  - Valid Moonstone props — variant="body1" / "body2" and color="text.secondary" are
+ *    Material UI API props that Moonstone Typography does not accept
+ */
 import React from 'react';
 import PropTypes from 'prop-types';
 import {Typography} from '@jahia/moonstone';

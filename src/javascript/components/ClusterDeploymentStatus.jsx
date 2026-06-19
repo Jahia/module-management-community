@@ -29,12 +29,13 @@ const ClusterDeploymentStatus = ({clusterDeployment, bundleKey}) => {
 
                 return (
                     <div key={node.nodeId} className={styles.clusterNode}>
+                        {/* A11y B-017: include state as text in label, not colour alone */}
                         <Chip
                             variant={isVersionConsistent ? 'bright' : 'outlined'}
-                            label={node.nodeId}
+                            label={`${node.nodeId}: ${state || '?'}`}
                             color={color}
                             icon={isVersionConsistent ? null : <Information/>}
-                            title={`${node.bundles.find(b => b.key === bundleKey)?.key} - ${state}`}
+                            aria-label={`Node ${node.nodeId} — ${bundleKey} — ${state || 'unknown'}`}
                         />
                     </div>
                 );
@@ -55,4 +56,3 @@ ClusterDeploymentStatus.propTypes = {
 };
 
 export default ClusterDeploymentStatus;
-

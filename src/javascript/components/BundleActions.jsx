@@ -3,8 +3,8 @@ import {useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
 import {useNotifications} from '@jahia/react-material';
-import {Button, Cancel, Delete, Information, Power, Reload, Upload} from '@jahia/moonstone';
-import {Dialog} from '@material-ui/core';
+import {Button, Cancel, Delete, Information, Power, Reload, Typography, Upload} from '@jahia/moonstone';
+import {Dialog, DialogActions, DialogContent, DialogTitle} from '@material-ui/core';
 import * as PropTypes from 'prop-types';
 import styles from './ModuleManagementCommunityApp.scss';
 import BundleDetails from './BundleDetails';
@@ -13,6 +13,8 @@ const BundleActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, 
     const {t} = useTranslation('module-management-community');
     const notificationContext = useNotifications();
     const [open, setOpen] = useState(false);
+    // A11y B-003: uninstall confirmation state
+    const [confirmUninstall, setConfirmUninstall] = useState(false);
 
     const {bundleId} = bundle;
 
@@ -86,12 +88,13 @@ const BundleActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, 
     return (
         <>
             <div className={styles.actionGroup} style={{width: 'fit-content'}}>
+                {/* A11y A-003: aria-label instead of empty label + title */}
                 <Button variant="ghost"
                         size="default"
                         color="default"
                         label=""
                         icon={<Information/>}
-                        title={t('label.showDetails')}
+                        aria-label={t('label.showDetails')}
                         onClick={() => setOpen(true)}/>
 
                 {isNotBundleType && isInactive && (
@@ -101,15 +104,16 @@ const BundleActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, 
                                 color="accent"
                                 label=""
                                 icon={<Power/>}
-                                title={t('label.startBundle')}
+                                aria-label={t('label.startBundle')}
                                 onClick={handleStart}/>
+                        {/* A11y B-003: show confirm dialog instead of immediate uninstall */}
                         <Button variant="ghost"
                                 size="default"
                                 color="danger"
                                 label=""
                                 icon={<Delete/>}
-                                title={t('label.uninstallBundle')}
-                                onClick={handleUninstall}/>
+                                aria-label={t('label.uninstallBundle')}
+                                onClick={() => setConfirmUninstall(true)}/>
                     </>
                 )}
 
@@ -121,7 +125,7 @@ const BundleActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, 
                                     color="default"
                                     label=""
                                     icon={<Cancel/>}
-                                    title={t('label.stopBundle')}
+                                    aria-label={t('label.stopBundle')}
                                     onClick={handleStop}/>
                         )}
                         <Button variant="ghost"
@@ -129,7 +133,7 @@ const BundleActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, 
                                 color="default"
                                 label=""
                                 icon={<Reload/>}
-                                title={t('label.refreshBundle')}
+                                aria-label={t('label.refreshBundle')}
                                 onClick={handleRefresh}/>
                         {isNotBundleType && hasUpdateAvailable && (
                             <Button variant="ghost"
@@ -137,15 +141,59 @@ const BundleActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, 
                                     color="accent"
                                     label=""
                                     icon={<Upload/>}
-                                    title={t('label.updateBundle')}
+                                    aria-label={t('label.updateBundle')}
                                     onClick={() => onUpdate(bundle.symbolicName)}/>
                         )}
                     </>
                 )}
             </div>
 
-            <Dialog fullWidth open={open} maxWidth="lg" data-testid="bundle-details-dialog" onClose={() => setOpen(false)}>
-                <BundleDetails bundle={bundle} close={setOpen} refetch={refetch}/>
+            {/* A11y A-011: Dialog with aria-labelledby pointing to bundle title */}
+            <Dialog fullWidth
+                    open={open}
+                    maxWidth="lg"
+                    aria-labelledby="bundle-details-title"
+                    data-testid="bundle-details-dialog"
+                    onClose={() => setOpen(false)}
+            >
+                <BundleDetails bundle={bundle}
+                               close={setOpen}
+                               refetch={refetch}/>
+            </Dialog>
+
+            {/* A11y B-003: Uninstall confirmation dialog */}
+            <Dialog open={confirmUninstall}
+                    aria-labelledby="uninstall-confirm-title"
+                    aria-describedby="uninstall-confirm-desc"
+                    onClose={() => setConfirmUninstall(false)}
+            >
+                <DialogTitle id="uninstall-confirm-title">
+                    {t('label.uninstall.confirm.title', {
+                        name: bundle.symbolicName,
+                        defaultValue: `Uninstall ${bundle.symbolicName}?`
+                    })}
+                </DialogTitle>
+                <DialogContent id="uninstall-confirm-desc">
+                    <Typography variant="body">
+                        {t('label.uninstall.confirm.message', {
+                            defaultValue: 'This will permanently uninstall the bundle. Are you sure?'
+                        })}
+                    </Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button variant="ghost"
+                            size="big"
+                            label={t('label.cancel')}
+                            onClick={() => setConfirmUninstall(false)}/>
+                    <Button variant="default"
+                            size="big"
+                            color="danger"
+                            label={t('label.uninstallBundle')}
+                            onClick={() => {
+                                setConfirmUninstall(false);
+                                handleUninstall();
+                            }}/>
+                </DialogActions>
             </Dialog>
         </>
     );
@@ -160,4 +208,3 @@ BundleActions.propTypes = {
 };
 
 export default BundleActions;
-

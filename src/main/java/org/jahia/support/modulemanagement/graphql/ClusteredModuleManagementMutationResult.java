@@ -12,13 +12,15 @@ import javax.inject.Inject;
 
 public class ClusteredModuleManagementMutationResult extends  ModuleManagementMutationResult {
 
-    @Inject
     @GraphQLOsgiService(service = org.apache.karaf.cellar.core.Synchronizer.class, filter = "(resource=bundle)")
     private Synchronizer cellarBundleSynchronizer;
 
-    @Inject
     @GraphQLOsgiService(service = GroupManager.class)
     private GroupManager groupManager;
+
+    @Inject
+    public ClusteredModuleManagementMutationResult() {
+    }
 
     @GraphQLField
     @GraphQLName("synchronizeBundles")

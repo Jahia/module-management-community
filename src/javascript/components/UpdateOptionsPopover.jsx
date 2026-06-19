@@ -50,10 +50,12 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange}) => {
                         className={`${styles.tuneBtn} ${nonDefault ? styles.tuneBtnActive : ''}`}
                         type="button"
                         aria-label={t('label.input.group.updateOptions')}
+                        aria-haspopup="true"
+                        aria-expanded={Boolean(anchorEl)}
                         data-testid="update-options-btn"
                         onClick={handleOpen}
                     >
-                        <Tune/>
+                        <Tune aria-hidden="true"/>
                         {nonDefault && <span className={styles.badge} aria-label={t('label.input.settings.modified')}/>}
                     </button>
                 </span>
@@ -104,11 +106,13 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange}) => {
                              className={`${styles.switchRow} ${danger && !preferences[key] ? styles.dangerRow : ''}`}
                         >
                             <div className={styles.switchLabelRow}>
+                                {/* A11y A-008: aria-label associates the switch with its label text */}
                                 <Switch
                                     checked={preferences[key]}
+                                    aria-label={t(labelKey)}
                                     onChange={(e, value, checked) => handleSwitch(key, checked)}
                                 />
-                                <Typography variant="body" weight={danger ? 'semiBold' : 'default'}>
+                                <Typography variant="body" weight={danger ? 'semiBold' : 'default'} aria-hidden="true">
                                     {t(labelKey)}
                                 </Typography>
                                 <Tooltip title={t(descKey)} placement="right">
