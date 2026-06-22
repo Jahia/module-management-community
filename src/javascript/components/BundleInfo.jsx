@@ -36,8 +36,8 @@ const SectionTitle = ({children}) => (
 
 SectionTitle.propTypes = {children: PropTypes.node};
 
-const ChipGroup = ({items, color = 'default', getTitle, column = false}) => (
-    <div className={column ? styles.chipGroupColumn : styles.chipGroup}>
+const ChipGroup = ({items, color = 'default', getTitle, isColumn = false}) => (
+    <div className={isColumn ? styles.chipGroupColumn : styles.chipGroup}>
         {items.map(item => (
             <Chip key={item}
                   variant="outlined"
@@ -52,7 +52,7 @@ ChipGroup.propTypes = {
     items: PropTypes.arrayOf(PropTypes.string),
     color: PropTypes.string,
     getTitle: PropTypes.func,
-    column: PropTypes.bool
+    isColumn: PropTypes.bool
 };
 
 const BundleInfo = ({bundle}) => {
@@ -97,9 +97,9 @@ const BundleInfo = ({bundle}) => {
     return (
         <div className={styles.bundleInfo}>
 
-            {/* A11y B-020: warning banners as alert regions */}
+            {/* A11y HIGH-11: banners present at mount — use polite status, not assertive alert */}
             {missingCount > 0 && (
-                <div role="alert" className={styles.unresolvedBannerDanger}>
+                <div role="status" aria-live="polite" className={styles.unresolvedBannerDanger}>
                     <Warning aria-hidden="true"/>
                     <Typography variant="body">
                         {t('label.bundle.unresolvedReqs.bannerMissing', {count: missingCount})}
@@ -107,7 +107,7 @@ const BundleInfo = ({bundle}) => {
                 </div>
             )}
             {missingCount === 0 && conflictCount > 0 && (
-                <div role="alert" className={styles.unresolvedBannerWarning}>
+                <div role="status" aria-live="polite" className={styles.unresolvedBannerWarning}>
                     <Warning aria-hidden="true"/>
                     <Typography variant="body">
                         {t('label.bundle.unresolvedReqs.bannerConflict', {count: conflictCount})}
@@ -141,7 +141,7 @@ const BundleInfo = ({bundle}) => {
                                     {t('label.bundle.details.services.provides')}
                                 </Typography>
                                 {services.length > 0 ? (
-                                    <ChipGroup items={services} color="accent" column/>
+                                    <ChipGroup isColumn items={services} color="accent"/>
                                 ) : (
                                     <Typography variant="caption" className={styles.emptyState}>
                                         {t('label.bundle.details.services.none')}
@@ -153,7 +153,7 @@ const BundleInfo = ({bundle}) => {
                                     {t('label.bundle.details.services.consumes')}
                                 </Typography>
                                 {servicesInUse.length > 0 ? (
-                                    <ChipGroup items={servicesInUse} color="default" column/>
+                                    <ChipGroup isColumn items={servicesInUse} color="default"/>
                                 ) : (
                                     <Typography variant="caption" className={styles.emptyState}>
                                         {t('label.bundle.details.services.none')}
@@ -217,7 +217,8 @@ const BundleInfo = ({bundle}) => {
                         {showManifest && (
                             <table id="manifest-table"
                                    className={styles.manifestTable}
-                                   aria-label={t('label.bundle.details.manifest.tableLabel', 'Bundle manifest')}>
+                                   aria-label={t('label.bundle.details.manifest.tableLabel', 'Bundle manifest')}
+                            >
                                 <thead>
                                     <tr>
                                         <th scope="col">{t('label.bundle.details.manifest.col.key', 'Key')}</th>

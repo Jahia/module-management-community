@@ -5,6 +5,36 @@ import PropTypes from 'prop-types';
 
 let instanceCount = 0;
 
+/**
+ * Parse a mermaid flowchart definition into a plain-text list of edges
+ * ("X depends on Y") for a visually-hidden text alternative (A11y CRITICAL-5).
+ * Node ids are de-quoted and bracketed labels stripped so the output reads naturally.
+ */
+const parseEdges = definition => {
+    if (!definition) {
+        return [];
+    }
+
+    const clean = token => token
+        .trim()
+        // Strip a trailing node label in [..], (..), {..} and keep the id/label text
+        .replace(/^([^[({]+)[[({].*$/, '$1')
+        .replace(/["']/g, '')
+        .trim();
+
+    return definition
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line.includes('-->'))
+        .map(line => {
+            // Drop an optional edge label: A -->|label| B
+            const withoutLabel = line.replace(/\|[^|]*\|/g, ' ');
+            const [from, to] = withoutLabel.split('-->');
+            return from && to ? {from: clean(from), to: clean(to)} : null;
+        })
+        .filter(Boolean);
+};
+
 const Mermaid = ({className, children, onError, ariaLabel}) => {
     const [element, setElement] = useState();
     const [renderResult, setRenderResult] = useState();
@@ -20,6 +50,11 @@ const Mermaid = ({className, children, onError, ariaLabel}) => {
 
     const containerId = containerIdRef.current;
     const diagramText = children;
+    const descId = `${containerId}-desc`;
+    // Dedupe edges so each "X depends on Y" is listed once and keys stay unique.
+    const edges = Array.from(
+        new Map(parseEdges(diagramText).map(e => [`${e.from}->${e.to}`, e])).values()
+    );
 
     // Initialize mermaid once on mount
     useEffect(() => {
@@ -77,14 +112,38 @@ const Mermaid = ({className, children, onError, ariaLabel}) => {
     }, [containerId, diagramText, onError]);
 
     return (
-        /* A11y C-013 / D-005: role="img", keyboard focus, localised label via ariaLabel prop */
-        <div ref={updateDiagramRef}
-             className={className}
-             id={containerId}
-             role="img"
-             tabIndex={0}
-             aria-label={ariaLabel || 'Dependency graph'}
-        />
+        <>
+            {/* A11y C-013 / D-005: role="img", keyboard focus, localised label via ariaLabel prop.
+                CRITICAL-5: aria-describedby points to a visually-hidden edge list. */}
+            <div ref={updateDiagramRef}
+                 className={className}
+                 id={containerId}
+                 role="img"
+                 tabIndex={0}
+                 aria-label={ariaLabel || 'Dependency graph'}
+                 aria-describedby={edges.length > 0 ? descId : undefined}
+            />
+            {edges.length > 0 && (
+                <ul
+                    id={descId}
+                    style={{
+                        position: 'absolute',
+                        width: '1px',
+                        height: '1px',
+                        margin: '-1px',
+                        padding: 0,
+                        border: 0,
+                        overflow: 'hidden',
+                        clip: 'rect(0, 0, 0, 0)',
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    {edges.map(edge => (
+                        <li key={`${edge.from}->${edge.to}`}>{`${edge.from} depends on ${edge.to}`}</li>
+                    ))}
+                </ul>
+            )}
+        </>
     );
 };
 

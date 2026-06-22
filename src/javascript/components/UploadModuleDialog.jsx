@@ -8,6 +8,48 @@ import PropTypes from 'prop-types';
 const UPLOAD_URL = `${window.contextJsParameters?.contextPath || ''}/modules/module-management-community/upload`;
 const IMPORT_URL = `${window.contextJsParameters?.contextPath || ''}/modules/module-management-community/import`;
 
+// Per-mode configuration. Keeps the component free of long ternary chains
+// (lower cognitive complexity) and centralises the accepted file types so the
+// drop-zone aria-label can reflect the currently accepted extension (A11y HIGH-9).
+const MODE_CONFIG = {
+    jar: {
+        accept: '.jar',
+        icon: '📦',
+        emojiLabel: 'JAR file',
+        extensions: '.jar',
+        dropzoneKey: 'label.upload.dialog.dropzone',
+        deployKey: 'label.upload.dialog.deploy',
+        uploadingKey: 'label.upload.dialog.deploying',
+        hintKey: 'label.upload.dialog.hint',
+        validationKey: 'label.upload.validation.notJar',
+        isValid: name => name.endsWith('.jar')
+    },
+    zip: {
+        accept: '.zip',
+        icon: '🗜️',
+        emojiLabel: 'ZIP archive',
+        extensions: '.zip',
+        dropzoneKey: 'label.import.dialog.dropzone',
+        deployKey: 'label.import.dialog.import',
+        uploadingKey: 'label.import.dialog.importing',
+        hintKey: 'label.import.dialog.hint',
+        validationKey: 'label.import.validation.notZip',
+        isValid: name => name.endsWith('.zip')
+    },
+    yaml: {
+        accept: '.yaml,.yml',
+        icon: '📄',
+        emojiLabel: 'YAML file',
+        extensions: '.yaml, .yml',
+        dropzoneKey: 'label.yaml.dialog.dropzone',
+        deployKey: 'label.yaml.dialog.apply',
+        uploadingKey: 'label.yaml.dialog.applying',
+        hintKey: 'label.yaml.dialog.hint',
+        validationKey: 'label.yaml.validation.notYaml',
+        isValid: name => name.endsWith('.yaml') || name.endsWith('.yml')
+    }
+};
+
 /**
  * Dialog for deploying a single module JAR **or** importing a module snapshot ZIP archive.
  *
@@ -28,7 +70,7 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
     const [statusMessage, setStatusMessage] = useState('');
 
     const isZipMode = mode === 'zip';
-    const isYamlMode = mode === 'yaml';
+    const config = MODE_CONFIG[mode] || MODE_CONFIG.jar;
 
     const resetState = () => {
         setSelectedFile(null);
@@ -52,17 +94,8 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
             return t('label.upload.validation.noFile');
         }
 
-        const name = file.name.toLowerCase();
-        if (isZipMode) {
-            if (!name.endsWith('.zip')) {
-                return t('label.import.validation.notZip');
-            }
-        } else if (isYamlMode) {
-            if (!name.endsWith('.yaml') && !name.endsWith('.yml')) {
-                return t('label.yaml.validation.notYaml');
-            }
-        } else if (!name.endsWith('.jar')) {
-            return t('label.upload.validation.notJar');
+        if (!config.isValid(file.name.toLowerCase())) {
+            return t(config.validationKey);
         }
 
         return null; // Valid
@@ -152,28 +185,19 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
     const isUploading = status === 'uploading';
     const isSuccess = status === 'success';
 
-    const dropzoneLabel = isZipMode ?
-        t('label.import.dialog.dropzone') :
-        isYamlMode ? t('label.yaml.dialog.dropzone') :
-            t('label.upload.dialog.dropzone');
+    const dropzoneLabel = t(config.dropzoneKey);
+    const deployLabel = t(config.deployKey);
+    const uploadingLabel = t(config.uploadingKey);
+    const hintLabel = t(config.hintKey);
 
-    const deployLabel = isZipMode ?
-        t('label.import.dialog.import') :
-        isYamlMode ? t('label.yaml.dialog.apply') :
-            t('label.upload.dialog.deploy');
+    const fileIcon = config.icon;
+    const acceptAttr = config.accept;
 
-    const uploadingLabel = isZipMode ?
-        t('label.import.dialog.importing') :
-        isYamlMode ? t('label.yaml.dialog.applying') :
-            t('label.upload.dialog.deploying');
-
-    const hintLabel = isZipMode ?
-        t('label.import.dialog.hint') :
-        isYamlMode ? t('label.yaml.dialog.hint') :
-            t('label.upload.dialog.hint');
-
-    const fileIcon = isZipMode ? '🗜️' : isYamlMode ? '📄' : '📦';
-    const acceptAttr = isZipMode ? '.zip' : isYamlMode ? '.yaml,.yml' : '.jar';
+    // A11y HIGH-9: aria-label reflects the currently-accepted file type
+    const dropzoneAriaLabel = t('label.upload.dropzone.ariaLabel', {
+        types: config.extensions,
+        defaultValue: `Select or drop a ${config.extensions} file`
+    });
 
     return (
         <Dialog
@@ -221,7 +245,8 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                     <div
                         role="button"
                         tabIndex={0}
-                        aria-label={t('label.upload.dropzone.ariaLabel', 'Select or drop a file')}
+                        aria-label={dropzoneAriaLabel}
+                        aria-describedby="upload-dropzone-hint"
                         className={`${styles.dropZone} ${isDragging ? styles.dropZoneDragging : ''} ${selectedFile ? styles.dropZoneSelected : ''}`}
                         onClick={() => fileInputRef.current?.click()}
                         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && fileInputRef.current?.click()}
@@ -240,7 +265,7 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                             <>
                                 <Typography variant="body" weight="semiBold" className={styles.fileName}>
                                     {/* A11y A-013: emoji with role="img" */}
-                                    <span role="img" aria-label={isZipMode ? 'ZIP archive' : isYamlMode ? 'YAML file' : 'JAR file'}>
+                                    <span role="img" aria-label={config.emojiLabel}>
                                         {fileIcon}
                                     </span>
                                     {' '}{selectedFile.name}
@@ -281,9 +306,9 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                     </div>
                 )}
 
-                {/* Helper text */}
+                {/* Helper text — referenced by the drop zone via aria-describedby (A11y HIGH-9) */}
                 {!isSuccess && (
-                    <Typography variant="caption" className={styles.helperText}>
+                    <Typography id="upload-dropzone-hint" variant="caption" className={styles.helperText}>
                         {hintLabel}
                     </Typography>
                 )}

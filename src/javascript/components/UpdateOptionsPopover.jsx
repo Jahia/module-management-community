@@ -50,8 +50,9 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange}) => {
                         className={`${styles.tuneBtn} ${nonDefault ? styles.tuneBtnActive : ''}`}
                         type="button"
                         aria-label={t('label.input.group.updateOptions')}
-                        aria-haspopup="true"
+                        aria-haspopup="dialog"
                         aria-expanded={Boolean(anchorEl)}
+                        aria-controls={anchorEl ? 'update-options-popover' : undefined}
                         data-testid="update-options-btn"
                         onClick={handleOpen}
                     >
@@ -68,7 +69,12 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange}) => {
                 transformOrigin={{vertical: 'top', horizontal: 'right'}}
                 onClose={handleClose}
             >
-                <div className={styles.popover}>
+                {/* A11y HIGH-7: dialog role + label; MUI Popover handles focus move/return */}
+                <div id="update-options-popover"
+                     role="dialog"
+                     aria-label={t('label.input.group.updateOptions')}
+                     className={styles.popover}
+                >
                     <Typography variant="subheading" weight="bold" className={styles.popoverTitle}>
                         {t('label.input.group.updateOptions')}
                     </Typography>

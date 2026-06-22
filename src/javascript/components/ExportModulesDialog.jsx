@@ -209,7 +209,8 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                 {status === 'error' && (
                     <div className={`${styles.statusRow} ${styles.statusError}`}
                          role="alert"
-                         aria-live="assertive">
+                         aria-live="assertive"
+                    >
                         <Typography variant="body">
                             <span role="img" aria-label="Warning">⚠️</span> {errorMessage}
                         </Typography>
@@ -224,7 +225,8 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                         </Typography>
                         <pre className={styles.yamlPreview}
                              tabIndex={0}
-                             aria-label={t('label.export.dialog.preview.ariaLabel', 'YAML provisioning preview')}>
+                             aria-label={t('label.export.dialog.preview.ariaLabel', 'YAML provisioning preview')}
+                        >
                             {previewYaml}
                         </pre>
                     </div>

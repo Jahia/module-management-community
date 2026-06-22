@@ -1,4 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
+import {createPortal} from 'react-dom';
 import * as PropTypes from 'prop-types';
 import {Button, Cancel, Check, Close, Typography, Warning} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
@@ -86,6 +87,26 @@ export const HealthStatus = ({status, probes, version}) => {
         }
     }, [isDialogOpen]);
 
+    // A11y CRITICAL-1: while the modal is open, make the rest of the page inert and
+    // hidden from assistive tech so the SR virtual cursor can't escape the dialog.
+    useEffect(() => {
+        if (!isDialogOpen) {
+            return undefined;
+        }
+
+        const appRoot = document.getElementById('module-management-community-root');
+        if (!appRoot) {
+            return undefined;
+        }
+
+        appRoot.setAttribute('aria-hidden', 'true');
+        appRoot.setAttribute('inert', '');
+        return () => {
+            appRoot.removeAttribute('aria-hidden');
+            appRoot.removeAttribute('inert');
+        };
+    }, [isDialogOpen]);
+
     const renderStatusBadge = (s, ref) => {
         // A11y A-002: each status button has a descriptive aria-label
         if (s === 'GREEN') {
@@ -163,8 +184,9 @@ export const HealthStatus = ({status, probes, version}) => {
                 {renderStatusBadge(status, openBtnRef)}
             </div>
 
-            {isDialogOpen && (
-                // A11y A-001 / C-002: proper dialog with focus trap via onKeyDown handler
+            {isDialogOpen && createPortal(
+                // A11y A-001 / C-002 / CRITICAL-1: dialog portalled to <body> so the inert
+                // app root (set above) doesn't disable the dialog itself. Focus trap via onKeyDown.
                 <div ref={dialogRef}
                      className={styles.probeDialog}
                      role="dialog"
@@ -175,7 +197,7 @@ export const HealthStatus = ({status, probes, version}) => {
                     <div className={styles.probeDialogContent}>
                         <div className={styles.probeDialogHeader}>
                             {/* A11y C-001: semantic h2 — dialog title is the top heading in this modal */}
-                            <Typography variant="title" component="h2">{t('label.sam.probes.title')}</Typography>
+                            <Typography id="probe-dialog-title" variant="title" component="h2">{t('label.sam.probes.title')}</Typography>
                             {/* A11y A-027: close button with accessible label */}
                             <Button variant="ghost"
                                     icon={<Close/>}
@@ -227,7 +249,8 @@ export const HealthStatus = ({status, probes, version}) => {
                                     onClick={handleClose}/>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     );
