@@ -40,7 +40,11 @@ public class ModuleManagementQueryResult {
     }
 
     private SettingsBean settingsBean() {
-        return BundleUtils.getOsgiService(SettingsBean.class, null);
+        SettingsBean settingsBean = BundleUtils.getOsgiService(SettingsBean.class, null);
+        if (settingsBean == null) {
+            throw new IllegalStateException("SettingsBean is not available");
+        }
+        return settingsBean;
     }
 
     @GraphQLField
