@@ -4,21 +4,16 @@ import org.apache.commons.fileupload.FileItemIterator;
 import org.apache.commons.fileupload.FileItemStream;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
-import org.jahia.params.valves.AuthValveContext;
-import org.jahia.services.content.JCRSessionFactory;
 import org.jahia.services.securityfilter.PermissionService;
 import org.jahia.services.usermanager.JahiaUser;
-import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
-import javax.jcr.RepositoryException;
 import javax.servlet.Servlet;
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -38,33 +33,28 @@ import java.io.PrintWriter;
         property = {"alias=/module-management-community/import"},
         immediate = true
 )
-public class ModuleArchiveImportServlet extends HttpServlet {
+public class ModuleArchiveImportServlet extends AbstractModuleManagementServlet {
 
     private static final Logger logger = LoggerFactory.getLogger(ModuleArchiveImportServlet.class);
     private static final long MAX_ARCHIVE_SIZE = 500L * 1024 * 1024; // 500 MB
+    private static final String ERROR_IMPORT_FAILED = "{\"error\":\"Import failed\"}";
 
-    @Reference
-    private ModuleManagementCommunityService moduleManagementCommunityService;
+    private final transient ModuleManagementCommunityService moduleManagementCommunityService;
 
-    @Reference
-    private PermissionService permissionService;
+    @Activate
+    public ModuleArchiveImportServlet(
+            @Reference ModuleManagementCommunityService moduleManagementCommunityService,
+            @Reference PermissionService permissionService) {
+        super(permissionService);
+        this.moduleManagementCommunityService = moduleManagementCommunityService;
+    }
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        response.setContentType("application/json;charset=UTF-8");
-        response.setCharacterEncoding("UTF-8");
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+        handleMultipartPost(request, response, "module-management-community.import", logger, this::handleImport);
+    }
 
-        String origin = request.getHeader("Origin");
-        if (origin != null) {
-            response.setHeader("Access-Control-Allow-Origin", origin);
-            response.setHeader("Vary", "Origin");
-        }
-
-        PrintWriter writer = response.getWriter();
-
-        JahiaUser currentUser = securityChecks(request, response, writer);
-        if (currentUser == null) return;
-
+    private void handleImport(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, JahiaUser currentUser) {
         try {
             ServletFileUpload upload = new ServletFileUpload();
             upload.setFileSizeMax(MAX_ARCHIVE_SIZE);
@@ -74,100 +64,46 @@ public class ModuleArchiveImportServlet extends HttpServlet {
                 FileItemStream item = iterator.next();
                 String fieldName = item.getFieldName();
                 if (!item.isFormField() && ("archive".equals(fieldName) || "file".equals(fieldName))) {
-                    String fileName = sanitizeFileName(item.getName());
-                    if (!fileName.toLowerCase().endsWith(".zip")) {
-                        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                        writer.write("{\"error\":\"Only .zip archive files are accepted\"}");
-                        return;
-                    }
-
-                    logger.info("Received archive import request for file: '{}' by user: '{}'",
-                            fileName, currentUser.getName());
-
-                    try (InputStream stream = item.openStream()) {
-                        String result = moduleManagementCommunityService.importModuleArchive(stream, fileName);
-                        writer.write("{\"message\":" + toJsonString(result) + "}");
-                    }
+                    processArchiveItem(item, response, writer, currentUser);
                     return;
                 }
             }
 
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             writer.write("{\"error\":\"No 'archive' or 'file' field found in the multipart request\"}");
-
         } catch (FileUploadException e) {
             logger.error("Error parsing multipart archive upload", e);
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            writer.write("{\"error\":" + toJsonString(e.getMessage()) + "}");
+            writer.write("{\"error\":\"Invalid multipart upload\"}");
         } catch (IOException e) {
+            // Detail is logged server-side only; clients get a generic message (no internal leak).
             logger.error("Error importing module archive", e);
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            writer.write("{\"error\":" + toJsonString(e.getMessage()) + "}");
+            writer.write(ERROR_IMPORT_FAILED);
         }
     }
 
-    @Nullable
-    private JahiaUser securityChecks(HttpServletRequest request, HttpServletResponse response, PrintWriter writer) {
-        // --- Authentication check ---
-        JahiaUser currentUser = JCRSessionFactory.getInstance().getCurrentUser();
-        AuthValveContext ctx = (AuthValveContext) request.getAttribute(AuthValveContext.class.getName());
-        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser) || ctx == null || ctx.isAuthRetrievedFromSession()) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            writer.write("{\"error\":\"Authentication required\"}");
-            return null;
-        }
-
-        try {
-            if(!permissionService.hasPermission("module-management-community.import")) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                writer.write("{\"error\":\"Authentication required\"}");
-                return null;
-            }
-        } catch (RepositoryException e) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            writer.write("{\"error\":\"Authentication required\"}");
-            return null;
-        }
-
-        // --- Multipart check ---
-        if (!ServletFileUpload.isMultipartContent(request)) {
+    private void processArchiveItem(FileItemStream item, HttpServletResponse response, PrintWriter writer, JahiaUser currentUser) throws IOException {
+        String fileName = ServletSupport.sanitizeFileName(item.getName(), "archive.zip");
+        if (!fileName.toLowerCase().endsWith(".zip")) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            writer.write("{\"error\":\"Multipart request required\"}");
-            return null;
+            writer.write("{\"error\":\"Only .zip archive files are accepted\"}");
+            return;
         }
-        return currentUser;
+
+        if (logger.isInfoEnabled()) {
+            logger.info("Received archive import request for file: '{}' by user: '{}'",
+                    fileName, ServletSupport.sanitizeForLog(currentUser.getName()));
+        }
+
+        try (InputStream stream = item.openStream()) {
+            String result = moduleManagementCommunityService.importModuleArchive(stream, fileName);
+            writer.write("{\"message\":" + ServletSupport.toJsonString(result) + "}");
+        }
     }
 
     @Override
     protected void doOptions(HttpServletRequest request, HttpServletResponse response) {
-        String origin = request.getHeader("Origin");
-        if (origin != null) {
-            response.setHeader("Access-Control-Allow-Origin", origin);
-            response.setHeader("Vary", "Origin");
-        }
-        response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-        response.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Requested-With");
-        response.setStatus(HttpServletResponse.SC_OK);
-    }
-
-    private String sanitizeFileName(String raw) {
-        if (raw == null) {
-            return "archive.zip";
-        }
-        int lastSlash = Math.max(raw.lastIndexOf('/'), raw.lastIndexOf('\\'));
-        return lastSlash >= 0 ? raw.substring(lastSlash + 1) : raw;
-    }
-
-    private String toJsonString(String value) {
-        if (value == null) {
-            return "null";
-        }
-        return "\"" + value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t") + "\"";
+        handleOptions(request, response, "POST, OPTIONS");
     }
 }
-

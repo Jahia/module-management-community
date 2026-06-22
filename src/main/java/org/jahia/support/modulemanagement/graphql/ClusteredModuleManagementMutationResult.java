@@ -12,6 +12,8 @@ import javax.inject.Inject;
 
 public class ClusteredModuleManagementMutationResult extends  ModuleManagementMutationResult {
 
+    private static final String CELLAR_SYNCHRONIZER_UNAVAILABLE = "Cellar bundle synchronizer is not available.";
+
     @GraphQLOsgiService(service = org.apache.karaf.cellar.core.Synchronizer.class, filter = "(resource=bundle)")
     private Synchronizer cellarBundleSynchronizer;
 
@@ -30,7 +32,7 @@ public class ClusteredModuleManagementMutationResult extends  ModuleManagementMu
             cellarBundleSynchronizer.sync(group);
             return "Bundles synchronization triggered successfully.";
         } else {
-            return "Cellar bundle synchronizer is not available.";
+            return CELLAR_SYNCHRONIZER_UNAVAILABLE;
         }
     }
 
@@ -42,7 +44,7 @@ public class ClusteredModuleManagementMutationResult extends  ModuleManagementMu
             cellarBundleSynchronizer.push(group);
             return "Bundles pushed to the cluster successfully.";
         } else {
-            return "Cellar bundle synchronizer is not available.";
+            return CELLAR_SYNCHRONIZER_UNAVAILABLE;
         }
     }
 
@@ -54,7 +56,7 @@ public class ClusteredModuleManagementMutationResult extends  ModuleManagementMu
             cellarBundleSynchronizer.pull(group);
             return "Bundles pulled from the cluster successfully.";
         } else {
-            return "Cellar bundle synchronizer is not available.";
+            return CELLAR_SYNCHRONIZER_UNAVAILABLE;
         }
     }
 }
