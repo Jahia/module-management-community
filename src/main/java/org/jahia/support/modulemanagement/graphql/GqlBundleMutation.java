@@ -14,6 +14,9 @@ import java.util.List;
 
 public class GqlBundleMutation {
 
+    private static final String MODULE_MANAGER_SERVICE = "org.jahia.services.modulemanager.ModuleManager";
+    private static final String BUNDLE_PREFIX = "Bundle ";
+
     private final Bundle bundle;
 
     public GqlBundleMutation(Bundle bundle) {
@@ -23,42 +26,42 @@ public class GqlBundleMutation {
     @GraphQLField
     @GraphQLName("stop")
     public String stop() {
-        ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
+        ModuleManager moduleManager = BundleUtils.getOsgiService(MODULE_MANAGER_SERVICE);
         if (moduleManager != null) {
             moduleManager.stop(BundleInfo.fromBundle(bundle).getKey(), null);
         }
-        return "Bundle " + BundleInfo.fromBundle(bundle).getKey() + " stopped successfully.";
+        return BUNDLE_PREFIX + BundleInfo.fromBundle(bundle).getKey() + " stopped successfully.";
     }
 
     @GraphQLField
     @GraphQLName("start")
     public String start() {
-        ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
+        ModuleManager moduleManager = BundleUtils.getOsgiService(MODULE_MANAGER_SERVICE);
         if (moduleManager != null) {
             moduleManager.start(BundleInfo.fromBundle(bundle).getKey(), null);
         }
-        return "Bundle " + BundleInfo.fromBundle(bundle).getKey() + " stopped successfully.";
+        return BUNDLE_PREFIX + BundleInfo.fromBundle(bundle).getKey() + " stopped successfully.";
     }
 
     @GraphQLField
     @GraphQLName("uninstall")
     public String uninstall() {
-        ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
+        ModuleManager moduleManager = BundleUtils.getOsgiService(MODULE_MANAGER_SERVICE);
         BundleInfo bundleInfo = BundleInfo.fromBundle(bundle);
         if (moduleManager != null) {
             moduleManager.uninstall(bundleInfo.getKey(), null);
         }
-        return "Bundle " + bundleInfo.getKey() + " uninstalled successfully.";
+        return BUNDLE_PREFIX + bundleInfo.getKey() + " uninstalled successfully.";
     }
 
     @GraphQLField
     @GraphQLName("refresh")
     public String refresh() {
-        ModuleManager moduleManager = BundleUtils.getOsgiService("org.jahia.services.modulemanager.ModuleManager");
+        ModuleManager moduleManager = BundleUtils.getOsgiService(MODULE_MANAGER_SERVICE);
         if (moduleManager != null) {
             moduleManager.refresh(BundleInfo.fromBundle(bundle).getKey(), null);
         }
-        return "Bundle " + BundleInfo.fromBundle(bundle).getKey() + " refreshed successfully.";
+        return BUNDLE_PREFIX + BundleInfo.fromBundle(bundle).getKey() + " refreshed successfully.";
     }
 
     @GraphQLField
