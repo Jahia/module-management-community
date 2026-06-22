@@ -38,7 +38,8 @@ abstract class AbstractModuleManagementServlet extends HttpServlet {
     /** Body of a multipart POST handler, invoked once the request is authenticated and validated. */
     @FunctionalInterface
     protected interface MultipartHandler {
-        void handle(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, JahiaUser currentUser);
+        void handle(HttpServletRequest request, HttpServletResponse response, PrintWriter writer, JahiaUser currentUser)
+                throws IOException;
     }
 
     /**

@@ -99,6 +99,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     private static final String BUNDLE_PREFIX = "Bundle ";
     private static final String JCR_BUNDLES_BASE_PATH = "/module-management/bundles";
     private static final String JCR_PATH_SEPARATOR = "/";
+    // Minimum number of "/"-split parts for a valid managed bundle path
+    // /module-management/bundles/{group}/{symbolicName}/{version}/{file} → leading "" + 6 segments.
+    private static final int MIN_JCR_BUNDLE_PATH_PARTS = 7;
     private static final String YAML_FORMAT = "yaml";
     private static final String MVN_PREFIX = "mvn:";
     private static final String YAML_EXTENSION = ".yaml";
@@ -198,14 +201,28 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Reference
     ConfigurationAdmin configurationAdmin;
 
-    private volatile Instant lastUpdateTime = null;
     /**
-     * Immutable snapshot of detected updates (symbolicName/version : latestVersion → install URL).
-     * Always replaced atomically with a fully-built unmodifiable map — never populated in place —
-     * so concurrent readers from request threads always observe a consistent view. Held in an
-     * {@link AtomicReference} ({@code null} value = cache not populated) per Sonar S3077.
+     * Immutable, atomically-published snapshot pairing the detected-updates map with the instant it
+     * was computed. Bundling both into one object stored in a single {@link AtomicReference} means a
+     * reader can never observe a fresh map alongside a stale timestamp (or vice-versa): a publish is
+     * a single reference swap. The {@code updates} map is always a fully-built unmodifiable map; a
+     * {@code null} {@code updates} value marks the cache as not populated. Per Sonar S3077 the
+     * reference is held in an {@link AtomicReference} rather than a plain volatile field.
      */
-    private final AtomicReference<Map<String, String>> modulesWithUpdates = new AtomicReference<>();
+    private static final class UpdatesSnapshot {
+        final Map<String, String> updates;
+        final Instant checkedAt;
+
+        UpdatesSnapshot(Map<String, String> updates, Instant checkedAt) {
+            this.updates = updates;
+            this.checkedAt = checkedAt;
+        }
+    }
+
+    /** The empty/not-populated snapshot: no updates map, no check timestamp. */
+    private static final UpdatesSnapshot EMPTY_SNAPSHOT = new UpdatesSnapshot(null, null);
+
+    private final AtomicReference<UpdatesSnapshot> updatesSnapshot = new AtomicReference<>(EMPTY_SNAPSHOT);
     private BundleContext bundleContext;
     private Set<Pattern> excludeModules;
     private int maxModulesToUpdate;
@@ -323,7 +340,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
         // Sort updates to have a deterministic order
         updates = updates.stream().sorted().collect(Collectors.toCollection(LinkedHashSet::new));
-        Map<String, String> currentUpdates = modulesWithUpdates.get();
+        Map<String, String> currentUpdates = updatesSnapshot.get().updates;
         StringBuilder sb = new StringBuilder();
         sb.append(YAML_INSTALL_OR_UPGRADE);
         for (String bundleKey : updates) {
@@ -347,7 +364,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", getProvisioningFilenameWithDateAndExtension(CLUSTER_SYNCHRONIZED_YAML_SKIPPED, ".clusterSynchronized")).toFile(), yamlScript, StandardCharsets.UTF_8, false);
             } else {
                 FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", getProvisioningFilenameWithDateAndExtension("module-management-community" + YAML_EXTENSION, YAML_EXTENSION)).toFile(), yamlScript, StandardCharsets.UTF_8, false);
-                modulesWithUpdates.set(null); // Clear the cache after execution
+                updatesSnapshot.set(EMPTY_SNAPSHOT); // Clear the cache after execution
             }
         } else {
             FileUtils.write(File.createTempFile("module-management-community-temp", YAML_EXTENSION, new File(settingsBean.getTmpContentDiskPath())), yamlScript, "UTF-8", true);
@@ -399,9 +416,12 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Override
     public Set<String> listAvailableUpdates(boolean jahiaOnly, List<String> filters, boolean forceUpdate) throws IOException {
         List<Pattern> patterns = getPatternList(filters);
-        Map<String, String> cached = modulesWithUpdates.get();
-        if (!forceUpdate && (lastUpdateTime != null && Instant.now().minus(Duration.ofHours(2)).isBefore(lastUpdateTime) && cached != null)) {
-            logger.info("Module updates is cached until {}", lastUpdateTime.plus(Duration.ofHours(2)));
+        // Read the cache as one consistent snapshot — map and timestamp can never disagree.
+        UpdatesSnapshot snapshot = updatesSnapshot.get();
+        Map<String, String> cached = snapshot.updates;
+        Instant checkedAt = snapshot.checkedAt;
+        if (!forceUpdate && (checkedAt != null && Instant.now().minus(Duration.ofHours(2)).isBefore(checkedAt) && cached != null)) {
+            logger.info("Module updates is cached until {}", checkedAt.plus(Duration.ofHours(2)));
             Set<String> filteredUpdates = getFilteredUpdates(cached, filters, patterns);
             return filteredUpdates != null ? filteredUpdates : new HashSet<>(cached.keySet());
         }
@@ -428,8 +448,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
 
         Map<String, String> published = Collections.unmodifiableMap(updates);
-        modulesWithUpdates.set(published);
-        lastUpdateTime = Instant.now();
+        // Publish map + timestamp together so readers never see a fresh map with a stale time.
+        updatesSnapshot.set(new UpdatesSnapshot(published, Instant.now()));
 
         Set<String> filteredUpdates = getFilteredUpdates(published, filters, patterns);
         Set<String> availableUpdates = filteredUpdates != null ? filteredUpdates : new HashSet<>(published.keySet());
@@ -477,7 +497,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     /**
      * Scan all ACTIVE Jahia module bundles and compare their version against the store index.
-     * Populates {@link #modulesWithUpdates} for entries where a newer non-SNAPSHOT version exists.
+     * Populates the {@code updates} map for entries where a newer non-SNAPSHOT version exists.
      */
     private void checkJahiaModulesAgainstStoreIndex(Map<String, String> updates) {
         if (storeModuleIndex.get().isEmpty()) {
@@ -572,8 +592,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             }
             Map<String, StoreModuleEntry> newIndex = buildStoreIndex(json);
             storeModuleIndex.set(Collections.unmodifiableMap(newIndex));
-            modulesWithUpdates.set(null); // invalidate update cache
-            lastUpdateTime = null;
+            updatesSnapshot.set(EMPTY_SNAPSHOT); // invalidate update cache
             logger.info("Store module index refreshed from URL: {} modules indexed", newIndex.size());
         } catch (Exception e) {
             logger.warn("Failed to fetch store module index from URL ({}): {} — trying bundled fallback",
@@ -615,8 +634,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             String json = new String(readBounded(in, MAX_STORE_INDEX_BYTES), StandardCharsets.UTF_8);
             Map<String, StoreModuleEntry> newIndex = buildStoreIndex(json);
             storeModuleIndex.set(Collections.unmodifiableMap(newIndex));
-            modulesWithUpdates.set(null);
-            lastUpdateTime = null;
+            updatesSnapshot.set(EMPTY_SNAPSHOT);
             logger.info("Store module index loaded from bundled classpath resource: {} modules indexed",
                     newIndex.size());
         } catch (Exception e) {
@@ -856,7 +874,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public Instant getLastUpdateTime() {
-        return lastUpdateTime;
+        return updatesSnapshot.get().checkedAt;
     }
 
     @Override
@@ -1097,8 +1115,12 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
         // Derive symbolicName and targetVersion from the JCR path structure:
         // /module-management/bundles/{group/path}/{symbolicName}/{version}/{file.jar}
+        // The shortest valid path (single-segment group) splits into 7 elements:
+        // ["", "module-management", "bundles", "{group}", "{symbolicName}", "{version}", "{file.jar}"].
+        // symbolicName is read at parts[length-3] and version at parts[length-2], so anything
+        // shorter cannot yield valid coordinates and must be rejected.
         String[] parts = jcrPath.split("/");
-        if (parts.length < 3) {
+        if (parts.length < MIN_JCR_BUNDLE_PATH_PARTS) {
             throw new IOException("Cannot derive bundle coordinates from JCR path: " + sanitizeForLog(jcrPath));
         }
         final String symbolicName = parts[parts.length - 3];
@@ -1496,8 +1518,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * recomputes against the store index. Call this after any install or deploy operation.
      */
     private void invalidateUpdatesCache() {
-        modulesWithUpdates.set(null);
-        lastUpdateTime = null;
+        updatesSnapshot.set(EMPTY_SNAPSHOT);
         logger.debug("Updates cache invalidated — will recompute on next listAvailableUpdates() call");
     }
 

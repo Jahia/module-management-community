@@ -40,7 +40,7 @@ public class GqlBundleMutation {
         if (moduleManager != null) {
             moduleManager.start(BundleInfo.fromBundle(bundle).getKey(), null);
         }
-        return BUNDLE_PREFIX + BundleInfo.fromBundle(bundle).getKey() + " stopped successfully.";
+        return BUNDLE_PREFIX + BundleInfo.fromBundle(bundle).getKey() + " started successfully.";
     }
 
     @GraphQLField

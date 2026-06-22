@@ -43,7 +43,8 @@ public class ModuleManagementMutationResult {
     @GraphQLDescription("Import a module from the file system into the OSGi framework")
     public String importModule(@GraphQLName("bundleId") long bundleId,
                                @GraphQLName("force") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean force) throws IOException {
-        if (moduleManagementCommunityService().importModule(moduleManagementCommunityService().getBundleById(bundleId), force))
+        ModuleManagementCommunityService service = moduleManagementCommunityService();
+        if (service.importModule(service.getBundleById(bundleId), force))
             return "Module imported successfully.";
         else
             return "Failed to import module.";
