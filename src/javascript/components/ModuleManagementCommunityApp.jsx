@@ -43,6 +43,42 @@ import PropTypes from 'prop-types';
 /** Module types that are "Jahia modules" as opposed to plain OSGi bundles. */
 const JAHIA_MODULE_TYPES = ['module', 'system', 'templatesSet'];
 
+/** Aria-sort value for a column header given the active sort column/direction. */
+const ariaSortFor = (property, orderBy, order) => {
+    if (orderBy !== property) {
+        return 'none';
+    }
+
+    return order === 'asc' ? 'ascending' : 'descending';
+};
+
+/**
+ * Predicate factory for the installed-modules table filter. Extracted from the
+ * component to keep the render function's cognitive complexity within budget.
+ */
+const buildModuleFilter = ({updatesOnly, updates, dependentUpdates, typeFilter, bundleTypes, debouncedFilter}) => module => {
+    if (updatesOnly &&
+        !updates.some(u => u.name === module.name) &&
+        !dependentUpdates[module.name]?.length) {
+        return false;
+    }
+
+    if (typeFilter === 'jahia') {
+        const knownType = bundleTypes[module.name];
+        if (knownType && !JAHIA_MODULE_TYPES.includes(knownType)) {
+            return false;
+        }
+    } else if (typeFilter) {
+        const knownType = bundleTypes[module.name];
+        if (knownType && knownType !== typeFilter) {
+            return false;
+        }
+    }
+
+    const needle = debouncedFilter.trim().toLowerCase();
+    return needle === '' || module.name.toLowerCase().includes(needle);
+};
+
 const INSTALLED_MODULES_QUERY = gql`query {
     admin { modulesManagement { installedModules installedBundleTypes clustered } }
 }`;
@@ -71,16 +107,37 @@ const CLEANUP_JCR_MUTATION = gql`mutation { admin { modulesManagement { cleanupJ
 
 // ── SortableHeader ────────────────────────────────────────────────────────────
 
-const SortableHeader = ({property, label, order, orderBy, onSort}) => (
-    <TableSortLabel
-        active={orderBy === property}
-        classes={{icon: orderBy === property ? styles.iconActive : styles.icon}}
-        direction={orderBy === property ? order : 'asc'}
-        onClick={() => onSort(property)}
-    >
-        <Typography variant="body" weight="semiBold">{label}</Typography>
-    </TableSortLabel>
-);
+// A11y CRITICAL-4: real <button> whose accessible name includes the current sort
+// direction, so screen-reader users hear e.g. "Module name, sorted ascending".
+// The visible label text and the sort icon are preserved; aria-sort stays on the th.
+const SortableHeader = ({property, label, order, orderBy, onSort}) => {
+    const {t} = useTranslation('module-management-community');
+    const isActive = orderBy === property;
+    const directionLabel = isActive ?
+        (order === 'asc' ?
+            t('label.table.sort.ascending', 'sorted ascending') :
+            t('label.table.sort.descending', 'sorted descending')) :
+        t('label.table.sort.notSorted', 'not sorted, activate to sort ascending');
+
+    return (
+        <button
+            type="button"
+            className={styles.sortableHeaderBtn}
+            aria-label={`${label}, ${directionLabel}`}
+            onClick={() => onSort(property)}
+        >
+            <Typography variant="body" weight="semiBold" aria-hidden="true">{label}</Typography>
+            <TableSortLabel
+                component="span"
+                active={isActive}
+                classes={{icon: isActive ? styles.iconActive : styles.icon}}
+                direction={isActive ? order : 'asc'}
+                aria-hidden="true"
+                tabIndex={-1}
+            />
+        </button>
+    );
+};
 
 SortableHeader.propTypes = {
     property: PropTypes.string,
@@ -88,6 +145,44 @@ SortableHeader.propTypes = {
     order: PropTypes.string,
     orderBy: PropTypes.string,
     onSort: PropTypes.func
+};
+
+// ── ClusterMenuItems ──────────────────────────────────────────────────────────
+
+// Cluster operations sub-menu. Extracted so the main component's render stays
+// within the cognitive-complexity budget. Renders nothing when not clustered.
+const ClusterMenuItems = ({isClustered, t, onOperation}) => {
+    if (!isClustered) {
+        return null;
+    }
+
+    const operations = [
+        {key: 'synchronize', labelKey: 'label.table.actions.sync', Icon: Reload},
+        {key: 'push', labelKey: 'label.table.actions.push', Icon: Upload},
+        {key: 'pull', labelKey: 'label.table.actions.pull', Icon: Download}
+    ];
+
+    return (
+        <>
+            <Divider/>
+            <MenuItem isDisabled
+                      label={t('label.cluster.ops.title')}
+                      iconStart={<Server/>}
+                      className={styles.menuSectionHeader}/>
+            {operations.map(({key, labelKey, Icon}) => (
+                <MenuItem key={key}
+                          label={t(labelKey)}
+                          iconStart={<Icon/>}
+                          onClick={() => onOperation(key)}/>
+            ))}
+        </>
+    );
+};
+
+ClusterMenuItems.propTypes = {
+    isClustered: PropTypes.bool,
+    t: PropTypes.func.isRequired,
+    onOperation: PropTypes.func.isRequired
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -313,30 +408,14 @@ const ModuleManagementCommunityApp = () => {
 
     // ── Filtered / paginated slice ─────────────────────────────────────────────
 
-    const filteredModules = sortedModules.filter(m => {
-        if (preferences.updatesOnly) {
-            if (!updates.some(u => u.name === m.name) && !dependentUpdates[m.name]?.length) {
-                return false;
-            }
-        }
-
-        if (typeFilter === 'jahia') {
-            // Show only Jahia module types; hide plain OSGi bundles
-            const knownType = bundleTypes[m.name];
-            if (knownType && !JAHIA_MODULE_TYPES.includes(knownType)) {
-                return false;
-            }
-        } else if (typeFilter) {
-            const knownType = bundleTypes[m.name];
-            if (knownType && knownType !== typeFilter) {
-                return false;
-            }
-        }
-
-        return debouncedFilter.trim() === '' ?
-            true :
-            m.name.toLowerCase().includes(debouncedFilter.trim().toLowerCase());
-    });
+    const filteredModules = sortedModules.filter(buildModuleFilter({
+        updatesOnly: preferences.updatesOnly,
+        updates,
+        dependentUpdates,
+        typeFilter,
+        bundleTypes,
+        debouncedFilter
+    }));
 
     const isClustered = initialData.admin.modulesManagement.clustered;
     const lastUpdate = dayjs(data.admin.modulesManagement.lastUpdateTime).format('DD/MM/YYYY HH:mm');
@@ -458,37 +537,14 @@ const ModuleManagementCommunityApp = () => {
                             <MenuItem label={t('label.cleanup.jcr')}
                                       iconStart={<DeletePermanently/>}
                                       onClick={handleCleanupJcr}/>
-                            {isClustered && <Divider/>}
-                            {isClustered && (
-                                <MenuItem isDisabled
-                                          label={t('label.cluster.ops.title')}
-                                          iconStart={<Server/>}
-                                          className={styles.menuSectionHeader}/>
-                            )}
-                            {isClustered && (
-                                <MenuItem label={t('label.table.actions.sync')}
-                                          iconStart={<Reload/>}
-                                          onClick={() => {
-                                              setMenuAnchor(null);
-                                              handleClusterOperation('synchronize');
-                                          }}/>
-                            )}
-                            {isClustered && (
-                                <MenuItem label={t('label.table.actions.push')}
-                                          iconStart={<Upload/>}
-                                          onClick={() => {
-                                              setMenuAnchor(null);
-                                              handleClusterOperation('push');
-                                          }}/>
-                            )}
-                            {isClustered && (
-                                <MenuItem label={t('label.table.actions.pull')}
-                                          iconStart={<Download/>}
-                                          onClick={() => {
-                                              setMenuAnchor(null);
-                                              handleClusterOperation('pull');
-                                          }}/>
-                            )}
+                            <ClusterMenuItems
+                                isClustered={isClustered}
+                                t={t}
+                                onOperation={operation => {
+                                    setMenuAnchor(null);
+                                    handleClusterOperation(operation);
+                                }}
+                            />
                             <Divider/>
                             <MenuItem isDisabled label={t('label.lastUpdate', {date: lastUpdate})}/>
                         </Menu>
@@ -504,7 +560,7 @@ const ModuleManagementCommunityApp = () => {
                     <TableHead>
                         <TableRow>
                             <TableHeadCell
-                                aria-sort={orderBy === 'name' ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                aria-sort={ariaSortFor('name', orderBy, order)}
                             >
                                 <div className={styles.columnHeaderCell}>
                                     <div className={styles.columnHeaderRow}>
@@ -557,7 +613,7 @@ const ModuleManagementCommunityApp = () => {
                             </TableHeadCell>
 
                             <TableHeadCell
-                                aria-sort={orderBy === 'version' ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                aria-sort={ariaSortFor('version', orderBy, order)}
                             >
                                 <SortableHeader property="version"
                                                 label={t('label.table.cells.version')}
@@ -568,7 +624,7 @@ const ModuleManagementCommunityApp = () => {
 
                             {updates.length > 0 && (
                                 <TableHeadCell
-                                    aria-sort={orderBy === 'available' ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                    aria-sort={ariaSortFor('available', orderBy, order)}
                                 >
                                     <div className={styles.columnHeaderCell}>
                                         <div className={styles.columnHeaderRow}>
@@ -580,20 +636,20 @@ const ModuleManagementCommunityApp = () => {
                                         </div>
                                         {/* A11y A-021: aria-label on updates-only switch */}
                                         <label className={styles.columnCheckboxLabel}>
-                                             <Switch checked={preferences.updatesOnly}
-                                                     aria-label={t('label.input.updatesOnly')}
-                                                     onChange={(e, value, checked) => setPreferences({
+                                            <Switch checked={preferences.updatesOnly}
+                                                    aria-label={t('label.input.updatesOnly')}
+                                                    onChange={(e, value, checked) => setPreferences({
                                                          ...preferences,
                                                          updatesOnly: checked
                                                      })}/>
-                                             <Typography variant="caption" aria-hidden="true">{t('label.input.updatesOnly')}</Typography>
-                                         </label>
+                                            <Typography variant="caption" aria-hidden="true">{t('label.input.updatesOnly')}</Typography>
+                                        </label>
                                     </div>
                                 </TableHeadCell>
                             )}
 
                             <TableHeadCell
-                                aria-sort={orderBy === 'state' ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                aria-sort={ariaSortFor('state', orderBy, order)}
                             >
                                 <SortableHeader property="state"
                                                 label={isClustered ? t('label.table.cells.clusterstate') : t('label.table.cells.state')}

@@ -53,10 +53,10 @@
 
 .actionGroup {
     display: flex;
-    align-content: space-evenly;
-    justify-content: space-between;
-    align-items: center;
     gap: var(--spacing-small);
+    justify-content: space-between;
+    align-content: space-evenly;
+    align-items: center;
     margin-top: var(--spacing-medium);
 
     /* WCAG 2.5.5 / 2.5.8 — uniform 44 px touch target for every child button
@@ -72,15 +72,16 @@
     display: flex;
     flex-direction: column;
     margin-right: 16px;
-    border: 1px solid #ccc;
     padding: 8px;
+
+    border: 1px solid #ccc;
     border-radius: 4px;
 }
 
 .fixedWidthButton {
+    flex-grow: 2;
     width: initial;
     min-width: initial;
-    flex-grow: 2;
 }
 
 /* Loading states */
@@ -100,42 +101,47 @@
 /* Visually hidden but screen-reader accessible */
 .srOnly {
     position: absolute;
+
     width: 1px;
     height: 1px;
-    padding: 0;
     margin: -1px;
+    padding: 0;
+
+    white-space: nowrap;
+
+    border: 0;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
 }
 
 /* 3-dot "More actions" menu trigger */
 .dotMenuBtn {
+    @media (prefers-reduced-motion: no-preference) {
+        transition: background-color 0.15s ease; /* A11y B-007 */
+    }
+
     display: inline-flex;
-    align-items: center;
+    flex-shrink: 0;
     justify-content: center;
+    align-items: center;
     min-width: 44px;   /* A11y B-001: 44×44 px minimum target size */
     min-height: 44px;
     padding: 0;
-    font-size: 20px;
+
     font-weight: bold;
-    line-height: 1;
+    font-size: 20px;
     color: var(--color-accent);
-    background: transparent;
+    line-height: 1;
+
     border: 1px solid var(--color-accent);
     border-radius: 4px;
+    background: transparent;
     cursor: pointer;
-    flex-shrink: 0;
 
     /* A11y B-026: explicit focus indicator */
     &:focus-visible {
         outline: 3px solid var(--color-accent);
         outline-offset: 2px;
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-        transition: background-color 0.15s ease; /* A11y B-007 */
     }
 
     &:hover { background-color: rgba(0, 0, 0, 0.06); }
@@ -145,14 +151,16 @@
 /* Table column headers & filters */
 .columnFilterInput {
     display: block;
+    box-sizing: border-box;
+    width: 200px;
     margin-top: 6px;
     margin-bottom: 8px;
-    width: 200px;
     padding: 4px 6px;
+
+    font-size: 12px;
+
     border: 1px solid #767676;  /* A11y A-019: ≥3:1 non-text contrast on white */
     border-radius: 4px;
-    font-size: 12px;
-    box-sizing: border-box;
 
     &:focus-visible {
         outline: 3px solid var(--color-accent);
@@ -172,22 +180,45 @@
     align-items: center;
 }
 
+/* A11y CRITICAL-4: native button used as the sort control */
+.sortableHeaderBtn {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    padding: 0;
+
+    color: inherit;
+    text-align: left;
+
+    border: 0;
+    background: none;
+    cursor: pointer;
+
+    &:focus-visible {
+        outline: 3px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+}
+
 .columnCheckboxLabel {
     display: flex;
+    gap: 6px;
     align-items: center;
     margin-top: 6px;
     margin-bottom: 8px;
-    gap: 6px;
-    cursor: pointer;
+
     white-space: nowrap;
+
+    cursor: pointer;
 }
 
 :global(.moonstone-tableRow) {
-    border-bottom: 1px solid var(--color-gray_light);
     height: fit-content;
-    margin-bottom: 0.1rem;
     margin-top: 0.1rem;
+    margin-bottom: 0.1rem;
     padding-bottom: 4px;
+
+    border-bottom: 1px solid var(--color-gray_light);
 }
 
 /* Pagination */
@@ -201,14 +232,15 @@
 
 .paginationControls {
     display: flex;
-    align-items: center;
     gap: 16px;
+    align-items: center;
 }
 
 .itemsPerPageSelect {
     padding: 4px 8px;
-    border-radius: 4px;
+
     border: 1px solid #767676;  /* A11y A-019: ≥3:1 non-text contrast */
+    border-radius: 4px;
 
     &:focus-visible {
         outline: 3px solid var(--color-accent);
@@ -223,8 +255,8 @@
 /* Cluster node status (used by ClusterDeploymentStatus) */
 .clusterStatus {
     display: flex;
-    gap: 8px;
     flex-wrap: wrap;
+    gap: 8px;
 }
 
 .clusterNode {
@@ -238,18 +270,20 @@
 
 /* Menu section header (disabled label used as divider in the ⋮ menu) */
 .menuSectionHeader {
-    opacity: 1 !important;
-    font-size: 0.75rem !important;  /* A11y C-003: was 11px absolute — now relative unit */
     font-weight: 700 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    font-size: 0.75rem !important;  /* A11y C-003: was 11px absolute — now relative unit */
     color: var(--color-gray_dark) !important;  /* A11y C-003: lifted from gray60 for ≥7:1 */
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+
+    opacity: 1 !important;
+
     pointer-events: none;
 }
 
 .marginBorder {
-    margin-left: var(--spacing-small);
     margin-right: var(--spacing-small);
+    margin-left: var(--spacing-small);
 }
 
 /* ─── Global motion preference ───────────────────────────────────────────── */
@@ -258,8 +292,8 @@
     *,
     *::before,
     *::after {
+        transition-duration: 0.01ms !important;
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
     }
 }
