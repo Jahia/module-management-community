@@ -51,7 +51,8 @@ public class ModuleManagementQueryResult {
     @GraphQLName("lastUpdateTime")
     @GraphQLDescription("Return the last time the module updates were checked")
     public String getLastUpdateTime() {
-        return getModuleManagementCommunityService().getLastUpdateTime().toString();
+        java.time.Instant lastUpdateTime = getModuleManagementCommunityService().getLastUpdateTime();
+        return lastUpdateTime != null ? lastUpdateTime.toString() : null;
     }
 
 
