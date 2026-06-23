@@ -1,0 +1,12 @@
+query GetStoreModules($searchTerm: String) {
+    admin {
+        modulesManagement {
+            storeModules(searchTerm: $searchTerm) {
+                symbolicName
+                title
+                latestVersion
+                storeUrl
+            }
+        }
+    }
+}
