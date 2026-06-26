@@ -78,12 +78,12 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
 
     if (error) {
         console.error('Error when fetching module data: ' + error);
-        return <TableRow><TableBodyCell colSpan={4}>{t('label.errors.loadingModuleData')}</TableBodyCell></TableRow>;
+        return <TableRow className={styles.tableRow}><TableBodyCell colSpan={4}>{t('label.errors.loadingModuleData')}</TableBodyCell></TableRow>;
     }
 
     if (loading) {
         return (
-            <TableRow>
+            <TableRow className={styles.tableRow}>
                 {/* A11y A-010: announce row-level loading state */}
                 <TableBodyCell colSpan={5}>
                     <div className={styles.flexCenter} role="status" aria-label="Loading module data">
@@ -98,7 +98,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
 
     if (!bundle) {
         return (
-            <TableRow>
+            <TableRow className={styles.tableRow}>
                 <TableBodyCell colSpan={5}>{t('label.errors.moduleNotFound', {module})}</TableBodyCell>
             </TableRow>
         );
@@ -112,7 +112,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
         [];
 
     return (
-        <TableRow>
+        <TableRow className={styles.tableRow}>
             <TableBodyCell>
                 <Typography variant="subheading" weight="semiBold">
                     {bundle.symbolicName} <Typography variant="caption">[{bundle.bundleId}]</Typography>
