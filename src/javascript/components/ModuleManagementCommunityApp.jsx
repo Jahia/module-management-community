@@ -558,7 +558,7 @@ const ModuleManagementCommunityApp = () => {
                 {/* A11y A-017: table with accessible name */}
                 <Table aria-label={t('label.table.title')}>
                     <TableHead>
-                        <TableRow>
+                        <TableRow className={styles.tableRow}>
                             <TableHeadCell
                                 aria-sort={ariaSortFor('name', orderBy, order)}
                             >

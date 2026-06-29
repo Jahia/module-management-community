@@ -212,7 +212,8 @@
     cursor: pointer;
 }
 
-:global(.moonstone-tableRow) {
+.tableRow {
+    border-bottom: 1px solid var(--color-gray_light);
     height: fit-content;
     margin-top: 0.1rem;
     margin-bottom: 0.1rem;
