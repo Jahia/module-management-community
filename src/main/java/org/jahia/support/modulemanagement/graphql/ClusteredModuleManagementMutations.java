@@ -11,6 +11,10 @@ import org.jahia.modules.graphql.provider.dxm.admin.GqlAdminMutation;
 @GraphQLTypeExtension(GqlAdminMutation.class)
 public final class ClusteredModuleManagementMutations {
 
+    private ClusteredModuleManagementMutations() {
+        // Utility class — prevent instantiation
+    }
+
     @GraphQLField
     @GraphQLName("modulesManagement")
     public static ClusteredModuleManagementMutationResult modulesManagement() {

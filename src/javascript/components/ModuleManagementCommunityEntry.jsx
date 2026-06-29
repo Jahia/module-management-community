@@ -7,9 +7,12 @@ import {capitalize} from '@material-ui/core/utils/helpers';
 import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {HealthStatus} from './HealthStatus';
+import {useModulePreferences} from '../hooks/useModulePreferences';
 
 export const ModuleManagementCommunityEntry = () => {
     const {t} = useTranslation('module-management-community');
+    // A11y HIGH-8 (WCAG 2.2.4): only poll when the user has enabled auto-refresh
+    const [preferences] = useModulePreferences();
     const {data, error, loading} = useQuery(gql`
         query GetServerStatus {
             admin {
@@ -26,21 +29,23 @@ export const ModuleManagementCommunityEntry = () => {
             }
         }`, {
         fetchPolicy: 'network-only',
-        pollInterval: 30000
+        pollInterval: preferences.autoRefresh ? 30000 : 0
     });
 
     return (
         /* A11y B-013: Suspense fallback as accessible live region */
         <Suspense fallback={
             <div role="status" aria-live="polite" aria-label="Loading">
-                <span className="srOnly">Loading…</span>
+                <span className={styles.srOnly}>Loading…</span>
             </div>
-        }>
+        }
+        >
             <div className={styles.root} id="module-management-community-root">
                 <div className={styles.headerRoot}>
                     <header className={styles.header}>
                         <div className={styles.titles}>
-                            <Typography variant="title">{capitalize(t('label.title'))}</Typography>
+                            {/* A11y CRITICAL-3: page title as the single <h1> landmark heading */}
+                            <Typography variant="title" component="h1">{capitalize(t('label.title'))}</Typography>
                             <Typography variant="subheading">{t('label.subtitle')}</Typography>
                         </div>
                         <div className={styles.actionBar}>
@@ -73,9 +78,10 @@ export const ModuleManagementCommunityEntry = () => {
                     </header>
                     <Separator size="large" variant="horizontal" spacing="medium" aria-hidden="true"/>
                 </div>
-                <div className={styles.content}>
+                {/* A11y CRITICAL-3: primary content wrapped in a <main> landmark */}
+                <main className={styles.content}>
                     <ModuleManagementCommunityApp/>
-                </div>
+                </main>
             </div>
         </Suspense>
     );

@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -68,6 +68,8 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
     // Tracks pending install for the downgrade confirmation dialog.
     // Shape: null | { source: 'store', version } | { source: 'jcr', version, jcrPath }
     const [confirmInstall, setConfirmInstall] = useState(null);
+    // A11y HIGH-6: refs to each tab button so keyboard nav can move DOM focus
+    const tabRefs = useRef({});
 
     useEffect(() => {
         setBundle(initialBundle);
@@ -191,7 +193,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
         <DialogContent className={styles.bundleDetailsContainer}>
             <div className={styles.bundleDetailsHeader}>
                 <div className={styles.bundleDetailsTitle}>
-                    <Typography variant="title" component="h2">{bundleDisplayName}</Typography>
+                    <Typography id="bundle-details-title" variant="title" component="h2">{bundleDisplayName}</Typography>
                     <Badge label={'v' + bundle.version} color="accent"/>
                     <Badge label={bundle.type || 'bundle'}
                            color={BUNDLE_TYPE_COLOR[bundle.type] || 'default'}/>
@@ -254,18 +256,22 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                  className={styles.bundleDetailsTabs}
                  onKeyDown={e => {
                      const idx = visibleTabs.findIndex(tab => tab.id === activeTab);
+                     let nextId = null;
                      if (e.key === 'ArrowRight') {
-                         e.preventDefault();
-                         setActiveTab(visibleTabs[(idx + 1) % visibleTabs.length].id);
+                         nextId = visibleTabs[(idx + 1) % visibleTabs.length].id;
                      } else if (e.key === 'ArrowLeft') {
-                         e.preventDefault();
-                         setActiveTab(visibleTabs[(idx - 1 + visibleTabs.length) % visibleTabs.length].id);
+                         nextId = visibleTabs[(idx - 1 + visibleTabs.length) % visibleTabs.length].id;
                      } else if (e.key === 'Home') {
-                         e.preventDefault();
-                         setActiveTab(visibleTabs[0].id);
+                         nextId = visibleTabs[0].id;
                      } else if (e.key === 'End') {
+                         nextId = visibleTabs[visibleTabs.length - 1].id;
+                     }
+
+                     if (nextId) {
                          e.preventDefault();
-                         setActiveTab(visibleTabs[visibleTabs.length - 1].id);
+                         setActiveTab(nextId);
+                         // A11y HIGH-6: move DOM focus to the newly-activated tab button
+                         tabRefs.current[nextId]?.focus();
                      }
                  }}
             >
@@ -280,6 +286,9 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                     return (
                         <button
                             key={tab.id}
+                            ref={el => {
+                                tabRefs.current[tab.id] = el;
+                            }}
                             type="button"
                             role="tab"
                             tabIndex={isActive ? 0 : -1}
@@ -301,7 +310,8 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
             <div id={`tabpanel-${activeTab}`}
                  role="tabpanel"
                  aria-labelledby={`tab-${activeTab}`}
-                 className={styles.bundleDetailsContent}>
+                 className={styles.bundleDetailsContent}
+            >
                 {activeTab === 'details' && (
                     <BundleInfo bundle={bundle}/>
                 )}
@@ -345,6 +355,10 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                                color={site.deployed ? 'success' : 'danger'}/>
                                         <Switch checked={site.deployed}
                                                 value={site.siteKey}
+                                                aria-label={t('label.bundle.sites.toggleAriaLabel', {
+                                                    site: site.siteKey,
+                                                    defaultValue: `Toggle deployment on site ${site.siteKey}`
+                                                })}
                                                 onChange={handleSiteDeployment}/>
                                     </div>
                                 </li>
@@ -525,7 +539,8 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
             <Dialog open={Boolean(confirmInstall)}
                     aria-labelledby="confirm-install-title"
                     aria-describedby="confirm-install-desc"
-                    onClose={() => setConfirmInstall(null)}>
+                    onClose={() => setConfirmInstall(null)}
+            >
                 <DialogTitle id="confirm-install-title">
                     <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                         <Warning color="var(--color-warning)" aria-hidden="true"/>

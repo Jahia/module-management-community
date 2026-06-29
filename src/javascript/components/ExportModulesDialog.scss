@@ -1,8 +1,9 @@
 /* A11y D-007: semantic h2 dialog title */
 .dialogTitle {
     margin: 0;
-    font-size: 1.15rem;
+
     font-weight: 600;
+    font-size: 1.15rem;
     color: var(--color-gray_dark);
 }
 
@@ -15,12 +16,13 @@
 
 .sectionLabel {
     margin-bottom: 2px;
+
     color: #1a1a1a;
 }
 
 .typeGroup {
-    margin-bottom: 4px;
     gap: 8px;
+    margin-bottom: 4px;
 
     :global(.MuiFormControlLabel-root) {
         margin-right: 16px;
@@ -36,9 +38,10 @@
 .embedRow {
     display: flex;
     flex-direction: row;
-    align-items: flex-start;
     gap: 12px;
+    align-items: flex-start;
     padding: 10px 12px;
+
     border: 1px solid var(--color-gray_light, #e0e0e0);
     border-radius: 6px;
     background: var(--color-gray_lightest, #fafafa);
@@ -51,28 +54,31 @@
 }
 
 .embedHint {
-    color: var(--color-gray_dark) !important;  /* A11y D-002: lifted from #555 for ≥7:1 */
     margin-top: 2px;
+
+    color: var(--color-gray_dark) !important;  /* A11y D-002: lifted from #555 for ≥7:1 */
 }
 
 .hint {
-    color: var(--color-gray_dark) !important;  /* A11y D-002: lifted from #666 (~5.2:1) for ≥7:1 */
     margin-top: 2px;
+
+    color: var(--color-gray_dark) !important;  /* A11y D-002: lifted from #666 (~5.2:1) for ≥7:1 */
 }
 
 .statusRow {
     display: flex;
-    align-items: center;
     gap: 12px;
+    align-items: center;
     padding: 8px 0;
 }
 
 .statusError {
-    color: #c00 !important;
+    color: #b91c1c !important; /* A11y MED: lifted from #c00 (~5.9:1) to ≥7:1 */
 }
 
 .previewContainer {
     margin-top: 8px;
+
     border: 1px solid #ddd;
     border-radius: 4px;
     overflow: hidden;
@@ -81,26 +87,30 @@
 .previewLabel {
     display: block;
     padding: 6px 12px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #ddd;
+
     color: #333 !important;
+
+    border-bottom: 1px solid #ddd;
+    background: #f5f5f5;
 }
 
 .yamlPreview {
+    max-height: 320px;
     margin: 0;
     padding: 12px;
-    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+
     font-size: 12px;
-    line-height: 1.5;
-    max-height: 320px;
-    overflow-y: auto;
-    white-space: pre;
-    background: #fafafa;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
     color: #222;
+    line-height: 1.5;
+    white-space: pre;
+
+    background: #fafafa;
+    overflow-y: auto;
 }
 
 .dialogActions {
-    padding: 12px 24px;
     gap: 8px;
     justify-content: flex-end;
+    padding: 12px 24px;
 }

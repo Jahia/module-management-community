@@ -5,7 +5,6 @@ import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import org.apache.felix.utils.resource.SimpleFilter;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
-import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.osgi.BundleUtils;
 import org.jahia.services.modulemanager.BundleBucketInfo;
 import org.jahia.services.modulemanager.spi.BundleService;
@@ -20,7 +19,6 @@ import org.osgi.framework.wiring.FrameworkWiring;
 import org.osgi.framework.wiring.BundleWire;
 import org.osgi.framework.wiring.BundleWiring;
 
-import javax.inject.Inject;
 import javax.jcr.RepositoryException;
 import java.util.*;
 import java.util.function.Supplier;
@@ -29,6 +27,8 @@ import java.util.stream.Collectors;
 
 public class GqlBundle {
     public static final String FILTER_DIRECTIVES = "filter";
+    private static final String OSGI_WIRING_PACKAGE = "osgi.wiring.package";
+    private static final String JAHIA_MODULES_DEPENDENCIES = "com.jahia.modules.dependencies";
     protected final Bundle bundle;
 
     public GqlBundle(Bundle bundle) {
@@ -71,9 +71,9 @@ public class GqlBundle {
         }
     }
 
-    @Inject
-    @GraphQLOsgiService(service = ModuleManagementCommunityService.class)
-    ModuleManagementCommunityService moduleManagementCommunityService;
+    private ModuleManagementCommunityService moduleManagementCommunityService() {
+        return BundleUtils.getOsgiService(ModuleManagementCommunityService.class, null);
+    }
 
     @GraphQLField
     @GraphQLName("symbolicName")
@@ -128,14 +128,14 @@ public class GqlBundle {
         BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
         if (bundleWiring != null) {
             // Bundle is resolved/active — return actual runtime wires
-            for (BundleWire wire : bundleWiring.getRequiredWires("osgi.wiring.package")) {
+            for (BundleWire wire : bundleWiring.getRequiredWires(OSGI_WIRING_PACKAGE)) {
                 wiring.add(wire.getProviderWiring().toString());
             }
         } else {
             // Bundle is unresolved (e.g. INSTALLED) — fall back to declared manifest requirements
             BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
             if (bundleRevision != null) {
-                for (BundleRequirement req : bundleRevision.getDeclaredRequirements("osgi.wiring.package")) {
+                for (BundleRequirement req : bundleRevision.getDeclaredRequirements(OSGI_WIRING_PACKAGE)) {
                     String filter = req.getDirectives().get(FILTER_DIRECTIVES);
                     if (filter != null) wiring.add(filter);
                 }
@@ -149,7 +149,7 @@ public class GqlBundle {
     public String getDependencyGraph(@GraphQLName("depth") @GraphQLDefaultValue(DefaultDepthSupplier.class) int depth) {
         StringBuilder mermaid = getMermaid();
         Set<String> visited = new HashSet<>();
-        buildGraph(bundle, mermaid, visited, 0, depth, "osgi.wiring.package");
+        buildGraph(bundle, mermaid, visited, 0, depth, OSGI_WIRING_PACKAGE);
         return mermaid.toString();
     }
 
@@ -160,14 +160,14 @@ public class GqlBundle {
         BundleWiring bundleWiring = bundle.adapt(BundleWiring.class);
         if (bundleWiring != null) {
             // Bundle is resolved/active — return actual runtime wires
-            for (BundleWire wire : bundleWiring.getRequiredWires("com.jahia.modules.dependencies")) {
+            for (BundleWire wire : bundleWiring.getRequiredWires(JAHIA_MODULES_DEPENDENCIES)) {
                 wiring.add(wire.getProviderWiring().toString());
             }
         } else {
             // Bundle is unresolved (e.g. INSTALLED) — fall back to declared manifest requirements
             BundleRevision bundleRevision = bundle.adapt(BundleRevision.class);
             if (bundleRevision != null) {
-                for (BundleRequirement req : bundleRevision.getDeclaredRequirements("com.jahia.modules.dependencies")) {
+                for (BundleRequirement req : bundleRevision.getDeclaredRequirements(JAHIA_MODULES_DEPENDENCIES)) {
                     String filter = req.getDirectives().get(FILTER_DIRECTIVES);
                     if (filter != null) wiring.add(filter);
                 }
@@ -181,7 +181,7 @@ public class GqlBundle {
     public String getModuleDependencyGraph(@GraphQLName("depth") @GraphQLDefaultValue(DefaultDepthSupplier.class) int depth) {
         StringBuilder mermaid = getMermaid();
         Set<String> visited = new HashSet<>();
-        buildGraph(bundle, mermaid, visited, 0, depth, "com.jahia.modules.dependencies");
+        buildGraph(bundle, mermaid, visited, 0, depth, JAHIA_MODULES_DEPENDENCIES);
         return mermaid.toString();
     }
 
@@ -372,7 +372,7 @@ public class GqlBundle {
     @GraphQLName("previousVersions")
     public List<GqlBundleVersion> getPreviousVersions() {
         try {
-            return moduleManagementCommunityService.getBundleVersionsFromJcr(bundle)
+            return moduleManagementCommunityService().getBundleVersionsFromJcr(bundle)
                     .stream().map(GqlBundleVersion::new).collect(Collectors.toList());
         } catch (RepositoryException e) {
             throw new DataFetchingException("Error retrieving previous versions from JCR", e);
@@ -382,7 +382,7 @@ public class GqlBundle {
     @GraphQLField
     @GraphQLName("storeVersions")
     public List<GqlStoreVersion> getStoreVersions() {
-        return moduleManagementCommunityService.getStoreVersionsForBundle(bundle.getSymbolicName())
+        return moduleManagementCommunityService().getStoreVersionsForBundle(bundle.getSymbolicName())
                 .stream().map(GqlStoreVersion::new).collect(Collectors.toList());
     }
 
@@ -459,7 +459,7 @@ public class GqlBundle {
     public SortedSet<GqlSiteDeployment> getSitesDeployment() {
         SortedSet<GqlSiteDeployment> sites = new TreeSet<>();
         try {
-            moduleManagementCommunityService.getSitesDeployment(bundle).entrySet().forEach(stringBooleanEntry -> {
+            moduleManagementCommunityService().getSitesDeployment(bundle).entrySet().forEach(stringBooleanEntry -> {
                 String siteKey = stringBooleanEntry.getKey();
                 boolean isDeployed = stringBooleanEntry.getValue();
                 sites.add(new GqlSiteDeployment(siteKey, isDeployed));
@@ -577,6 +577,19 @@ public class GqlBundle {
         @Override
         public int compareTo(GqlSiteDeployment o) {
             return this.siteKey.compareTo(o.siteKey);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof GqlSiteDeployment)) return false;
+            GqlSiteDeployment that = (GqlSiteDeployment) o;
+            return Objects.equals(this.siteKey, that.siteKey);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(siteKey);
         }
     }
 }

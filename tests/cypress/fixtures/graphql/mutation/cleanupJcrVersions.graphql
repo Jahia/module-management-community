@@ -1,0 +1,7 @@
+mutation CleanupJcrVersions {
+    admin {
+        modulesManagement {
+            cleanupJcrVersions
+        }
+    }
+}

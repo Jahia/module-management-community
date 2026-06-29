@@ -56,6 +56,10 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
         variables: {module: module.name, version: module.version}
     });
 
+    // MEDIUM: colSpan must match the actual visible column count for placeholder rows.
+    // Columns: name, type, version, [available], state, [cluster nodes], actions
+    const columnCount = 5 + (updates.length > 0 ? 1 : 0) + (isClustered ? 1 : 0);
+
     useEffect(() => {
         const bundle = data?.admin?.modulesManagement?.bundle;
         if (bundle !== undefined) {
@@ -78,14 +82,14 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
 
     if (error) {
         console.error('Error when fetching module data: ' + error);
-        return <TableRow className={styles.tableRow}><TableBodyCell colSpan={4}>{t('label.errors.loadingModuleData')}</TableBodyCell></TableRow>;
+        return <TableRow className={styles.tableRow}><TableBodyCell colSpan={columnCount}>{t('label.errors.loadingModuleData')}</TableBodyCell></TableRow>;
     }
 
     if (loading) {
         return (
             <TableRow className={styles.tableRow}>
                 {/* A11y A-010: announce row-level loading state */}
-                <TableBodyCell colSpan={5}>
+                <TableBodyCell colSpan={columnCount}>
                     <div className={styles.flexCenter} role="status" aria-label="Loading module data">
                         <Loader size="small"/>
                     </div>
@@ -99,7 +103,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
     if (!bundle) {
         return (
             <TableRow className={styles.tableRow}>
-                <TableBodyCell colSpan={5}>{t('label.errors.moduleNotFound', {module})}</TableBodyCell>
+                <TableBodyCell colSpan={columnCount}>{t('label.errors.moduleNotFound', {module})}</TableBodyCell>
             </TableRow>
         );
     }
