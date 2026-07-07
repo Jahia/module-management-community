@@ -3,7 +3,12 @@ package org.jahia.support.modulemanagement.graphql;
 import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
 import graphql.annotations.annotationTypes.GraphQLTypeExtension;
+import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
 import org.jahia.modules.graphql.provider.dxm.admin.GqlAdminMutation;
+import org.jahia.modules.graphql.provider.dxm.security.GraphQLRequiresPermission;
+import org.jahia.services.securityfilter.PermissionService;
+
+import javax.jcr.RepositoryException;
 
 /**
  * Admin mutation class for Module Management
@@ -17,6 +22,7 @@ public final class ModuleManagementMutations {
 
     @GraphQLField
     @GraphQLName("modulesManagement")
+    @GraphQLRequiresPermission(value = "graphqlAdminMutation")
     public static ModuleManagementMutationResult modulesManagement() {
         return new ModuleManagementMutationResult();
     }

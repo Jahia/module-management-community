@@ -1,7 +1,9 @@
 upload_modules:
   description: Can upload modules in the module management
+  metadata:
+    visible: true
   auto_apply:
-    - always: true
+    - origin: hosted
   constraints:
     - user_permission: provisioningAccess
       path: /
@@ -9,3 +11,21 @@ upload_modules:
     - api: module-management-community.upload
     - api: module-management-community.import
     - api: module-management-community.export
+
+provisioning_modules_graphql:
+  description: Can use provisioning modules GraphQL API via Modules Management Community
+  metadata:
+    visible: true
+  auto_apply:
+    - origin: hosted
+  constraints:
+    - user_permission: provisioningAccess
+      path: /
+  grants:
+    - api: graphql.Query.admin
+    - api: graphql.Mutation.admin
+    - api: graphql.AdminMutation.modulesManagement
+    - api: graphql.AdminQuery.modulesManagement
+    - api: graphql.ClusteredModuleManagementMutationResult
+    - api: graphql.ModuleManagementMutationResult
+    - api: graphql.ModuleManagementQueryResult
