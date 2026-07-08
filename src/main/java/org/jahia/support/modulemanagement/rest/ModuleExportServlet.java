@@ -1,21 +1,17 @@
 package org.jahia.support.modulemanagement.rest;
 
 import org.apache.commons.io.FileUtils;
-import org.jahia.params.valves.AuthValveContext;
-import org.jahia.services.content.JCRSessionFactory;
 import org.jahia.services.securityfilter.PermissionService;
 import org.jahia.services.usermanager.JahiaUser;
-import org.jahia.services.usermanager.JahiaUserManagerService;
 import org.jahia.support.modulemanagement.ExportOptions;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.jcr.RepositoryException;
 import javax.servlet.Servlet;
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.BufferedInputStream;
@@ -42,51 +38,40 @@ import java.time.LocalDate;
         property = {"alias=/module-management-community/export"},
         immediate = true
 )
-public class ModuleExportServlet extends HttpServlet {
+public class ModuleExportServlet extends AbstractModuleManagementServlet {
 
     private static final Logger logger = LoggerFactory.getLogger(ModuleExportServlet.class);
     private static final int BUFFER_SIZE = 65536;
+    private static final String ERROR_EXPORT_FAILED = "{\"error\":\"Export failed\"}";
 
-    @Reference
-    private ModuleManagementCommunityService moduleManagementCommunityService;
+    private final transient ModuleManagementCommunityService moduleManagementCommunityService;
 
-    @Reference
-    private PermissionService permissionService;
+    @Activate
+    public ModuleExportServlet(
+            @Reference ModuleManagementCommunityService moduleManagementCommunityService,
+            @Reference PermissionService permissionService) {
+        super(permissionService);
+        this.moduleManagementCommunityService = moduleManagementCommunityService;
+    }
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
-
-        // --- Authentication check ---
-        JahiaUser currentUser = JCRSessionFactory.getInstance().getCurrentUser();
-        AuthValveContext ctx = (AuthValveContext) request.getAttribute(AuthValveContext.class.getName());
-        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser) || ctx == null || ctx.isAuthRetrievedFromSession()) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getOutputStream().write("{\"error\":\"Authentication required\"}".getBytes(StandardCharsets.UTF_8));
-            return;
-        }
-
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) {
         try {
-            if(!permissionService.hasPermission("module-management-community.export")) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                response.setContentType("application/json;charset=UTF-8");
-                response.getOutputStream().write("{\"error\":\"Authentication required\"}".getBytes(StandardCharsets.UTF_8));
+            JahiaUser currentUser = checkAuthorized(request, response, "module-management-community.export");
+            if (currentUser == null) {
                 return;
             }
-        } catch (RepositoryException e) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getOutputStream().write("{\"error\":\"Authentication required\"}".getBytes(StandardCharsets.UTF_8));
-            return;
+            ServletSupport.applyCorsHeaders(request, response);
+            streamExport(request, response, currentUser);
+        } catch (IOException e) {
+            logger.error("Unexpected I/O error handling module export", e);
+            if (!response.isCommitted()) {
+                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            }
         }
+    }
 
-        // --- Allow admin SPA (same origin) to call via fetch ---
-        String origin = request.getHeader("Origin");
-        if (origin != null) {
-            response.setHeader("Access-Control-Allow-Origin", origin);
-            response.setHeader("Vary", "Origin");
-        }
-
+    private void streamExport(HttpServletRequest request, HttpServletResponse response, JahiaUser currentUser) {
         File zipFile = null;
         try {
             String typesParam = request.getParameter("types");
@@ -94,7 +79,10 @@ public class ModuleExportServlet extends HttpServlet {
             boolean embedAll = !"false".equalsIgnoreCase(request.getParameter("embedAll"));
             ExportOptions options = ExportOptions.fromParams(typesParam, embedAll);
 
-            logger.info("Module export requested by '{}' for types: {}", currentUser.getName(), options.getTypes());
+            if (logger.isInfoEnabled()) {
+                logger.info("Module export requested by '{}' for types: {}",
+                        ServletSupport.sanitizeForLog(currentUser.getName()), options.getTypes());
+            }
             zipFile = moduleManagementCommunityService.exportModulesArchive(options);
 
             String filename = "module-snapshot-" + LocalDate.now() + ".zip";
@@ -112,14 +100,17 @@ public class ModuleExportServlet extends HttpServlet {
                     response.getOutputStream().write(buffer, 0, len);
                 }
             }
-
         } catch (Exception e) {
+            // Detail is logged server-side only; clients get a generic message (no internal leak).
             logger.error("Error generating module export archive", e);
             if (!response.isCommitted()) {
                 response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                response.setContentType("application/json;charset=UTF-8");
-                String msg = e.getMessage() != null ? e.getMessage().replace("\"", "'") : "Unknown error";
-                response.getOutputStream().write(("{\"error\":\"" + msg + "\"}").getBytes(StandardCharsets.UTF_8));
+                response.setContentType(ServletSupport.CONTENT_TYPE_JSON);
+                try {
+                    response.getOutputStream().write(ERROR_EXPORT_FAILED.getBytes(StandardCharsets.UTF_8));
+                } catch (IOException ioe) {
+                    logger.error("Failed to write export error response", ioe);
+                }
             }
         } finally {
             FileUtils.deleteQuietly(zipFile);
@@ -128,14 +119,6 @@ public class ModuleExportServlet extends HttpServlet {
 
     @Override
     protected void doOptions(HttpServletRequest request, HttpServletResponse response) {
-        String origin = request.getHeader("Origin");
-        if (origin != null) {
-            response.setHeader("Access-Control-Allow-Origin", origin);
-            response.setHeader("Vary", "Origin");
-        }
-        response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-        response.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Requested-With");
-        response.setStatus(HttpServletResponse.SC_OK);
+        handleOptions(request, response, "GET, OPTIONS");
     }
 }
-

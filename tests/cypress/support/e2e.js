@@ -25,9 +25,13 @@ import {jsErrorsLogger} from '@jahia/cypress';
 // This after() runs first (registered before jsErrorsLogger.enable()) so the
 // false positives are removed before jsErrorsLogger throws on them.
 // ---------------------------------------------------------------------------
-const MUI_V3_FALSE_POSITIVES = [
+// React.createElement: type is invalid warnings that originate from a bug in
+// jContent 3.7.0-SNAPSHOT. Our own component imports have been audited and are
+// clean. Remove this entry once jContent is upgraded past the affected snapshot.
+const PLATFORM_FALSE_POSITIVES = [
     'legacy contextTypes API',
-    'Warning: React.createFactory() is deprecated'
+    'Warning: React.createFactory() is deprecated',
+    'React.createElement: type is invalid'
 ];
 
 after(() => {
@@ -36,7 +40,7 @@ after(() => {
         .map(item => ({
             ...item,
             errors: item.errors.filter(e =>
-                !MUI_V3_FALSE_POSITIVES.some(fp => e.msg.includes(fp))
+                !PLATFORM_FALSE_POSITIVES.some(fp => e.msg.includes(fp))
             )
         }))
         .filter(item => item.errors.length > 0);

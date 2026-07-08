@@ -4,8 +4,6 @@ package org.jahia.support.modulemanagement.config;
 import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 
-import java.util.List;
-
 @ObjectClassDefinition(
         name = "Module Management Community Configuration",
         description = "Configuration for the Module Management Community features")

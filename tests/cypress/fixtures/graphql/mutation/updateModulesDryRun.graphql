@@ -1,0 +1,10 @@
+mutation UpdateModulesDryRun($jahiaOnly: Boolean, $dryRun: Boolean) {
+    admin {
+        modulesManagement {
+            updateModules(jahiaOnly: $jahiaOnly, dryRun: $dryRun) {
+                modules
+                yamlScript
+            }
+        }
+    }
+}

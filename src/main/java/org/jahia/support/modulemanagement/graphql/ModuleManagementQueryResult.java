@@ -7,17 +7,15 @@ import graphql.annotations.annotationTypes.GraphQLName;
 import org.apache.karaf.features.Feature;
 import org.jahia.api.settings.SettingsBean;
 import org.jahia.modules.graphql.provider.dxm.DataFetchingException;
-import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
+import org.jahia.osgi.BundleUtils;
 import org.jahia.support.modulemanagement.ExportOptions;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
-import javax.inject.Inject;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -25,16 +23,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class ModuleManagementQueryResult {
-
-    @Inject
-    @GraphQLOsgiService(
-            service = ModuleManagementCommunityService.class
-    )
-    ModuleManagementCommunityService moduleManagementCommunityService;
-
-    @Inject
-    @GraphQLOsgiService(service = SettingsBean.class)
-    SettingsBean settingsBean;
 
     @GraphQLField
     @GraphQLName("availableUpdates")
@@ -44,20 +32,27 @@ public class ModuleManagementQueryResult {
     }
 
     private ModuleManagementCommunityService getModuleManagementCommunityService() {
-        if (moduleManagementCommunityService == null) {
-            moduleManagementCommunityService = org.jahia.osgi.BundleUtils.getOsgiService(ModuleManagementCommunityService.class, null);
-            if (moduleManagementCommunityService == null) {
-                throw new IllegalStateException("ModuleManagementCommunityService is not available. Please ensure the module is installed and active.");
-            }
+        ModuleManagementCommunityService service = BundleUtils.getOsgiService(ModuleManagementCommunityService.class, null);
+        if (service == null) {
+            throw new IllegalStateException("ModuleManagementCommunityService is not available. Please ensure the module is installed and active.");
         }
-        return moduleManagementCommunityService;
+        return service;
+    }
+
+    private SettingsBean settingsBean() {
+        SettingsBean settingsBean = BundleUtils.getOsgiService(SettingsBean.class, null);
+        if (settingsBean == null) {
+            throw new IllegalStateException("SettingsBean is not available");
+        }
+        return settingsBean;
     }
 
     @GraphQLField
     @GraphQLName("lastUpdateTime")
     @GraphQLDescription("Return the last time the module updates were checked")
     public String getLastUpdateTime() {
-        return getModuleManagementCommunityService().getLastUpdateTime().toString();
+        java.time.Instant lastUpdateTime = getModuleManagementCommunityService().getLastUpdateTime();
+        return lastUpdateTime != null ? lastUpdateTime.toString() : null;
     }
 
 
@@ -74,7 +69,7 @@ public class ModuleManagementQueryResult {
     @GraphQLField
     @GraphQLName("bundle")
     @GraphQLDescription("Return different information about a bundle")
-    public GqlBundle getBundle(@GraphQLName("name") String name, @GraphQLName("version") String version) throws IOException {
+    public GqlBundle getBundle(@GraphQLName("name") String name, @GraphQLName("version") String version) {
         Bundle bundle = null;
         if(version == null) {
             bundle = Arrays.stream(FrameworkUtil.getBundle(ModuleManagementCommunityService.class).getBundleContext().getBundles()).filter(b -> b.getSymbolicName().equals(name)).findFirst().orElse(null);
@@ -85,7 +80,7 @@ public class ModuleManagementQueryResult {
         if (bundle == null) {
             throw new DataFetchingException("Bundle with name " + name + " and version " + version + " not found");
         }
-        return settingsBean.isClusterActivated() ? new ClusteredGqlBundle(bundle) : new GqlBundle(bundle);
+        return settingsBean().isClusterActivated() ? new ClusteredGqlBundle(bundle) : new GqlBundle(bundle);
     }
 
     @GraphQLField
@@ -122,7 +117,7 @@ public class ModuleManagementQueryResult {
     @GraphQLName("clustered")
     @GraphQLDescription("Return true if the Jahia instance is clustered")
     public boolean isClustered() {
-        return settingsBean.isClusterActivated();
+        return settingsBean().isClusterActivated();
     }
 
     @GraphQLField
@@ -219,7 +214,7 @@ public class ModuleManagementQueryResult {
         @GraphQLDescription("The bundles included in this feature")
         public List<String> getBundles() {
             return feature.getBundles().stream()
-                    .map(bundleInfo -> bundleInfo.getLocation())
+                    .map(org.apache.karaf.features.BundleInfo::getLocation)
                     .collect(Collectors.toList());
         }
 

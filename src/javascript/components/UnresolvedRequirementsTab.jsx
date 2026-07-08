@@ -105,9 +105,9 @@ const UnresolvedRequirementsTab = ({bundle}) => {
 
     return (
         <div className={styles.unresolvedReqsTab}>
-            {/* A11y B-020: warning banners as alert regions */}
+            {/* A11y HIGH-11: banners present at mount — use polite status, not assertive alert */}
             {missing.length > 0 && (
-                <div role="alert" className={styles.unresolvedAlertDanger}>
+                <div role="status" aria-live="polite" className={styles.unresolvedAlertDanger}>
                     <Warning aria-hidden="true"/>
                     <Typography variant="body">
                         {t('label.bundle.unresolvedReqs.alertMissing', {count: missing.length})}
@@ -115,7 +115,7 @@ const UnresolvedRequirementsTab = ({bundle}) => {
                 </div>
             )}
             {conflicting.length > 0 && (
-                <div role="alert" className={styles.unresolvedAlertWarning}>
+                <div role="status" aria-live="polite" className={styles.unresolvedAlertWarning}>
                     <Warning aria-hidden="true"/>
                     <Typography variant="body">
                         {t('label.bundle.unresolvedReqs.alertConflict', {count: conflicting.length})}
@@ -196,7 +196,8 @@ const UnresolvedRequirementsTab = ({bundle}) => {
             ) : (
                 /* A11y B-009: table with aria-label and scope="col" headers */
                 <table className={styles.unresolvedTable}
-                       aria-label={t('label.bundle.unresolvedReqs.tableLabel', 'Unresolved requirements')}>
+                       aria-label={t('label.bundle.unresolvedReqs.tableLabel', 'Unresolved requirements')}
+                >
                     <thead>
                         <tr>
                             <th scope="col" className={styles.unresolvedThNs}>{t('label.bundle.unresolvedReqs.col.namespace')}</th>

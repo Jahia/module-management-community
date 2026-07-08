@@ -74,6 +74,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -89,6 +90,34 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     public static final String CLUSTER_SYNCHRONIZED_YAML_SKIPPED = "module-management-community.clusterSynchronized.yaml.skipped"; // We need to use skipped suffix to avoid execution on startup before cluster is ready
     public static final String CLUSTER_SYNCHRONIZED_YAML = "module-management-community.clusterSynchronized.yaml";
 
+    // ── Internal string constants (de-duplicated literals) ───────────────────────
+    private static final String VERSION = "version";
+    private static final String JAHIA_GROUP_ID = "Jahia-GroupId";
+    private static final String JCR_CONTENT = "jcr:content";
+    private static final String JCR_DATA = "jcr:data";
+    private static final String NT_MODULE_MANAGEMENT_BUNDLE = "jnt:moduleManagementBundle";
+    private static final String BUNDLE_PREFIX = "Bundle ";
+    private static final String JCR_BUNDLES_BASE_PATH = "/module-management/bundles";
+    private static final String JCR_PATH_SEPARATOR = "/";
+    // Minimum number of "/"-split parts for a valid managed bundle path
+    // /module-management/bundles/{group}/{symbolicName}/{version}/{file} → leading "" + 6 segments.
+    private static final int MIN_JCR_BUNDLE_PATH_PARTS = 7;
+    private static final String YAML_FORMAT = "yaml";
+    private static final String MVN_PREFIX = "mvn:";
+    private static final String YAML_EXTENSION = ".yaml";
+    // YAML provisioning script fragments
+    private static final String YAML_INSTALL_OR_UPGRADE = "- installOrUpgradeBundle:\n";
+    private static final String YAML_URL_PREFIX = "  - url: '";
+    private static final String YAML_START_LEVEL = "    startLevel: ";
+    private static final String YAML_AUTOSTART_TRUE = "  autoStart: true\n";
+    // siteKey must be a simple identifier to be safe in YAML / karaf commands
+    private static final Pattern SITE_KEY_PATTERN = Pattern.compile("^[a-zA-Z0-9_-]+$");
+    // Cap the store-index download to defend against an oversized / malicious response body
+    private static final int MAX_STORE_INDEX_BYTES = 32 * 1024 * 1024; // 32 MB
+    // Zip-bomb defences for archive import
+    private static final long MAX_TOTAL_UNCOMPRESSED_BYTES = 1024L * 1024 * 1024; // 1 GB
+    private static final int MAX_ZIP_ENTRIES = 10_000;
+
     /**
      * URL of the Jahia store module catalogue — configurable, refreshed periodically by the background job.
      */
@@ -99,10 +128,12 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     // ── Store index (replaces Maven for Jahia module update checks) ──────────────
     /**
-     * Immutable snapshot; replaced atomically on every refresh.
+     * Immutable snapshot; replaced atomically on every refresh. Held in an {@link AtomicReference}
+     * so concurrent request threads always observe a fully-built, consistent map (volatile alone
+     * is insufficient for object references that must be published atomically — Sonar S3077).
      */
-    private volatile Map<String, StoreModuleEntry> storeModuleIndex = Collections.emptyMap();
-    private volatile Instant storeIndexLastFetched = null;
+    private final AtomicReference<Map<String, StoreModuleEntry>> storeModuleIndex =
+            new AtomicReference<>(Collections.emptyMap());
     /**
      * Effective URL read from OSGi config at activation time.
      */
@@ -170,8 +201,28 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Reference
     ConfigurationAdmin configurationAdmin;
 
-    private Instant lastUpdateTime = null;
-    private Map<String, String> modulesWithUpdates;
+    /**
+     * Immutable, atomically-published snapshot pairing the detected-updates map with the instant it
+     * was computed. Bundling both into one object stored in a single {@link AtomicReference} means a
+     * reader can never observe a fresh map alongside a stale timestamp (or vice-versa): a publish is
+     * a single reference swap. The {@code updates} map is always a fully-built unmodifiable map; a
+     * {@code null} {@code updates} value marks the cache as not populated. Per Sonar S3077 the
+     * reference is held in an {@link AtomicReference} rather than a plain volatile field.
+     */
+    private static final class UpdatesSnapshot {
+        final Map<String, String> updates;
+        final Instant checkedAt;
+
+        UpdatesSnapshot(Map<String, String> updates, Instant checkedAt) {
+            this.updates = updates;
+            this.checkedAt = checkedAt;
+        }
+    }
+
+    /** The empty/not-populated snapshot: no updates map, no check timestamp. */
+    private static final UpdatesSnapshot EMPTY_SNAPSHOT = new UpdatesSnapshot(null, null);
+
+    private final AtomicReference<UpdatesSnapshot> updatesSnapshot = new AtomicReference<>(EMPTY_SNAPSHOT);
     private BundleContext bundleContext;
     private Set<Pattern> excludeModules;
     private int maxModulesToUpdate;
@@ -289,15 +340,16 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
         // Sort updates to have a deterministic order
         updates = updates.stream().sorted().collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<String, String> currentUpdates = updatesSnapshot.get().updates;
         StringBuilder sb = new StringBuilder();
-        sb.append("- installOrUpgradeBundle:\n");
+        sb.append(YAML_INSTALL_OR_UPGRADE);
         for (String bundleKey : updates) {
-            sb.append("  - url: '").append(modulesWithUpdates.get(bundleKey)).append("'\n");
+            sb.append(YAML_URL_PREFIX).append(currentUpdates.get(bundleKey)).append("'\n");
             Bundle bundle = BundleUtils.getBundle(StringUtils.substringBeforeLast(bundleKey, "/"), StringUtils.substringAfterLast(bundleKey, "/").split(":")[0].trim());
             BundleStartLevel bundleStartLevel = bundle.adapt(BundleStartLevel.class);
             int moduleStartLevel = SettingsBean.getInstance().getModuleStartLevel();
             if (bundleStartLevel.getStartLevel() != moduleStartLevel) {
-                sb.append("    startLevel: ").append(bundleStartLevel.getStartLevel()).append("\n");
+                sb.append(YAML_START_LEVEL).append(bundleStartLevel.getStartLevel()).append("\n");
             }
         }
         sb.append("  autoStart: ").append(autostart).append("\n");
@@ -311,11 +363,11 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 // Save script in SettingsBean.var path /patches on disk for running upon startup
                 FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", getProvisioningFilenameWithDateAndExtension(CLUSTER_SYNCHRONIZED_YAML_SKIPPED, ".clusterSynchronized")).toFile(), yamlScript, StandardCharsets.UTF_8, false);
             } else {
-                FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", getProvisioningFilenameWithDateAndExtension("module-management-community.yaml", ".yaml")).toFile(), yamlScript, StandardCharsets.UTF_8, false);
-                modulesWithUpdates = null; // Clear the cache after execution
+                FileUtils.write(Path.of(settingsBean.getJahiaVarDiskPath(), "patches", "provisioning", getProvisioningFilenameWithDateAndExtension("module-management-community" + YAML_EXTENSION, YAML_EXTENSION)).toFile(), yamlScript, StandardCharsets.UTF_8, false);
+                updatesSnapshot.set(EMPTY_SNAPSHOT); // Clear the cache after execution
             }
         } else {
-            FileUtils.write(File.createTempFile("module-management-community-temp", ".yaml", new File(settingsBean.getTmpContentDiskPath())), yamlScript, "UTF-8", true);
+            FileUtils.write(File.createTempFile("module-management-community-temp", YAML_EXTENSION, new File(settingsBean.getTmpContentDiskPath())), yamlScript, "UTF-8", true);
             logger.info("Dry run mode enabled, not executing provisioning script:\n{}", yamlScript);
         }
 
@@ -326,6 +378,24 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     public static String getProvisioningFilenameWithDateAndExtension(String baseName, String extension) {
         String dateStr = java.time.LocalDate.now().toString();
         return baseName.replace(extension, "-" + dateStr + extension);
+    }
+
+    /**
+     * Strips CR, LF and other ISO control characters from a user-controlled value before it is
+     * written to the log, defeating log-forging / log-injection (Sonar javasecurity:S5145).
+     */
+    private static String sanitizeForLog(String value) {
+        if (value == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (!Character.isISOControl(c)) {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -346,10 +416,14 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Override
     public Set<String> listAvailableUpdates(boolean jahiaOnly, List<String> filters, boolean forceUpdate) throws IOException {
         List<Pattern> patterns = getPatternList(filters);
-        if (!forceUpdate && (lastUpdateTime != null && Instant.now().minus(Duration.ofHours(2)).isBefore(lastUpdateTime) && modulesWithUpdates != null)) {
-            logger.info("Module updates is cached until {}", lastUpdateTime.plus(Duration.ofHours(2)));
-            Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
-            return filteredUpdates != null ? filteredUpdates : new HashSet<>(modulesWithUpdates.keySet());
+        // Read the cache as one consistent snapshot — map and timestamp can never disagree.
+        UpdatesSnapshot snapshot = updatesSnapshot.get();
+        Map<String, String> cached = snapshot.updates;
+        Instant checkedAt = snapshot.checkedAt;
+        if (!forceUpdate && (checkedAt != null && Instant.now().minus(Duration.ofHours(2)).isBefore(checkedAt) && cached != null)) {
+            logger.info("Module updates is cached until {}", checkedAt.plus(Duration.ofHours(2)));
+            Set<String> filteredUpdates = getFilteredUpdates(cached, filters, patterns);
+            return filteredUpdates != null ? filteredUpdates : new HashSet<>(cached.keySet());
         }
 
         SettingsBean settingsBean = SettingsBean.getInstance();
@@ -362,20 +436,23 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             return Collections.emptySet();
         }
 
-        modulesWithUpdates = new HashMap<>();
+        // Build into a local map and publish atomically once fully populated (thread-safe).
+        Map<String, String> updates = new HashMap<>();
 
         // ── Fast path: JSON store index for Jahia modules ────────────────────────
-        checkJahiaModulesAgainstStoreIndex();
+        checkJahiaModulesAgainstStoreIndex(updates);
 
         // ── Slow path: Maven for plain OSGi bundles (only when caller asks) ───────
         if (!jahiaOnly) {
-            checkMaven();
+            checkMaven(updates);
         }
 
-        lastUpdateTime = Instant.now();
+        Map<String, String> published = Collections.unmodifiableMap(updates);
+        // Publish map + timestamp together so readers never see a fresh map with a stale time.
+        updatesSnapshot.set(new UpdatesSnapshot(published, Instant.now()));
 
-        Set<String> filteredUpdates = getFilteredUpdates(filters, patterns);
-        Set<String> availableUpdates = filteredUpdates != null ? filteredUpdates : new HashSet<>(modulesWithUpdates.keySet());
+        Set<String> filteredUpdates = getFilteredUpdates(published, filters, patterns);
+        Set<String> availableUpdates = filteredUpdates != null ? filteredUpdates : new HashSet<>(published.keySet());
 
         // If jahiaOnly is true, remove any non-Jahia entries that may have slipped through
         if (jahiaOnly) {
@@ -393,7 +470,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return availableUpdates;
     }
 
-    private void checkMaven() {
+    private void checkMaven(Map<String, String> updates) {
         MavenResolver resolver = BundleUtils.getOsgiService(MavenResolver.class, null);
         if (resolver != null) {
             ModuleManager moduleManager = BundleUtils.getOsgiService(ModuleManager.class, null);
@@ -406,7 +483,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                                 StringUtils.substringAfterLast(bKey, "/"));
                         // Only check non-Jahia bundles here; Jahia modules are handled above
                         if (bundle != null && !BundleUtils.isJahiaModuleBundle(bundle)) {
-                            checkBundleUpdates(key, bundleInfo, resolver);
+                            checkBundleUpdates(key, bundleInfo, resolver, updates);
                         }
                     }
                 });
@@ -420,10 +497,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     /**
      * Scan all ACTIVE Jahia module bundles and compare their version against the store index.
-     * Populates {@link #modulesWithUpdates} for entries where a newer non-SNAPSHOT version exists.
+     * Populates the {@code updates} map for entries where a newer non-SNAPSHOT version exists.
      */
-    private void checkJahiaModulesAgainstStoreIndex() {
-        if (storeModuleIndex.isEmpty()) {
+    private void checkJahiaModulesAgainstStoreIndex(Map<String, String> updates) {
+        if (storeModuleIndex.get().isEmpty()) {
             logger.warn("Store module index is empty — Jahia module update detection skipped. " +
                     "Call refreshStoreIndex() to populate the index.");
             return;
@@ -439,57 +516,66 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 logger.debug("Skipping excluded module: {}", symbolicName);
                 continue;
             }
-            if (lookupBundle(bundle, symbolicName, vs)) {
+            if (lookupBundle(bundle, symbolicName, vs, updates)) {
                 found++;
             }
         }
         logger.info("Store index check complete: {} update(s) found across Jahia modules", found);
     }
 
-    private boolean lookupBundle(Bundle bundle, String symbolicName, VersionScheme vs) {
-        boolean found = false;
-        StoreModuleEntry entry = storeModuleIndex.get(symbolicName);
+    private boolean lookupBundle(Bundle bundle, String symbolicName, VersionScheme vs, Map<String, String> updates) {
+        StoreModuleEntry entry = storeModuleIndex.get().get(symbolicName);
         if (entry == null) {
             logger.debug("Module {} not found in store index", symbolicName);
-            return found;
+            return false;
         }
         try {
             Version installed = vs.parseVersion(bundle.getVersion().toString());
-            Version latestStore = null;
-            String latestVersionStr = null;
-            for (String vStr : entry.versions) {
-                if (vStr.contains(SNAPSHOT)) {
-                    continue;
-                }
-                if (!isCompatibleWithJahia(entry.requiredVersions.get(vStr))) {
-                    logger.debug("Skipping {} {} — requires newer Jahia (required: {})",
-                            symbolicName, vStr, entry.requiredVersions.get(vStr));
-                    continue;
-                }
-                try {
-                    Version v = vs.parseVersion(vStr);
-                    if (latestStore == null || v.compareTo(latestStore) > 0) {
-                        latestStore = v;
-                        latestVersionStr = vStr;
-                    }
-                } catch (InvalidVersionSpecificationException ignore) {
-                    logger.debug("Unparseable store version {} for {}", vStr, symbolicName);
-                }
+            String latestVersionStr = findLatestCompatibleStoreVersion(entry, symbolicName, vs);
+            if (latestVersionStr == null) {
+                return false;
             }
-            if (latestStore != null && latestStore.compareTo(installed) > 0) {
-                String key = symbolicName + "/" + bundle.getVersion() + " : " + latestVersionStr;
-                // Prefer the direct download URL; fall back to an mvn: coordinate
-                String url = entry.downloadUrls.getOrDefault(
-                        latestVersionStr,
-                        "mvn:" + entry.groupId + "/" + symbolicName + "/" + latestVersionStr);
-                modulesWithUpdates.put(key, url);
-                found = true;
-                logger.debug("Store update found: {} {} → {}", symbolicName, bundle.getVersion(), latestVersionStr);
+            Version latestStore = vs.parseVersion(latestVersionStr);
+            if (latestStore.compareTo(installed) <= 0) {
+                return false;
             }
+            String key = symbolicName + "/" + bundle.getVersion() + " : " + latestVersionStr;
+            // Prefer the direct download URL; fall back to an mvn: coordinate
+            String url = entry.downloadUrls.getOrDefault(
+                    latestVersionStr,
+                    MVN_PREFIX + entry.groupId + "/" + symbolicName + "/" + latestVersionStr);
+            updates.put(key, url);
+            logger.debug("Store update found: {} {} → {}", symbolicName, bundle.getVersion(), latestVersionStr);
+            return true;
         } catch (InvalidVersionSpecificationException e) {
             logger.debug("Cannot parse installed version for {}: {}", symbolicName, e.getMessage());
+            return false;
         }
-        return found;
+    }
+
+    /**
+     * Returns the highest non-SNAPSHOT, Jahia-compatible version string from {@code entry}, or
+     * {@code null} when none qualifies. Extracted from {@link #lookupBundle} to keep that method's
+     * cognitive complexity within bounds (Sonar S3776).
+     */
+    private String findLatestCompatibleStoreVersion(StoreModuleEntry entry, String symbolicName, VersionScheme vs) {
+        Version latestStore = null;
+        String latestVersionStr = null;
+        for (String vStr : entry.versions) {
+            if (vStr.contains(SNAPSHOT) || !isCompatibleWithJahia(entry.requiredVersions.get(vStr))) {
+                continue;
+            }
+            try {
+                Version v = vs.parseVersion(vStr);
+                if (latestStore == null || v.compareTo(latestStore) > 0) {
+                    latestStore = v;
+                    latestVersionStr = vStr;
+                }
+            } catch (InvalidVersionSpecificationException ignore) {
+                logger.debug("Unparseable store version {} for {}", vStr, symbolicName);
+            }
+        }
+        return latestVersionStr;
     }
 
     @Override
@@ -502,19 +588,37 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             conn.setRequestProperty("Accept", "application/json");
             String json;
             try (InputStream in = new BufferedInputStream(conn.getInputStream())) {
-                json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                json = new String(readBounded(in, MAX_STORE_INDEX_BYTES), StandardCharsets.UTF_8);
             }
             Map<String, StoreModuleEntry> newIndex = buildStoreIndex(json);
-            storeModuleIndex = Collections.unmodifiableMap(newIndex);
-            storeIndexLastFetched = Instant.now();
-            modulesWithUpdates = null; // invalidate update cache
-            lastUpdateTime = null;
-            logger.info("Store module index refreshed from URL: {} modules indexed", storeModuleIndex.size());
+            storeModuleIndex.set(Collections.unmodifiableMap(newIndex));
+            updatesSnapshot.set(EMPTY_SNAPSHOT); // invalidate update cache
+            logger.info("Store module index refreshed from URL: {} modules indexed", newIndex.size());
         } catch (Exception e) {
             logger.warn("Failed to fetch store module index from URL ({}): {} — trying bundled fallback",
                     storeModuleListUrl, e.getMessage());
             loadBundledStoreIndex();
         }
+    }
+
+    /**
+     * Read at most {@code maxBytes} from {@code in}, aborting with an {@link IOException} if the
+     * stream exceeds the cap. Protects against an oversized / malicious response body
+     * (unbounded {@code readAllBytes} could exhaust the heap).
+     */
+    private static byte[] readBounded(InputStream in, int maxBytes) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int total = 0;
+        int read;
+        while ((read = in.read(chunk)) != -1) {
+            total += read;
+            if (total > maxBytes) {
+                throw new IOException("Store index response exceeds the maximum allowed size of " + maxBytes + " bytes");
+            }
+            buffer.write(chunk, 0, read);
+        }
+        return buffer.toByteArray();
     }
 
     /**
@@ -527,14 +631,12 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             return;
         }
         try (InputStream in = resource.openStream()) {
-            String json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            String json = new String(readBounded(in, MAX_STORE_INDEX_BYTES), StandardCharsets.UTF_8);
             Map<String, StoreModuleEntry> newIndex = buildStoreIndex(json);
-            storeModuleIndex = Collections.unmodifiableMap(newIndex);
-            storeIndexLastFetched = Instant.now();
-            modulesWithUpdates = null;
-            lastUpdateTime = null;
+            storeModuleIndex.set(Collections.unmodifiableMap(newIndex));
+            updatesSnapshot.set(EMPTY_SNAPSHOT);
             logger.info("Store module index loaded from bundled classpath resource: {} modules indexed",
-                    storeModuleIndex.size());
+                    newIndex.size());
         } catch (Exception e) {
             logger.error("Failed to load bundled store module list", e);
         }
@@ -593,7 +695,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     private static void parseVersionsNode(JsonNode versionsNode, List<String> versions, Map<String, String> downloadUrls, Map<String, String> requiredVersions) {
         for (JsonNode vEntry : versionsNode) {
-            String version = vEntry.path("version").asText(null);
+            String version = vEntry.path(VERSION).asText(null);
             if (version == null || version.isEmpty()) {
                 continue;
             }
@@ -610,7 +712,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
     }
 
-    private void checkBundleUpdates(String bundleKey, BundleService.BundleInformation bundleInfo, MavenResolver resolver) {
+    private void checkBundleUpdates(String bundleKey, BundleService.BundleInformation bundleInfo, MavenResolver resolver, Map<String, String> updates) {
         if (bundleInfo.getOsgiState() == BundleState.ACTIVE) {
             String key = getBundleKey(bundleKey);
             if (excludeModules.stream().anyMatch(pattern -> pattern.matcher(key).matches())) {
@@ -629,22 +731,22 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 } catch (InvalidVersionSpecificationException e) {
                     throw new JahiaRuntimeException(e);
                 }
-                resolveAvailableVersions(resolver, location, bundle, bundleVersion, key);
+                resolveAvailableVersions(resolver, location, bundle, bundleVersion, key, updates);
             }
         }
     }
 
-    private void resolveAvailableVersions(MavenResolver resolver, String location, Bundle bundle, Version bundleVersion, String key) {
+    private void resolveAvailableVersions(MavenResolver resolver, String location, Bundle bundle, Version bundleVersion, String key, Map<String, String> updates) {
         Artifact artifact = null;
         List<Version> versions = null;
-        if (location.startsWith("mvn:")) {
-            String[] parts = StringUtils.substringAfter(location, "mvn:").split("/");
+        if (location.startsWith(MVN_PREFIX)) {
+            String[] parts = StringUtils.substringAfter(location, MVN_PREFIX).split("/");
             logger.debug("Checking for updates for {} : {} : {}", parts[0], parts[1], parts[2]);
             artifact = new DefaultArtifact(parts[0], parts[1], "jar", getVersion(bundle.getVersion()));
         } else {
             Dictionary<String, String> headers = bundle.getHeaders();
-            if (headers.get("Jahia-GroupId") != null) {
-                String groupId = headers.get("Jahia-GroupId");
+            if (headers.get(JAHIA_GROUP_ID) != null) {
+                String groupId = headers.get(JAHIA_GROUP_ID);
                 artifact = new DefaultArtifact(groupId, bundle.getSymbolicName(), "jar", getVersion(bundle.getVersion()));
             }
         }
@@ -653,16 +755,16 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             if (!versions.isEmpty()) {
                 Version latestVersion = versions.get(versions.size() - 1);
                 if (!(latestVersion.toString().contains(SNAPSHOT)) && latestVersion.compareTo(bundleVersion) > 0) {
-                    modulesWithUpdates.put(key + " : " + latestVersion, "mvn:" + artifact.getGroupId() + "/" + artifact.getArtifactId() + "/" + latestVersion);
+                    updates.put(key + " : " + latestVersion, MVN_PREFIX + artifact.getGroupId() + "/" + artifact.getArtifactId() + "/" + latestVersion);
                 }
             }
         }
     }
 
-    private Set<String> getFilteredUpdates(List<String> filters, List<Pattern> patterns) {
+    private Set<String> getFilteredUpdates(Map<String, String> source, List<String> filters, List<Pattern> patterns) {
         if (CollectionUtils.isNotEmpty(filters)) {
             Set<String> filteredUpdates = new HashSet<>();
-            modulesWithUpdates.keySet().stream().filter(key -> {
+            source.keySet().stream().filter(key -> {
                 String finalKey = StringUtils.substringBefore(key, " : ");
                 return patterns.stream().anyMatch(pattern -> pattern.matcher(finalKey).matches());
             }).forEach(filteredUpdates::add);
@@ -691,8 +793,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 String featureURI = feature.getRepositoryUrl();
                 // A feature repositoryURL could contain multiple features
                 //First remove the protocol from the URI
-                if (featureURI != null && featureURI.startsWith("mvn:")) {
-                    featureURI = StringUtils.substringAfter(featureURI, "mvn:");
+                if (featureURI != null && featureURI.startsWith(MVN_PREFIX)) {
+                    featureURI = StringUtils.substringAfter(featureURI, MVN_PREFIX);
                 }
                 //Now we split by "/" to get the groupId, artifactId and version, type and classifier
                 String[] parts = featureURI.split("/");
@@ -772,7 +874,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public Instant getLastUpdateTime() {
-        return lastUpdateTime;
+        return updatesSnapshot.get().checkedAt;
     }
 
     @Override
@@ -804,27 +906,43 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         });
     }
 
+    /**
+     * Validates every site key against {@link #SITE_KEY_PATTERN} so it is safe to interpolate into a
+     * YAML provisioning script / karaf command (defends against YAML and command injection — M4).
+     *
+     * @throws DataFetchingException if any key contains characters outside {@code [a-zA-Z0-9_-]}
+     */
+    private static void validateSiteKeys(Set<String> sites) {
+        for (String site : sites) {
+            if (site == null || !SITE_KEY_PATTERN.matcher(site).matches()) {
+                throw new DataFetchingException("Invalid site key: only letters, digits, '_' and '-' are allowed");
+            }
+        }
+    }
+
     public boolean enableModuleOnSites(Bundle bundle, Set<String> sites) {
         if (bundle == null || sites == null || sites.isEmpty()) {
             logger.warn("Bundle or sites are null or empty, cannot enable module on sites");
             return false;
         }
+        validateSiteKeys(sites);
         // Generate a provisioning script to enable the module on the specified sites
         //# Enable jExperience on digitall,luxe
         //- enable: "jexperience"
         //  site: ["digitall", "luxe"]
         //- karafCommand: "log:log 'jExperience enabled on digitall and luxe'"
+        String joinedSites = String.join(", ", sites);
         String yamlScript = "- enable: \"" + bundle.getSymbolicName() + "\"\n" +
                 "  site: [" +
                 sites.stream().map(site -> "\"" + site + "\"").collect(Collectors.joining(", ")) +
                 "]\n" +
-                "- karafCommand: \"log:log '" + bundle.getSymbolicName() + " enabled on " + String.join(", ", sites) + "'\"\n";
+                "- karafCommand: \"log:log '" + bundle.getSymbolicName() + " enabled on " + joinedSites + "'\"\n";
         try {
-            provisioningManager.executeScript(yamlScript, "yaml");
-            logger.info("Module {} enabled on sites {}", bundle.getSymbolicName(), String.join(", ", sites));
+            provisioningManager.executeScript(yamlScript, YAML_FORMAT);
+            logger.info("Module {} enabled on sites {}", bundle.getSymbolicName(), joinedSites);
             return true;
         } catch (Exception e) {
-            logger.error("Error enabling module {} on sites {}", bundle.getSymbolicName(), String.join(", ", sites), e);
+            logger.error("Error enabling module {} on sites {}", bundle.getSymbolicName(), joinedSites, e);
             return false;
         }
     }
@@ -834,36 +952,39 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             logger.warn("Bundle or sites are null or empty, cannot disable module on sites");
             return false;
         }
-        // Call jahia site service to uninstall the module from the specified sites
+        validateSiteKeys(sites);
+        String joinedSites = String.join(", ", sites);
+        // Call jahia site service to uninstall the module from the specified sites.
+        // Track success explicitly so an inner RepositoryException is NOT reported as success.
+        final boolean[] success = {false};
         try {
             jcrTemplate.doExecuteWithSystemSessionAsUser(jahiaUserManagerService.lookupRootUser().getJahiaUser(), Constants.EDIT_WORKSPACE, Locale.getDefault(), session -> {
-                try {
-                    for (String siteKey : sites) {
-                        JahiaSite site = jahiaSitesService.getSiteByKey(siteKey, session);
-                        if (site != null) {
-                            JahiaTemplatesPackage templatePackage = jahiaTemplateManagerService.getTemplatePackageById(bundle.getSymbolicName());
-                            if (templatePackage != null) {
-                                jahiaTemplateManagerService.uninstallModule(templatePackage, site.getJCRLocalPath(), session);
-                                logger.info("Module {} disabled on site {}", bundle.getSymbolicName(), siteKey);
-                            } else {
-                                logger.warn("Module {} not found for site {}", bundle.getSymbolicName(), siteKey);
-                            }
+                for (String siteKey : sites) {
+                    JahiaSite site = jahiaSitesService.getSiteByKey(siteKey, session);
+                    if (site != null) {
+                        JahiaTemplatesPackage templatePackage = jahiaTemplateManagerService.getTemplatePackageById(bundle.getSymbolicName());
+                        if (templatePackage != null) {
+                            jahiaTemplateManagerService.uninstallModule(templatePackage, site.getJCRLocalPath(), session);
+                            logger.info("Module {} disabled on site {}", bundle.getSymbolicName(), siteKey);
                         } else {
-                            logger.warn("Site {} not found", siteKey);
+                            logger.warn("Module {} not found for site {}", bundle.getSymbolicName(), siteKey);
                         }
+                    } else {
+                        logger.warn("Site {} not found", siteKey);
                     }
-                    session.save();
-                } catch (RepositoryException e) {
-                    logger.error("Error disabling module {} on sites {}", bundle.getSymbolicName(), String.join(", ", sites), e);
                 }
+                session.save();
+                success[0] = true;
                 return null;
             });
         } catch (RepositoryException e) {
-            logger.error("Error disabling module {} on sites {}", bundle.getSymbolicName(), String.join(", ", sites), e);
+            logger.error("Error disabling module {} on sites {}", bundle.getSymbolicName(), joinedSites, e);
             return false;
         }
-        logger.info("Module {} disabled on sites {}", bundle.getSymbolicName(), String.join(", ", sites));
-        return true;
+        if (success[0]) {
+            logger.info("Module {} disabled on sites {}", bundle.getSymbolicName(), joinedSites);
+        }
+        return success[0];
     }
 
     @Override
@@ -895,7 +1016,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 logger.info("--- Done deploying content for DX OSGi bundle {} v{} --", templatePackage.getId(), templatePackage.getVersion());
                 return true;
             } catch (RepositoryException e) {
-                logger.error("Error while initializing module content for module " + templatePackage, e);
+                logger.error("Error while initializing module content for module {}", templatePackage, e);
             }
         }
         return false;
@@ -903,13 +1024,14 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public List<Map<String, Object>> getBundleVersionsFromJcr(Bundle bundle) throws RepositoryException {
-        String groupId = bundle.getHeaders().get("Jahia-GroupId");
+        String groupId = bundle.getHeaders().get(JAHIA_GROUP_ID);
         if (groupId == null) {
             logger.debug("No Jahia-GroupId header for bundle {}, skipping JCR version lookup", bundle.getSymbolicName());
             return Collections.emptyList();
         }
         String groupPath = groupId.replace('.', '/');
-        String jcrBundlePath = "/module-management/bundles/" + groupPath + "/" + bundle.getSymbolicName();
+        String jcrBundlePath = JCR_BUNDLES_BASE_PATH + JCR_PATH_SEPARATOR + groupPath
+                + JCR_PATH_SEPARATOR + bundle.getSymbolicName();
 
         return jcrTemplate.doExecuteWithSystemSessionAsUser(
                 jahiaUserManagerService.lookupRootUser().getJahiaUser(),
@@ -928,8 +1050,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                         }
                     }
                     versions.sort((a, b) -> {
-                        String vA = (String) a.get("version");
-                        String vB = (String) b.get("version");
+                        String vA = (String) a.get(VERSION);
+                        String vB = (String) b.get(VERSION);
                         try {
                             VersionScheme vs = new GenericVersionScheme();
                             return vs.parseVersion(vB).compareTo(vs.parseVersion(vA));
@@ -945,7 +1067,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                             .collect(Collectors.toSet());
 
                     // Remove versions that are already present in OSGi
-                    versions.removeIf(v -> installedVersions.contains(v.get("version")));
+                    versions.removeIf(v -> installedVersions.contains(v.get(VERSION)));
 
                     return versions;
                 });
@@ -955,9 +1077,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         javax.jcr.NodeIterator jarNodes = versionFolder.getNodes();
         while (jarNodes.hasNext()) {
             Node jarNode = jarNodes.nextNode();
-            if (jarNode.isNodeType("jnt:moduleManagementBundle")) {
+            if (jarNode.isNodeType(NT_MODULE_MANAGEMENT_BUNDLE)) {
                 Map<String, Object> info = new HashMap<>();
-                info.put("version", versionFolder.getName());
+                info.put(VERSION, versionFolder.getName());
                 info.put("jcrPath", jarNode.getPath());
                 info.put("fileName", jarNode.getName());
                 getJARBinaryInfo(bundle, versionFolder, jarNode, info);
@@ -968,10 +1090,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     private void getJARBinaryInfo(Bundle bundle, Node versionFolder, Node jarNode, Map<String, Object> info) throws RepositoryException {
         try {
-            if (jarNode.hasNode("jcr:content")) {
-                Node content = jarNode.getNode("jcr:content");
-                if (content.hasProperty("jcr:data")) {
-                    javax.jcr.Binary bin = content.getProperty("jcr:data").getBinary();
+            if (jarNode.hasNode(JCR_CONTENT)) {
+                Node content = jarNode.getNode(JCR_CONTENT);
+                if (content.hasProperty(JCR_DATA)) {
+                    javax.jcr.Binary bin = content.getProperty(JCR_DATA).getBinary();
                     info.put("size", bin.getSize());
                     bin.dispose();
                 }
@@ -986,11 +1108,20 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public String installBundleVersionFromJcr(String jcrPath) throws IOException {
+        // SECURITY: the jcrPath is client-supplied. Only allow paths under the managed bundle
+        // store so an attacker cannot install an arbitrary JCR binary as an OSGi bundle.
+        if (jcrPath == null || !jcrPath.startsWith(JCR_BUNDLES_BASE_PATH + "/")) {
+            throw new IOException("Invalid JCR bundle path: must be located under " + JCR_BUNDLES_BASE_PATH);
+        }
         // Derive symbolicName and targetVersion from the JCR path structure:
         // /module-management/bundles/{group/path}/{symbolicName}/{version}/{file.jar}
+        // The shortest valid path (single-segment group) splits into 7 elements:
+        // ["", "module-management", "bundles", "{group}", "{symbolicName}", "{version}", "{file.jar}"].
+        // symbolicName is read at parts[length-3] and version at parts[length-2], so anything
+        // shorter cannot yield valid coordinates and must be rejected.
         String[] parts = jcrPath.split("/");
-        if (parts.length < 3) {
-            throw new IOException("Cannot derive bundle coordinates from JCR path: " + jcrPath);
+        if (parts.length < MIN_JCR_BUNDLE_PATH_PARTS) {
+            throw new IOException("Cannot derive bundle coordinates from JCR path: " + sanitizeForLog(jcrPath));
         }
         final String symbolicName = parts[parts.length - 3];
         final String targetVersion = parts[parts.length - 2];
@@ -1000,9 +1131,11 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         List<Bundle> existingVersions = Arrays.stream(bundleContext.getBundles())
                 .filter(b -> symbolicName.equals(b.getSymbolicName()))
                 .collect(Collectors.toList());
-        logger.info("Found {} existing OSGi bundle(s) for {} before restore: {}",
-                existingVersions.size(), symbolicName,
-                existingVersions.stream().map(b -> b.getVersion().toString()).collect(Collectors.joining(", ")));
+        if (logger.isInfoEnabled()) {
+            logger.info("Found {} existing OSGi bundle(s) for {} before restore: {}",
+                    existingVersions.size(), symbolicName,
+                    existingVersions.stream().map(b -> b.getVersion().toString()).collect(Collectors.joining(", ")));
+        }
         SettingsBean settingsBean = SettingsBean.getInstance();
         // Create the temp file first, outside the JCR session, so it survives past the session close
         File tempFile = File.createTempFile("bundle-rollback-", ".jar", new File(settingsBean.getTmpContentDiskPath()));
@@ -1011,15 +1144,20 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         copyJARToTmpFile(jcrPath, fileNameHolder, tempFile);
 
         String fileName = fileNameHolder[0];
+        // SECURITY: verify the binary pulled from JCR really is an OSGi bundle before installing it.
+        validateOsgiBundle(tempFile, fileName);
+        String safeFileName = sanitizeForLog(fileName);
         try {
             String yamlScript = "- installBundle:\n" +
-                    "  - url: '" + tempFile.toURI() + "'\n" +
-                    "  autoStart: true\n" +
+                    YAML_URL_PREFIX + tempFile.toURI() + "'\n" +
+                    YAML_AUTOSTART_TRUE +
                     "  uninstallPreviousVersion: true\n" +
                     "  ignoreChecks: true\n" +
-                    "- karafCommand: \"log:log 'Bundle " + fileName + " installed from JCR rollback'\"\n";
-            provisioningManager.executeScript(yamlScript, "yaml");
-            logger.info("Bundle {} installed from JCR path: {}", fileName, jcrPath);
+                    "- karafCommand: \"log:log 'Bundle " + safeFileName.replace("'", "\\'") + " installed from JCR rollback'\"\n";
+            provisioningManager.executeScript(yamlScript, YAML_FORMAT);
+            if (logger.isInfoEnabled()) {
+                logger.info("Bundle {} installed from JCR path: {}", safeFileName, sanitizeForLog(jcrPath));
+            }
         } finally {
             FileUtils.deleteQuietly(tempFile);
         }
@@ -1046,7 +1184,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         if (restoredBundle == null) {
             logger.warn("Restored bundle {} v{} did not appear in OSGi within 30 s — skipping old-version cleanup",
                     symbolicName, targetVersion);
-            return "Bundle " + fileName + " installed but could not confirm in OSGi — other versions were NOT removed";
+            return BUNDLE_PREFIX + fileName + " installed but could not confirm in OSGi — other versions were NOT removed";
         }
 
         // Uninstall all previously existing versions (other than the one we just restored)
@@ -1066,7 +1204,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             }
         }
 
-        String result = "Bundle " + fileName + " (v" + targetVersion + ") installed successfully";
+        String result = BUNDLE_PREFIX + fileName + " (v" + targetVersion + ") installed successfully";
         if (!uninstalled.isEmpty()) {
             result += ". Removed old version(s): " + String.join(", ", uninstalled);
         }
@@ -1083,8 +1221,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                     session -> {
                         Node jarNode = session.getNode(jcrPath);
                         fileNameHolder[0] = jarNode.getName();
-                        Node content = jarNode.getNode("jcr:content");
-                        javax.jcr.Binary binary = content.getProperty("jcr:data").getBinary();
+                        Node content = jarNode.getNode(JCR_CONTENT);
+                        javax.jcr.Binary binary = content.getProperty(JCR_DATA).getBinary();
                         try (InputStream in = new BufferedInputStream(binary.getStream(), 64 * 1024);
                              OutputStream out = new BufferedOutputStream(new FileOutputStream(tempFile), 64 * 1024)) {
                             org.apache.commons.io.IOUtils.copy(in, out);
@@ -1103,7 +1241,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public List<Map<String, String>> getStoreVersionsForBundle(String symbolicName) {
-        StoreModuleEntry entry = storeModuleIndex.get(symbolicName);
+        StoreModuleEntry entry = storeModuleIndex.get().get(symbolicName);
         if (entry == null) {
             return Collections.emptyList();
         }
@@ -1113,7 +1251,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 .filter(v -> isCompatibleWithJahia(entry.requiredVersions.get(v)))
                 .map(v -> {
                     Map<String, String> info = new LinkedHashMap<>();
-                    info.put("version", v);
+                    info.put(VERSION, v);
                     info.put("storeUrl", entry.storeUrl != null ? entry.storeUrl : "");
                     info.put("downloadUrl", entry.downloadUrls.getOrDefault(v, ""));
                     return info;
@@ -1121,9 +1259,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 // Sort newest-first (gracefully degrade for unparseable versions)
                 .sorted((a, b) -> {
                     try {
-                        return vs.parseVersion(b.get("version")).compareTo(vs.parseVersion(a.get("version")));
+                        return vs.parseVersion(b.get(VERSION)).compareTo(vs.parseVersion(a.get(VERSION)));
                     } catch (InvalidVersionSpecificationException e) {
-                        return b.get("version").compareTo(a.get("version"));
+                        return b.get(VERSION).compareTo(a.get(VERSION));
                     }
                 })
                 .collect(Collectors.toList());
@@ -1131,7 +1269,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public List<Map<String, String>> getStoreModulesNotInstalled(String searchTerm) {
-        if (storeModuleIndex.isEmpty()) {
+        if (storeModuleIndex.get().isEmpty()) {
             refreshStoreIndex();
         }
 
@@ -1143,7 +1281,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         VersionScheme vs = new GenericVersionScheme();
         String lowerSearch = searchTerm != null ? searchTerm.toLowerCase() : "";
 
-        return storeModuleIndex.values().stream()
+        return storeModuleIndex.get().values().stream()
                 .filter(e -> !installed.contains(e.name))
                 .filter(e -> lowerSearch.isEmpty() || e.name.toLowerCase().contains(lowerSearch))
                 .map(e -> {
@@ -1193,13 +1331,13 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
         VersionScheme vs = new GenericVersionScheme();
         StringBuilder sb = new StringBuilder();
-        sb.append("- installOrUpgradeBundle:\n");
+        sb.append(YAML_INSTALL_OR_UPGRADE);
 
         List<String> included = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
 
         for (String name : symbolicNames) {
-            StoreModuleEntry entry = storeModuleIndex.get(name);
+            StoreModuleEntry entry = storeModuleIndex.get().get(name);
             if (entry == null) {
                 skipped.add(name + " (not in store index)");
                 continue;
@@ -1224,13 +1362,13 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
             String url = entry.downloadUrls.getOrDefault(
                     version,
-                    "mvn:" + entry.groupId + "/" + name + "/" + version
+                    MVN_PREFIX + entry.groupId + "/" + name + "/" + version
             );
-            sb.append("  - url: '").append(url).append("'\n");
+            sb.append(YAML_URL_PREFIX).append(url).append("'\n");
             included.add(name + "@" + version);
         }
 
-        sb.append("  autoStart: true\n");
+        sb.append(YAML_AUTOSTART_TRUE);
         sb.append("  uninstallPreviousVersion: false\n");
         sb.append("  ignoreChecks: false\n");
 
@@ -1239,7 +1377,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
 
         logger.info("Installing {} module(s) from store: {}", included.size(), included);
-        provisioningManager.executeScript(sb.toString(), "yaml");
+        provisioningManager.executeScript(sb.toString(), YAML_FORMAT);
         invalidateUpdatesCache();
 
         StringBuilder result = new StringBuilder("Successfully installed ")
@@ -1272,7 +1410,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public String installBundleVersionFromStore(String symbolicName, String version) throws IOException {
-        StoreModuleEntry entry = storeModuleIndex.get(symbolicName);
+        StoreModuleEntry entry = storeModuleIndex.get().get(symbolicName);
         if (entry == null) {
             throw new DataFetchingException("Module '" + symbolicName + "' not found in store index — " +
                     "call refreshStoreIndex() to populate the catalogue");
@@ -1284,20 +1422,20 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         // Prefer the direct download URL; fall back to a Maven coordinate
         String url = entry.downloadUrls.getOrDefault(
                 version,
-                "mvn:" + entry.groupId + "/" + symbolicName + "/" + version);
+                MVN_PREFIX + entry.groupId + "/" + symbolicName + "/" + version);
 
-        String yamlScript = "- installOrUpgradeBundle:\n" +
-                "  - url: '" + url + "'\n" +
-                "  autoStart: true\n" +
+        String yamlScript = YAML_INSTALL_OR_UPGRADE +
+                YAML_URL_PREFIX + url + "'\n" +
+                YAML_AUTOSTART_TRUE +
                 "  uninstallPreviousVersion: true\n" +
                 "  ignoreChecks: true\n" +
                 "- karafCommand: \"log:log 'Bundle " + symbolicName + " " + version +
                 " installed from store catalogue'\"\n";
 
         logger.info("Installing {} {} from store via provisioning YAML (url: {})", symbolicName, version, url);
-        provisioningManager.executeScript(yamlScript, "yaml");
+        provisioningManager.executeScript(yamlScript, YAML_FORMAT);
         invalidateUpdatesCache();
-        return "Bundle " + symbolicName + " " + version + " installed successfully from store catalogue";
+        return BUNDLE_PREFIX + symbolicName + " " + version + " installed successfully from store catalogue";
     }
 
     @Override
@@ -1315,15 +1453,17 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             FileUtils.copyInputStreamToFile(fileStream, tempFile);
             validateOsgiBundle(tempFile, fileName);
 
-            String yamlScript = "- installOrUpgradeBundle:\n" +
-                    "  - url: '" + tempFile.toURI() + "'\n" +
-                    "  autoStart: true\n" +
+            String yamlScript = YAML_INSTALL_OR_UPGRADE +
+                    YAML_URL_PREFIX + tempFile.toURI() + "'\n" +
+                    YAML_AUTOSTART_TRUE +
                     "  uninstallPreviousVersion: true\n" +
                     "  ignoreChecks: false\n" +
                     "- karafCommand: \"log:log 'Module " + fileName.replace("'", "\\'") + " deployed via upload'\"\n";
 
-            provisioningManager.executeScript(yamlScript, "yaml");
-            logger.info("Module {} deployed successfully via upload", fileName);
+            provisioningManager.executeScript(yamlScript, YAML_FORMAT);
+            if (logger.isInfoEnabled()) {
+                logger.info("Module {} deployed successfully via upload", sanitizeForLog(fileName));
+            }
             invalidateUpdatesCache();
             return "Module " + fileName + " deployed successfully";
         } finally {
@@ -1341,14 +1481,21 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             throw new IOException("Provisioning is only available on processing servers");
         }
 
-        String yamlContent = new String(yamlStream.readAllBytes(), StandardCharsets.UTF_8);
+        // SECURITY: this endpoint executes an admin-supplied Jahia provisioning script verbatim.
+        // That is by design — it mirrors Jahia's own provisioning tooling — and is gated behind the
+        // upload permission plus non-session authentication enforced in the servlet. Because the raw
+        // script may contain arbitrary provisioning operations, this method must never be exposed to
+        // lower-privileged callers.
+        String yamlContent = new String(readBounded(yamlStream, MAX_STORE_INDEX_BYTES), StandardCharsets.UTF_8);
         if (yamlContent.isBlank()) {
             throw new IOException("Uploaded YAML file is empty");
         }
 
-        logger.info("Applying provisioning YAML from uploaded file: {}", fileName);
+        if (logger.isInfoEnabled()) {
+            logger.info("Applying provisioning YAML from uploaded file: {}", sanitizeForLog(fileName));
+        }
         try {
-            provisioningManager.executeScript(yamlContent, "yaml");
+            provisioningManager.executeScript(yamlContent, YAML_FORMAT);
         } catch (Exception e) {
             // Translate low-level parse / execution errors into a clear user message.
             // A Jahia provisioning script must be a YAML *list* of operation objects,
@@ -1371,8 +1518,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * recomputes against the store index. Call this after any install or deploy operation.
      */
     private void invalidateUpdatesCache() {
-        modulesWithUpdates = null;
-        lastUpdateTime = null;
+        updatesSnapshot.set(EMPTY_SNAPSHOT);
         logger.debug("Updates cache invalidated — will recompute on next listAvailableUpdates() call");
     }
 
@@ -1486,8 +1632,15 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             String extractDirUri = extractDir.toURI().toString(); // e.g. "file:///tmp/module-import-uuid/"
             String resolvedYaml = rawYaml.replace("${archiveRoot}/", extractDirUri);
 
-            provisioningManager.executeScript(resolvedYaml, "yaml");
-            logger.info("Module archive '{}' imported successfully ({} JARs extracted)", archiveName, jarCount);
+            // SECURITY (C2): the provisioning.yaml comes from an attacker-controllable archive.
+            // Reject embedded karafCommand operations and ensure every install url: either points
+            // inside the extraction directory (the embedded JARs) or is an mvn:/https store URL.
+            validateImportedProvisioningYaml(resolvedYaml, extractDirUri);
+
+            provisioningManager.executeScript(resolvedYaml, YAML_FORMAT);
+            if (logger.isInfoEnabled()) {
+                logger.info("Module archive '{}' imported successfully ({} JARs extracted)", sanitizeForLog(archiveName), jarCount);
+            }
             return "Archive '" + archiveName + "' imported successfully (" + jarCount + " embedded bundle(s) deployed)";
         } finally {
             FileUtils.deleteQuietly(extractDir);
@@ -1533,7 +1686,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         sb.append("# Date: ").append(java.time.LocalDate.now()).append("\n");
         sb.append("# Eligible bundles: ").append(bundles.size()).append("\n");
         sb.append("# Embed mode: ").append(embedAll ? "all JARs embedded" : "Maven URLs + embedded non-Maven").append("\n\n");
-        sb.append("- installOrUpgradeBundle:\n");
+        sb.append(YAML_INSTALL_OR_UPGRADE);
 
         int included = 0;
         for (Bundle bundle : bundles) {
@@ -1544,7 +1697,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             included = getIncludedBundles(embeddedJars, embedAll, mavenFallbacks, mavenUrl, sb, sl, defaultStartLevel, included, entryName);
         }
 
-        sb.append("  autoStart: true\n");
+        sb.append(YAML_AUTOSTART_TRUE);
         sb.append("  uninstallPreviousVersion: true\n");
         sb.append("  ignoreChecks: false\n");
         sb.append("- karafCommand: \"log:log 'Module snapshot imported - ")
@@ -1555,9 +1708,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     private static int getIncludedBundles(Map<String, File> embeddedJars, boolean embedAll, Map<String, String> mavenFallbacks, String mavenUrl, StringBuilder sb, int sl, int defaultStartLevel, int included, String entryName) {
         if (!embedAll && mavenUrl != null) {
             // Maven-only mode: emit mvn: URL directly
-            sb.append("  - url: '").append(mavenUrl).append("'\n");
+            sb.append(YAML_URL_PREFIX).append(mavenUrl).append("'\n");
             if (sl != defaultStartLevel) {
-                sb.append("    startLevel: ").append(sl).append("\n");
+                sb.append(YAML_START_LEVEL).append(sl).append("\n");
             }
             included++;
         } else {
@@ -1566,14 +1719,14 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             if (isEmbedded) {
                 sb.append("  - url: '${archiveRoot}/").append(entryName).append("'\n");
                 if (sl != defaultStartLevel) {
-                    sb.append("    startLevel: ").append(sl).append("\n");
+                    sb.append(YAML_START_LEVEL).append(sl).append("\n");
                 }
                 included++;
             } else if (mavenFallbacks != null && mavenFallbacks.containsKey(entryName)) {
                 // JAR not in local cache — fall back to mvn: URL with a comment
-                sb.append("  - url: '").append(mavenFallbacks.get(entryName)).append("' # JAR not found locally\n");
+                sb.append(YAML_URL_PREFIX).append(mavenFallbacks.get(entryName)).append("' # JAR not found locally\n");
                 if (sl != defaultStartLevel) {
-                    sb.append("    startLevel: ").append(sl).append("\n");
+                    sb.append(YAML_START_LEVEL).append(sl).append("\n");
                 }
                 included++;
             }
@@ -1594,12 +1747,12 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      */
     private String resolveMavenUrl(Bundle bundle) {
         String location = bundle.getLocation();
-        if (location != null && location.startsWith("mvn:")) {
+        if (location != null && location.startsWith(MVN_PREFIX)) {
             return location;
         }
-        String groupId = bundle.getHeaders().get("Jahia-GroupId");
+        String groupId = bundle.getHeaders().get(JAHIA_GROUP_ID);
         if (groupId != null) {
-            return "mvn:" + groupId + "/" + bundle.getSymbolicName() + "/" + bundle.getVersion();
+            return MVN_PREFIX + groupId + "/" + bundle.getSymbolicName() + "/" + bundle.getVersion();
         }
         return null;
     }
@@ -1615,15 +1768,15 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * @return a populated temp file, or {@code null} if the bundle is not in JCR
      */
     private File resolveJarFromJcr(Bundle bundle) {
-        String groupId = bundle.getHeaders().get("Jahia-GroupId");
+        String groupId = bundle.getHeaders().get(JAHIA_GROUP_ID);
         if (groupId == null) {
             return null;
         }
 
         String groupPath = groupId.replace('.', '/');
         String version = bundle.getVersion().toString();
-        String jcrVersionPath = "/module-management/bundles/" + groupPath
-                + "/" + bundle.getSymbolicName() + "/" + version;
+        String jcrVersionPath = JCR_BUNDLES_BASE_PATH + JCR_PATH_SEPARATOR + groupPath
+                + JCR_PATH_SEPARATOR + bundle.getSymbolicName() + JCR_PATH_SEPARATOR + version;
 
         SettingsBean settingsBean = SettingsBean.getInstance();
         File tempFile = null;
@@ -1645,9 +1798,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                         javax.jcr.NodeIterator it = versionFolder.getNodes();
                         while (it.hasNext()) {
                             javax.jcr.Node jarNode = it.nextNode();
-                            if (jarNode.isNodeType("jnt:moduleManagementBundle")) {
-                                javax.jcr.Node content = jarNode.getNode("jcr:content");
-                                javax.jcr.Binary binary = content.getProperty("jcr:data").getBinary();
+                            if (jarNode.isNodeType(NT_MODULE_MANAGEMENT_BUNDLE)) {
+                                javax.jcr.Node content = jarNode.getNode(JCR_CONTENT);
+                                javax.jcr.Binary binary = content.getProperty(JCR_DATA).getBinary();
                                 try (java.io.InputStream in = new java.io.BufferedInputStream(binary.getStream(), 65536);
                                      java.io.OutputStream os = new java.io.BufferedOutputStream(new java.io.FileOutputStream(out), 65536)) {
                                     org.apache.commons.io.IOUtils.copy(in, os);
@@ -1696,21 +1849,6 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return null;
     }
 
-    /**
-     * @deprecated kept for backward compatibility — use {@link #resolveJarFromJcr}/{@link #resolveJarFromDisk}
-     */
-    private File resolveAnyJarFile(Bundle bundle, MavenResolver resolver) {
-        File jar = resolveJarFromJcr(bundle);
-        return jar != null ? jar : resolveJarFromDisk(bundle);
-    }
-
-    /**
-     * @deprecated use {@link #resolveAnyJarFile}
-     */
-    private File resolveJarFileForEmbed(Bundle bundle, MavenResolver resolver) {
-        return resolveAnyJarFile(bundle, resolver);
-    }
-
     private int getBundleStartLevel(Bundle bundle) {
         BundleStartLevel bsl = bundle.adapt(BundleStartLevel.class);
         return bsl != null ? bsl.getStartLevel() : SettingsBean.getInstance().getModuleStartLevel();
@@ -1737,43 +1875,135 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      */
     private int extractModuleArchive(InputStream zipStream, File targetDir) throws IOException {
         int jarCount = 0;
+        int entryCount = 0;
+        long totalBytes = 0;
         try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(zipStream))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
+                // SECURITY (C1): cap the number of entries to defend against zip bombs.
+                if (++entryCount > MAX_ZIP_ENTRIES) {
+                    abortExtraction(targetDir, "archive contains more than " + MAX_ZIP_ENTRIES + " entries");
+                }
                 String name = entry.getName().replace('\\', '/');
-                // Security: no path traversal
-                if (name.contains("..") || name.startsWith("/")) {
-                    logger.warn("Rejecting potentially dangerous ZIP entry: {}", name);
-                    zis.closeEntry();
-                    continue;
-                }
-                // Accept only expected file types
-                if (!name.endsWith(".jar") && !name.endsWith(".yaml") && !name.endsWith(".yml")) {
-                    zis.closeEntry();
-                    continue;
-                }
-                File outFile = new File(targetDir, name);
-                // Double-check the canonical path is still under targetDir
-                if (!outFile.getCanonicalPath().startsWith(targetDir.getCanonicalPath() + File.separator)) {
-                    logger.warn("Rejecting ZIP entry with escape path: {}", name);
-                    zis.closeEntry();
-                    continue;
-                }
-                outFile.getParentFile().mkdirs();
-                try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(outFile), 65536)) {
-                    byte[] buf = new byte[65536];
-                    int len;
-                    while ((len = zis.read(buf)) > 0) {
-                        bos.write(buf, 0, len);
+                File outFile = resolveSafeZipEntry(name, targetDir);
+                if (outFile != null) {
+                    outFile.getParentFile().mkdirs();
+                    totalBytes = copyZipEntry(zis, outFile, targetDir, totalBytes);
+                    if (name.endsWith(".jar")) {
+                        jarCount++;
                     }
-                }
-                if (name.endsWith(".jar")) {
-                    jarCount++;
                 }
                 zis.closeEntry();
             }
         }
         return jarCount;
+    }
+
+    /**
+     * Validates a single ZIP entry name and returns the target {@link File} it should be written to,
+     * or {@code null} when the entry must be skipped (path traversal, unexpected file type or a
+     * canonical path that escapes {@code targetDir}). Extracted from {@link #extractModuleArchive}
+     * to keep that loop's cognitive complexity within bounds (Sonar S3776).
+     */
+    private File resolveSafeZipEntry(String name, File targetDir) throws IOException {
+        // Security: no path traversal
+        if (name.contains("..") || name.startsWith("/")) {
+            if (logger.isWarnEnabled()) {
+                logger.warn("Rejecting potentially dangerous ZIP entry: {}", sanitizeForLog(name));
+            }
+            return null;
+        }
+        // Accept only expected file types
+        if (!name.endsWith(".jar") && !name.endsWith(YAML_EXTENSION) && !name.endsWith(".yml")) {
+            return null;
+        }
+        File outFile = new File(targetDir, name);
+        // Double-check the canonical path is still under targetDir
+        if (!outFile.getCanonicalPath().startsWith(targetDir.getCanonicalPath() + File.separator)) {
+            if (logger.isWarnEnabled()) {
+                logger.warn("Rejecting ZIP entry with escape path: {}", sanitizeForLog(name));
+            }
+            return null;
+        }
+        return outFile;
+    }
+
+    /**
+     * Stream one ZIP entry to {@code outFile}, enforcing the cumulative uncompressed-byte cap
+     * on the bytes actually written (never trusting {@code ZipEntry.getSize()} — C1 zip-bomb defence).
+     *
+     * @return the new running total of bytes written
+     */
+    private long copyZipEntry(ZipInputStream zis, File outFile, File targetDir, long totalBytes) throws IOException {
+        long running = totalBytes;
+        try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(outFile), 65536)) {
+            byte[] buf = new byte[65536];
+            int len;
+            while ((len = zis.read(buf)) > 0) {
+                running += len;
+                if (running > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                    // close current stream before cleanup to release the file handle
+                    bos.flush();
+                    abortExtraction(targetDir, "uncompressed archive size exceeds " + MAX_TOTAL_UNCOMPRESSED_BYTES + " bytes");
+                }
+                bos.write(buf, 0, len);
+            }
+        }
+        return running;
+    }
+
+    /** Clean up the partial extraction directory and abort with a clear error (C1). */
+    private void abortExtraction(File targetDir, String reason) throws IOException {
+        FileUtils.deleteQuietly(targetDir);
+        throw new IOException("Rejecting archive — possible zip bomb: " + reason);
+    }
+
+    /**
+     * Defensive validation of an imported provisioning script (C2). Rejects any {@code karafCommand}
+     * operation and ensures every {@code url:} value either resolves under {@code extractDirUri}
+     * (an embedded JAR) or is an {@code mvn:} / {@code https:} store URL.
+     */
+    private void validateImportedProvisioningYaml(String yaml, String extractDirUri) throws IOException {
+        for (String rawLine : yaml.split("\n")) {
+            String line = rawLine.trim();
+            if (!line.startsWith("#")) {
+                validateProvisioningLine(line, extractDirUri);
+            }
+        }
+    }
+
+    /**
+     * Validates a single non-comment provisioning line: rejects {@code karafCommand} operations and
+     * any {@code url:} value that does not resolve to an embedded bundle, an {@code mvn:} coordinate
+     * or an {@code https:} store URL. Extracted from {@link #validateImportedProvisioningYaml} to
+     * keep the loop simple (Sonar S135 / S3776).
+     */
+    private void validateProvisioningLine(String line, String extractDirUri) throws IOException {
+        if (line.contains("karafCommand")) {
+            throw new IOException("Imported provisioning script must not contain karafCommand operations");
+        }
+        int urlIdx = line.indexOf("url:");
+        if (urlIdx < 0) {
+            return;
+        }
+        String value = extractUrlValue(line.substring(urlIdx + "url:".length()).trim());
+        boolean allowed = value.startsWith(extractDirUri)
+                || value.startsWith(MVN_PREFIX)
+                || value.startsWith("https:");
+        if (!allowed) {
+            throw new IOException("Imported provisioning script references a disallowed url: it must point at an embedded bundle, an mvn: coordinate, or an https store URL");
+        }
+    }
+
+    /** Strips surrounding quotes and any trailing inline comment from a raw YAML scalar value. */
+    private static String extractUrlValue(String value) {
+        if (value.startsWith("'") || value.startsWith("\"")) {
+            char quote = value.charAt(0);
+            int end = value.indexOf(quote, 1);
+            return end > 0 ? value.substring(1, end) : value.substring(1);
+        }
+        int hash = value.indexOf(" #");
+        return hash >= 0 ? value.substring(0, hash).trim() : value;
     }
 
     private void validateOsgiBundle(File jarFile, String fileName) throws IOException {
@@ -1799,7 +2029,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     @Override
     public String cleanupJcrVersions() throws RepositoryException {
-        final String BASE_PATH = "/module-management/bundles";
+        final String BASE_PATH = JCR_BUNDLES_BASE_PATH;
 
         // Collect all currently OSGi-installed versions, keyed by symbolic name
         final Map<String, Set<String>> osgiVersions = new HashMap<>();
@@ -1874,6 +2104,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             try {
                 keep.add(sorted.get(0).getName());
             } catch (RepositoryException ignored) {
+                // Node name unavailable — simply skip retaining this entry; cleanup is best-effort.
             }
         }
         // 3) Keep one additional "previous" version
@@ -1882,6 +2113,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             try {
                 keep.add(vf.getName());
             } catch (RepositoryException ignored) {
+                // Node name unavailable — skip; cleanup is best-effort.
             }
         }
 
@@ -1903,6 +2135,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 try {
                     logger.warn("JCR cleanup: could not remove a version of {}: {}", symbolicName, ex.getMessage());
                 } catch (Exception ignored) {
+                    // Logging must never abort the cleanup loop — swallow secondary failures.
                 }
             }
         }
@@ -1918,7 +2151,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("- installOrUpgradeBundle:\n");
+        sb.append(YAML_INSTALL_OR_UPGRADE);
         List<String> included = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
 
@@ -1954,7 +2187,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             included.add(symbolicName);
         }
 
-        sb.append("  autoStart: true\n");
+        sb.append(YAML_AUTOSTART_TRUE);
         sb.append("  uninstallPreviousVersion: true\n");
         sb.append("  ignoreChecks: true\n");
 
@@ -1972,10 +2205,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     private Bundle getBundle(String symbolicName, Bundle bundle) {
         for (Bundle b : bundleContext.getBundles()) {
-            if (symbolicName.equals(b.getSymbolicName())) {
-                if (bundle == null || b.getState() == Bundle.ACTIVE) {
-                    bundle = b;
-                }
+            if (symbolicName.equals(b.getSymbolicName()) && (bundle == null || b.getState() == Bundle.ACTIVE)) {
+                bundle = b;
             }
         }
         return bundle;
@@ -1986,8 +2217,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         // Determine Maven groupId — same logic as listAvailableUpdates
         String groupId = null;
         String location = bundle.getLocation();
-        if (location != null && location.startsWith("mvn:")) {
-            String[] parts = StringUtils.substringAfter(location, "mvn:").split("/");
+        if (location != null && location.startsWith(MVN_PREFIX)) {
+            String[] parts = StringUtils.substringAfter(location, MVN_PREFIX).split("/");
             if (parts.length >= 2) {
                 groupId = parts[0];
             }
@@ -1995,8 +2226,8 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
         if (groupId == null) {
             Dictionary<String, String> headers = bundle.getHeaders();
-            if (headers.get("Jahia-GroupId") != null) {
-                groupId = headers.get("Jahia-GroupId");
+            if (headers.get(JAHIA_GROUP_ID) != null) {
+                groupId = headers.get(JAHIA_GROUP_ID);
             }
         }
 
@@ -2039,7 +2270,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     private boolean hasModuleBundleChild(javax.jcr.Node folder) throws RepositoryException {
         javax.jcr.NodeIterator it = folder.getNodes();
         while (it.hasNext()) {
-            if (it.nextNode().isNodeType("jnt:moduleManagementBundle")) {
+            if (it.nextNode().isNodeType(NT_MODULE_MANAGEMENT_BUNDLE)) {
                 return true;
             }
         }
@@ -2055,10 +2286,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         javax.jcr.NodeIterator it = versionFolder.getNodes();
         while (it.hasNext()) {
             javax.jcr.Node child = it.nextNode();
-            if (child.hasNode("jcr:content")) {
-                javax.jcr.Node content = child.getNode("jcr:content");
-                if (content.hasProperty("jcr:data")) {
-                    javax.jcr.Binary bin = content.getProperty("jcr:data").getBinary();
+            if (child.hasNode(JCR_CONTENT)) {
+                javax.jcr.Node content = child.getNode(JCR_CONTENT);
+                if (content.hasProperty(JCR_DATA)) {
+                    javax.jcr.Binary bin = content.getProperty(JCR_DATA).getBinary();
                     try {
                         size += bin.getSize();
                     } finally {
@@ -2086,7 +2317,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
                 return false;
             }
         } catch (RepositoryException e) {
-            logger.error("Error while reading module jcr content" + jahiaTemplatesPackage, e);
+            logger.error("Error while reading module jcr content {}", jahiaTemplatesPackage, e);
         }
         return true;
     }

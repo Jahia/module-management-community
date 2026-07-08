@@ -4,23 +4,19 @@ import graphql.annotations.annotationTypes.GraphQLDefaultValue;
 import graphql.annotations.annotationTypes.GraphQLDescription;
 import graphql.annotations.annotationTypes.GraphQLField;
 import graphql.annotations.annotationTypes.GraphQLName;
-import org.jahia.modules.graphql.provider.dxm.osgi.annotations.GraphQLOsgiService;
 import org.jahia.modules.graphql.provider.dxm.util.GqlUtils;
+import org.jahia.osgi.BundleUtils;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 
-import javax.inject.Inject;
 import javax.jcr.RepositoryException;
 import java.io.IOException;
 import java.util.List;
-import java.util.Set;
 
 public class ModuleManagementMutationResult {
 
-    @Inject
-    @GraphQLOsgiService(
-            service = ModuleManagementCommunityService.class
-    )
-    ModuleManagementCommunityService moduleManagementCommunityService;
+    private ModuleManagementCommunityService moduleManagementCommunityService() {
+        return BundleUtils.getOsgiService(ModuleManagementCommunityService.class, null);
+    }
 
     @GraphQLField
     @GraphQLName("updateModules")
@@ -32,14 +28,14 @@ public class ModuleManagementMutationResult {
                                      @GraphQLName("forceUpdateAll") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean forceUpdateAll,
                                      @GraphQLName("onStartup") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean onStartup,
                                      @GraphQLName("filters") List<String> filters) throws IOException {
-        return new GqlUpdateModulesResult(moduleManagementCommunityService.updateModules(jahiaOnly, dryRun, filters, autostart, uninstallPrevious, forceUpdateAll, onStartup));
+        return new GqlUpdateModulesResult(moduleManagementCommunityService().updateModules(jahiaOnly, dryRun, filters, autostart, uninstallPrevious, forceUpdateAll, onStartup));
     }
 
     @GraphQLField
     @GraphQLName("bundle")
     @GraphQLDescription("Allow developers to perform operations on bundles, such as installing, uninstalling, or updating")
     public GqlBundleMutation getBundle(@GraphQLName("bundleId") long bundleId) {
-        return new GqlBundleMutation(moduleManagementCommunityService.getBundleById(bundleId));
+        return new GqlBundleMutation(moduleManagementCommunityService().getBundleById(bundleId));
     }
 
     @GraphQLField
@@ -47,7 +43,8 @@ public class ModuleManagementMutationResult {
     @GraphQLDescription("Import a module from the file system into the OSGi framework")
     public String importModule(@GraphQLName("bundleId") long bundleId,
                                @GraphQLName("force") @GraphQLDefaultValue(GqlUtils.SupplierFalse.class) boolean force) throws IOException {
-        if (moduleManagementCommunityService.importModule(moduleManagementCommunityService.getBundleById(bundleId), force))
+        ModuleManagementCommunityService service = moduleManagementCommunityService();
+        if (service.importModule(service.getBundleById(bundleId), force))
             return "Module imported successfully.";
         else
             return "Failed to import module.";
@@ -57,7 +54,7 @@ public class ModuleManagementMutationResult {
     @GraphQLName("installBundleFromJcr")
     @GraphQLDescription("Install a bundle version from its JCR path (rollback to a previous version stored in /module-management/bundles/)")
     public String installBundleFromJcr(@GraphQLName("jcrPath") String jcrPath) throws IOException {
-        return moduleManagementCommunityService.installBundleVersionFromJcr(jcrPath);
+        return moduleManagementCommunityService().installBundleVersionFromJcr(jcrPath);
     }
 
     @GraphQLField
@@ -67,7 +64,7 @@ public class ModuleManagementMutationResult {
     public String installBundleFromStore(
             @GraphQLName("symbolicName") String symbolicName,
             @GraphQLName("version") String version) throws IOException {
-        return moduleManagementCommunityService.installBundleVersionFromStore(symbolicName, version);
+        return moduleManagementCommunityService().installBundleVersionFromStore(symbolicName, version);
     }
 
     @GraphQLField
@@ -76,7 +73,7 @@ public class ModuleManagementMutationResult {
             "currently-installed version(s) and one previous version per module. " +
             "Returns a human-readable summary of what was removed.")
     public String cleanupJcrVersions() throws RepositoryException {
-        return moduleManagementCommunityService.cleanupJcrVersions();
+        return moduleManagementCommunityService().cleanupJcrVersions();
     }
 
     @GraphQLField
@@ -84,7 +81,7 @@ public class ModuleManagementMutationResult {
     @GraphQLDescription("Generate a YAML provisioning script to replay the given (non-SNAPSHOT) modules on another server.")
     public String generateProvisioningScript(
             @GraphQLName("symbolicNames") List<String> symbolicNames) {
-        return moduleManagementCommunityService.generateProvisioningScript(symbolicNames);
+        return moduleManagementCommunityService().generateProvisioningScript(symbolicNames);
     }
 
     @GraphQLField
@@ -94,6 +91,6 @@ public class ModuleManagementMutationResult {
             "via a single provisioning script execution.")
     public String installStoreModules(
             @GraphQLName("symbolicNames") List<String> symbolicNames) throws java.io.IOException {
-        return moduleManagementCommunityService.installStoreModules(symbolicNames);
+        return moduleManagementCommunityService().installStoreModules(symbolicNames);
     }
 }

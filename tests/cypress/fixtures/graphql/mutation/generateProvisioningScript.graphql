@@ -1,0 +1,7 @@
+mutation GenerateProvisioningScript($symbolicNames: [String]) {
+    admin {
+        modulesManagement {
+            generateProvisioningScript(symbolicNames: $symbolicNames)
+        }
+    }
+}

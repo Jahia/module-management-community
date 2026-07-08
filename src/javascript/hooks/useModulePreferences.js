@@ -9,7 +9,7 @@ const DEFAULTS = {
     uninstallPrevious: true,
     updatesOnly: false,
     onStartup: false,
-    autoRefresh: true   // A11y B-005: user-controllable auto-refresh
+    autoRefresh: true // A11y B-005: user-controllable auto-refresh
 };
 
 const loadPreferences = () => {
