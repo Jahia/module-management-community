@@ -1451,10 +1451,10 @@
     eslint-plugin-react "^7.16.0"
     eslint-plugin-react-hooks "^2.2.0"
 
-"@jahia/moonstone@^2.20.0":
-  version "2.20.0"
-  resolved "https://registry.yarnpkg.com/@jahia/moonstone/-/moonstone-2.20.0.tgz#274e26d6725d21256a1c9f6d4749e1cbf43a645c"
-  integrity sha512-QHqOgz2bW+7mQD3aUqRXhWb/hXWw2Yie1KOleimIOkOiXtN7KKOvdc7pz5YeABdXkr3CIK3Acna9W+7hutTZaQ==
+"@jahia/moonstone@^2.20.2":
+  version "2.20.3"
+  resolved "https://registry.yarnpkg.com/@jahia/moonstone/-/moonstone-2.20.3.tgz#a2e213c80084458a108e27e6e8499bc6367dc3f8"
+  integrity sha512-YCMpVcS/aclFxMIOfnfJaQSWEoW81Rg5GHrtf7ona3g5vzKfcbUY1ZYdRalcSpZhG0z484vf4EcEbPrDq7NO9w==
   dependencies:
     "@floating-ui/react" "^0.27.19"
     "@tanstack/react-table" "^8.21.3"
