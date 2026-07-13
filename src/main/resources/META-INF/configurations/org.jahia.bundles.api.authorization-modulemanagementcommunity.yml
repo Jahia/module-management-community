@@ -29,3 +29,9 @@ provisioning_modules_graphql:
     - api: graphql.ClusteredModuleManagementMutationResult
     - api: graphql.ModuleManagementMutationResult
     - api: graphql.ModuleManagementQueryResult
+    # The per-bundle sub-API return types must be granted explicitly, otherwise the enforcing
+    # security filter denies bundle(name:) / bundle(bundleId:) even for authorized users.
+    - api: graphql.GqlBundle
+    - api: graphql.ClusteredGqlBundle
+    - api: graphql.GqlBundleMutation
+    - api: graphql.UpdateModulesResult

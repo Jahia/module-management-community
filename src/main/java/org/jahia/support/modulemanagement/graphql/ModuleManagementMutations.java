@@ -24,6 +24,9 @@ public final class ModuleManagementMutations {
     @GraphQLName("modulesManagement")
     @GraphQLRequiresPermission(value = "graphqlAdminMutation")
     public static ModuleManagementMutationResult modulesManagement() {
+        // D2: enforce provisioningAccess in-code — the declarative security-filter scope cannot
+        // restrict below the graphqlAdminMutation baseline (additive merge), so this is the real gate.
+        ProvisioningAccessGuard.enforce();
         return new ModuleManagementMutationResult();
     }
 }

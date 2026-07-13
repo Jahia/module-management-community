@@ -24,6 +24,23 @@ module.exports = (env, argv) => {
 
     const bundleName = 'module-management-community.bundle';
     const fileName = `${bundleName}.${buildTimeStamp}.js`;
+
+    // Module-federation shared config. @jahia/react-material is a shared singleton provided by the
+    // host (@jahia/jcontent). Jahia 8.2 ships react-material 3.0.5, so pinning the requiredVersion to
+    // ^3.0.6 leaves the shared singleton unsatisfiable ("No satisfying version (^3.0.6) ... Available
+    // versions: 3.0.5") and the admin app never mounts. Relax the requiredVersion to accept the
+    // platform-provided 3.0.5+ (the module consumes the host copy — import:false — so it always ran
+    // against whatever the host provides). Done here rather than in package.json to avoid rewriting
+    // the classic yarn.lock.
+    const moduleFederationConfig = getModuleFederationConfig(packageJson, {
+        remotes: {
+            '@jahia/jcontent': 'appShell.remotes.jcontent'
+        },
+    });
+    if (moduleFederationConfig.shared && moduleFederationConfig.shared['@jahia/react-material']) {
+        moduleFederationConfig.shared['@jahia/react-material'].requiredVersion = '^3.0.5';
+    }
+
     let config = {
         entry: {
             main: path.resolve(__dirname, 'src/javascript/index')
@@ -106,11 +123,7 @@ module.exports = (env, argv) => {
             ]
         },
         plugins: [
-            new ModuleFederationPlugin(getModuleFederationConfig(packageJson, {
-                remotes: {
-                    '@jahia/jcontent': 'appShell.remotes.jcontent'
-                },
-            })),
+            new ModuleFederationPlugin(moduleFederationConfig),
             new CleanWebpackPlugin({verbose: true}),
             new CopyWebpackPlugin({patterns: [{from: './package.json', to: ''}]}),
             new CaseSensitivePathsPlugin(),

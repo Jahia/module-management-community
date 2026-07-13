@@ -1979,7 +1979,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * keep the loop simple (Sonar S135 / S3776).
      */
     void validateProvisioningLine(String line, String extractDirUri) throws IOException {
-        if (line.contains("karafCommand")) {
+        // Case-insensitive: reject karafCommand regardless of casing (e.g. "karafcommand:") so a
+        // differently-cased key cannot slip past this anti-RCE guard.
+        if (line.toLowerCase(java.util.Locale.ROOT).contains("karafcommand")) {
             throw new IOException("Imported provisioning script must not contain karafCommand operations");
         }
         int urlIdx = line.indexOf("url:");

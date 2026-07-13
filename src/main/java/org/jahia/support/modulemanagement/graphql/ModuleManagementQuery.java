@@ -24,6 +24,9 @@ public final class ModuleManagementQuery {
     @GraphQLName("modulesManagement")
     @GraphQLRequiresPermission(value = "graphqlAdminQuery")
     public static ModuleManagementQueryResult modulesManagement() {
+        // D2: enforce provisioningAccess in-code — the declarative security-filter scope cannot
+        // restrict below the graphqlAdminQuery baseline (additive merge), so this is the real gate.
+        ProvisioningAccessGuard.enforce();
         return new ModuleManagementQueryResult();
     }
 }

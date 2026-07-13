@@ -20,6 +20,8 @@ public final class ClusteredModuleManagementMutations {
     @GraphQLName("modulesManagement")
     @GraphQLRequiresPermission(value = "graphqlAdminMutation")
     public static ClusteredModuleManagementMutationResult modulesManagement() {
+        // D2: enforce provisioningAccess in-code (see ProvisioningAccessGuard / ModuleManagementMutations).
+        ProvisioningAccessGuard.enforce();
         return new ClusteredModuleManagementMutationResult();
     }
 }
