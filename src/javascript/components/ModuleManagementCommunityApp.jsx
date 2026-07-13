@@ -8,8 +8,6 @@ import {
     DeletePermanently,
     Download,
     Loader,
-    Menu,
-    MenuItem,
     Reload,
     Separator,
     Server,
@@ -23,7 +21,10 @@ import {
     Upload
 } from '@jahia/moonstone';
 import styles from './ModuleManagementCommunityApp.scss';
-import {Card, CardContent, CardHeader, Divider, TableSortLabel, Tooltip} from '@material-ui/core';
+// A11y: MUI Menu/MenuItem give real role="menu"/role="menuitem" semantics,
+// Escape-to-close and focus return — none of which the Moonstone Menu provides
+// (it renders <menu role="list"> with plain <li> and injects an unlabeled search).
+import {Card, CardContent, CardHeader, Divider, Menu, MenuItem, TableSortLabel, Tooltip} from '@material-ui/core';
 import dayjs from 'dayjs';
 
 import {getComparator, resolveAllDependentModules} from '../utils/moduleUtils';
@@ -147,13 +148,14 @@ SortableHeader.propTypes = {
     onSort: PropTypes.func
 };
 
-// ── ClusterMenuItems ──────────────────────────────────────────────────────────
+// ── Cluster menu items ──────────────────────────────────────────────────────
 
-// Cluster operations sub-menu. Extracted so the main component's render stays
-// within the cognitive-complexity budget. Renders nothing when not clustered.
-const ClusterMenuItems = ({isClustered, t, onOperation}) => {
+// Cluster operations sub-menu. Returns a flat *array* of elements (not a
+// component) so they become direct children of the MUI <Menu> — MUI's MenuList
+// manages roving focus per child, and a wrapper component would hide them as one.
+const buildClusterMenuItems = ({isClustered, t, onOperation}) => {
     if (!isClustered) {
-        return null;
+        return [];
     }
 
     const operations = [
@@ -162,27 +164,17 @@ const ClusterMenuItems = ({isClustered, t, onOperation}) => {
         {key: 'pull', labelKey: 'label.table.actions.pull', Icon: Download}
     ];
 
-    return (
-        <>
-            <Divider/>
-            <MenuItem isDisabled
-                      label={t('label.cluster.ops.title')}
-                      iconStart={<Server/>}
-                      className={styles.menuSectionHeader}/>
-            {operations.map(({key, labelKey, Icon}) => (
-                <MenuItem key={key}
-                          label={t(labelKey)}
-                          iconStart={<Icon/>}
-                          onClick={() => onOperation(key)}/>
-            ))}
-        </>
-    );
-};
-
-ClusterMenuItems.propTypes = {
-    isClustered: PropTypes.bool,
-    t: PropTypes.func.isRequired,
-    onOperation: PropTypes.func.isRequired
+    return [
+        <Divider key="cluster-divider"/>,
+        <MenuItem key="cluster-title" disabled className={styles.menuSectionHeader}>
+            <span className={styles.menuItemContent}><Server aria-hidden="true"/>{t('label.cluster.ops.title')}</span>
+        </MenuItem>,
+        ...operations.map(({key, labelKey, Icon}) => (
+            <MenuItem key={key} onClick={() => onOperation(key)}>
+                <span className={styles.menuItemContent}><Icon aria-hidden="true"/>{t(labelKey)}</span>
+            </MenuItem>
+        ))
+    ];
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -392,7 +384,7 @@ const ModuleManagementCommunityApp = () => {
         return (
             <Card>
                 <CardHeader title={
-                    <Typography className={styles.title} variant="heading" weight="semiBold">
+                    <Typography className={styles.title} variant="heading" weight="semiBold" component="h2">
                         {t('label.table.title')}
                     </Typography>
                 }/>
@@ -427,7 +419,7 @@ const ModuleManagementCommunityApp = () => {
         <Card elevation={4}>
             <CardHeader
                 title={
-                    <Typography className={styles.title} variant="heading" weight="semiBold">
+                    <Typography className={styles.title} variant="heading" weight="semiBold" component="h2">
                         {t('label.table.title')}
                     </Typography>
                 }
@@ -491,62 +483,72 @@ const ModuleManagementCommunityApp = () => {
                             </span>
                         </Tooltip>
 
-                        {/* A11y A-014: aria-label, aria-haspopup, aria-expanded on ⋮ menu */}
+                        {/* A11y A-014: aria-label, aria-haspopup, aria-expanded, aria-controls on ⋮ menu */}
                         <button className={styles.dotMenuBtn}
+                                id="more-actions-trigger"
                                 type="button"
                                 aria-label={t('label.menu.title')}
                                 aria-haspopup="true"
                                 aria-expanded={Boolean(menuAnchor)}
+                                aria-controls={menuAnchor ? 'more-actions-menu' : undefined}
                                 data-testid="more-actions-btn"
                                 onClick={e => setMenuAnchor(e.currentTarget)}
                         >
                             <span aria-hidden="true">⋮</span>
                         </button>
-                        <Menu anchorEl={menuAnchor}
+                        <Menu id="more-actions-menu"
+                              anchorEl={menuAnchor}
+                              open={Boolean(menuAnchor)}
                               anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
                               getContentAnchorEl={null}
-                              isDisplayed={Boolean(menuAnchor)}
                               transformOrigin={{vertical: 'top', horizontal: 'right'}}
+                              MenuListProps={{'aria-label': t('label.menu.title')}}
                               onClose={() => setMenuAnchor(null)}
                         >
-                            <MenuItem label={t('label.upload.deploy')}
-                                      iconStart={<Upload/>}
-                                      onClick={() => {
-                                          setMenuAnchor(null);
-                                          setIsUploadOpen(true);
-                                      }}/>
-                            <MenuItem label={t('label.export.snapshot')}
-                                      iconStart={<Download/>}
-                                      onClick={() => {
-                                          setMenuAnchor(null);
-                                          setIsExportOpen(true);
-                                      }}/>
-                            <MenuItem label={t('label.generateScript.menuItem')}
-                                      iconStart={<Download/>}
-                                      onClick={() => {
-                                          setMenuAnchor(null);
-                                          setIsGenerateScriptOpen(true);
-                                      }}/>
-                            <MenuItem label={t('label.installFromStore.menuItem')}
-                                      iconStart={<Upload/>}
-                                      onClick={() => {
-                                          setMenuAnchor(null);
-                                          setIsInstallFromStoreOpen(true);
-                                      }}/>
+                            <MenuItem onClick={() => {
+                                setMenuAnchor(null);
+                                setIsUploadOpen(true);
+                            }}
+                            >
+                                <span className={styles.menuItemContent}><Upload aria-hidden="true"/>{t('label.upload.deploy')}</span>
+                            </MenuItem>
+                            <MenuItem onClick={() => {
+                                setMenuAnchor(null);
+                                setIsExportOpen(true);
+                            }}
+                            >
+                                <span className={styles.menuItemContent}><Download aria-hidden="true"/>{t('label.export.snapshot')}</span>
+                            </MenuItem>
+                            <MenuItem onClick={() => {
+                                setMenuAnchor(null);
+                                setIsGenerateScriptOpen(true);
+                            }}
+                            >
+                                <span className={styles.menuItemContent}><Download aria-hidden="true"/>{t('label.generateScript.menuItem')}</span>
+                            </MenuItem>
+                            <MenuItem onClick={() => {
+                                setMenuAnchor(null);
+                                setIsInstallFromStoreOpen(true);
+                            }}
+                            >
+                                <span className={styles.menuItemContent}><Upload aria-hidden="true"/>{t('label.installFromStore.menuItem')}</span>
+                            </MenuItem>
                             <Divider/>
-                            <MenuItem label={t('label.cleanup.jcr')}
-                                      iconStart={<DeletePermanently/>}
-                                      onClick={handleCleanupJcr}/>
-                            <ClusterMenuItems
-                                isClustered={isClustered}
-                                t={t}
-                                onOperation={operation => {
+                            <MenuItem onClick={handleCleanupJcr}>
+                                <span className={styles.menuItemContent}><DeletePermanently aria-hidden="true"/>{t('label.cleanup.jcr')}</span>
+                            </MenuItem>
+                            {buildClusterMenuItems({
+                                isClustered,
+                                t,
+                                onOperation: operation => {
                                     setMenuAnchor(null);
                                     handleClusterOperation(operation);
-                                }}
-                            />
+                                }
+                            })}
                             <Divider/>
-                            <MenuItem isDisabled label={t('label.lastUpdate', {date: lastUpdate})}/>
+                            <MenuItem disabled>
+                                <span className={styles.menuItemContent}>{t('label.lastUpdate', {date: lastUpdate})}</span>
+                            </MenuItem>
                         </Menu>
                     </div>
                 }
@@ -555,11 +557,14 @@ const ModuleManagementCommunityApp = () => {
 
             <CardContent className={styles.marginBorder}>
                 <Separator variant="horizontal" spacing="none"/>
-                {/* A11y A-017: table with accessible name */}
-                <Table aria-label={t('label.table.title')}>
-                    <TableHead>
-                        <TableRow className={styles.tableRow}>
+                {/* A11y A-017 / 1.3.1: explicit ARIA roles restore table semantics that
+                    Moonstone's `display:flex/block` styling strips from the native <table>. */}
+                <Table aria-label={t('label.table.title')} role="table">
+                    <TableHead role="rowgroup">
+                        <TableRow className={styles.tableRow} role="row">
                             <TableHeadCell
+                                role="columnheader"
+                                scope="col"
                                 aria-sort={ariaSortFor('name', orderBy, order)}
                             >
                                 <div className={styles.columnHeaderCell}>
@@ -584,7 +589,7 @@ const ModuleManagementCommunityApp = () => {
                                 </div>
                             </TableHeadCell>
 
-                            <TableHeadCell>
+                            <TableHeadCell role="columnheader" scope="col">
                                 <div className={styles.columnHeaderCell}>
                                     <div className={styles.columnHeaderRow}>
                                         <Typography variant="body"
@@ -613,6 +618,8 @@ const ModuleManagementCommunityApp = () => {
                             </TableHeadCell>
 
                             <TableHeadCell
+                                role="columnheader"
+                                scope="col"
                                 aria-sort={ariaSortFor('version', orderBy, order)}
                             >
                                 <SortableHeader property="version"
@@ -624,6 +631,8 @@ const ModuleManagementCommunityApp = () => {
 
                             {updates.length > 0 && (
                                 <TableHeadCell
+                                    role="columnheader"
+                                    scope="col"
                                     aria-sort={ariaSortFor('available', orderBy, order)}
                                 >
                                     <div className={styles.columnHeaderCell}>
@@ -649,6 +658,8 @@ const ModuleManagementCommunityApp = () => {
                             )}
 
                             <TableHeadCell
+                                role="columnheader"
+                                scope="col"
                                 aria-sort={ariaSortFor('state', orderBy, order)}
                             >
                                 <SortableHeader property="state"
@@ -659,14 +670,14 @@ const ModuleManagementCommunityApp = () => {
                             </TableHeadCell>
 
                             {isClustered && (
-                                <TableHeadCell>
+                                <TableHeadCell role="columnheader" scope="col">
                                     <Typography variant="body" weight="semiBold">
                                         {t('label.table.cells.cluster.nodes.state')}
                                     </Typography>
                                 </TableHeadCell>
                             )}
 
-                            <TableHeadCell>
+                            <TableHeadCell role="columnheader" scope="col">
                                 <Typography variant="body"
                                             weight="semiBold"
                                 >{t('label.table.actions.title')}
@@ -674,7 +685,7 @@ const ModuleManagementCommunityApp = () => {
                             </TableHeadCell>
                         </TableRow>
                     </TableHead>
-                    <TableBody>
+                    <TableBody role="rowgroup">
                         {pageSlice.map(module => (
                             <ModuleRow key={`${module.name}-${module.version}`}
                                        module={module}

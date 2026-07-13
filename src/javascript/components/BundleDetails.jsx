@@ -539,6 +539,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
             <Dialog open={Boolean(confirmInstall)}
                     aria-labelledby="confirm-install-title"
                     aria-describedby="confirm-install-desc"
+                    PaperProps={{role: 'alertdialog', 'aria-modal': 'true'}}
                     onClose={() => setConfirmInstall(null)}
             >
                 <DialogTitle id="confirm-install-title">

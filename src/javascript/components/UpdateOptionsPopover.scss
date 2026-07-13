@@ -103,7 +103,7 @@
 }
 
 .presetSafe {
-    color: #16a34a;
+    color: #166534;  /* A11y 1.4.3: was #16a34a (3.15:1) → ~6.8:1 on #f0fdf4 */
 
     border-color: #22c55e;
     background: #f0fdf4;
@@ -114,7 +114,7 @@
 }
 
 .presetApply {
-    color: #dc2626;
+    color: #991b1b;  /* A11y 1.4.3: was #dc2626 (4.41:1) → ~7.6:1 on #fef2f2 */
 
     border-color: #ef4444;
     background: #fef2f2;

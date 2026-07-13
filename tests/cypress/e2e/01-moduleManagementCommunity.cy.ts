@@ -550,11 +550,11 @@ describe('Module Management Community', () => {
 
         it('menu closes when pressing Escape', () => {
             openMoreActionsMenu();
-            cy.get('menu[role="list"]').should('be.visible');
+            cy.get('[role="menu"]').should('be.visible');
             cy.contains('Deploy module').should('be.visible');
-            cy.get(root).click();
-            cy.get('menu[role="list"]').should('not.be.visible');
-            cy.get(root).contains('Deploy module').should('not.be.visible');
+            cy.get('body').type('{esc}');
+            cy.get('[role="menu"]').should('not.exist');
+            cy.contains('Deploy module').should('not.exist');
         });
     });
 });

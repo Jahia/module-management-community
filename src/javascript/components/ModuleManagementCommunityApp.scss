@@ -213,7 +213,6 @@
 }
 
 .tableRow {
-  border-bottom: 1px solid var(--color-gray_light);
     height: fit-content;
     margin-top: 0.1rem;
     margin-bottom: 0.1rem;
@@ -269,6 +268,26 @@
     color: var(--color-gray_dark);  /* A11y C-003: lifted from gray60 for ≥7:1 */
 }
 
+/* Icon + label layout inside MUI menu items */
+.menuItemContent {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+
+    svg {
+        flex-shrink: 0;
+        width: 18px;
+        height: 18px;
+    }
+}
+
+/* Redefines the Moonstone danger token darker within a scoped subtree so a
+   destructive Button (white text on --moon-color-danger) reaches ≥4.5:1.
+   Applied via PaperProps so it travels with a portaled dialog. */
+.dangerScope {
+    --moon-color-danger: #840d0f;  /* WCAG 1.4.3: was #f44053 (3.68:1) → ~10:1 */
+}
+
 /* Menu section header (disabled label used as divider in the ⋮ menu) */
 .menuSectionHeader {
     font-weight: 700 !important;
@@ -285,6 +304,27 @@
 .marginBorder {
     margin-right: var(--spacing-small);
     margin-left: var(--spacing-small);
+}
+
+/* ─── Status badge / chip contrast (WCAG 1.4.3) ──────────────────────────── */
+/* Moonstone's "bright" success/danger chips and success/danger badges render
+   near-white text on --moon-color-success (#6abb6d, 2.31:1) and
+   --moon-color-danger (#f44053, 3.62:1) — both below the 4.5:1 minimum.
+   Swap in the darker _dark palette tokens (#267729 ≈ 5.6:1, #840d0f ≈ 10:1),
+   scoped to this module so the rest of the Jahia shell is untouched. The
+   [class*=…] selectors match Moonstone's hashed module classnames robustly. */
+:global {
+    #module-management-community-root {
+        [class*="_moonstone-chip_bright"][class*="_moonstone-color_success"],
+        [class*="_moonstone-badge"][class*="_moonstone-badge_success"] {
+            background-color: var(--moon-color-success_dark, #267729) !important;
+        }
+
+        [class*="_moonstone-chip_bright"][class*="_moonstone-color_danger"],
+        [class*="_moonstone-badge"][class*="_moonstone-badge_danger"] {
+            background-color: var(--moon-color-danger_dark, #840d0f) !important;
+        }
+    }
 }
 
 /* ─── Global motion preference ───────────────────────────────────────────── */

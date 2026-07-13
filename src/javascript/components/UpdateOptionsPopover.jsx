@@ -69,13 +69,14 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange}) => {
                 transformOrigin={{vertical: 'top', horizontal: 'right'}}
                 onClose={handleClose}
             >
-                {/* A11y HIGH-7: dialog role + label; MUI Popover handles focus move/return */}
+                {/* A11y HIGH-7: dialog role + aria-modal; labelled by its heading. */}
                 <div id="update-options-popover"
                      role="dialog"
-                     aria-label={t('label.input.group.updateOptions')}
+                     aria-modal="true"
+                     aria-labelledby="update-options-title"
                      className={styles.popover}
                 >
-                    <Typography variant="subheading" weight="bold" className={styles.popoverTitle}>
+                    <Typography id="update-options-title" component="h2" variant="subheading" weight="bold" className={styles.popoverTitle}>
                         {t('label.input.group.updateOptions')}
                     </Typography>
 

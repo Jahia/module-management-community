@@ -133,6 +133,7 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
                 open={isOpen}
                 maxWidth="md"
                 data-testid="generate-script-dialog"
+                PaperProps={{'aria-modal': 'true'}}
                 onClose={onClose}
                 onEnter={handleOpen}
             >

@@ -154,6 +154,7 @@ const BundleActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, 
                     maxWidth="lg"
                     aria-labelledby="bundle-details-title"
                     data-testid="bundle-details-dialog"
+                    PaperProps={{'aria-modal': 'true'}}
                     onClose={() => setOpen(false)}
             >
                 <BundleDetails bundle={bundle}
@@ -161,10 +162,13 @@ const BundleActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, 
                                refetch={refetch}/>
             </Dialog>
 
-            {/* A11y B-003: Uninstall confirmation dialog */}
+            {/* A11y B-003: Uninstall confirmation dialog.
+                alertdialog + aria-modal for a destructive prompt; dangerScope darkens
+                the confirm button's red to meet contrast. */}
             <Dialog open={confirmUninstall}
                     aria-labelledby="uninstall-confirm-title"
                     aria-describedby="uninstall-confirm-desc"
+                    PaperProps={{role: 'alertdialog', 'aria-modal': 'true', className: styles.dangerScope}}
                     onClose={() => setConfirmUninstall(false)}
             >
                 <DialogTitle id="uninstall-confirm-title">

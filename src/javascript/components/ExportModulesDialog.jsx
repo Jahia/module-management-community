@@ -132,7 +132,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
     const isBusy = isExporting || isPreviewing;
 
     return (
-        <Dialog fullWidth open={isOpen} maxWidth="md" data-testid="export-modules-dialog" onClose={handleClose}>
+        <Dialog fullWidth open={isOpen} maxWidth="md" data-testid="export-modules-dialog" PaperProps={{'aria-modal': 'true'}} onClose={handleClose}>
             <DialogTitle disableTypography>
                 <Typography variant="heading" weight="semiBold" component="h2">
                     {t('label.export.dialog.title')}

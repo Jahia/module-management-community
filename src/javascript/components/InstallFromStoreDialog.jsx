@@ -173,6 +173,7 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
             open={isOpen}
             maxWidth="md"
             data-testid="install-from-store-dialog"
+            PaperProps={{'aria-modal': 'true'}}
             onClose={isInstalling ? undefined : handleClose}
             onEnter={handleOpen}
         >

@@ -205,6 +205,7 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
             open={isOpen}
             maxWidth="sm"
             data-testid="upload-module-dialog"
+            PaperProps={{'aria-modal': 'true'}}
             onClose={isUploading ? undefined : handleClose}
         >
             <DialogTitle disableTypography>

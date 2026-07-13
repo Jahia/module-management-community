@@ -82,14 +82,14 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
 
     if (error) {
         console.error('Error when fetching module data: ' + error);
-        return <TableRow className={styles.tableRow}><TableBodyCell colSpan={4}>{t('label.errors.loadingModuleData')}</TableBodyCell></TableRow>;
+        return <TableRow className={styles.tableRow} role="row"><TableBodyCell role="cell" colSpan={4}>{t('label.errors.loadingModuleData')}</TableBodyCell></TableRow>;
     }
 
     if (loading) {
         return (
-            <TableRow className={styles.tableRow}>
+            <TableRow className={styles.tableRow} role="row">
                 {/* A11y A-010: announce row-level loading state */}
-                <TableBodyCell colSpan={columnCount}>
+                <TableBodyCell role="cell" colSpan={columnCount}>
                     <div className={styles.flexCenter} role="status" aria-label="Loading module data">
                         <Loader size="small"/>
                     </div>
@@ -102,8 +102,8 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
 
     if (!bundle) {
         return (
-            <TableRow className={styles.tableRow}>
-                <TableBodyCell colSpan={columnCount}>{t('label.errors.moduleNotFound', {module})}</TableBodyCell>
+            <TableRow className={styles.tableRow} role="row">
+                <TableBodyCell role="cell" colSpan={columnCount}>{t('label.errors.moduleNotFound', {module})}</TableBodyCell>
             </TableRow>
         );
     }
@@ -116,21 +116,21 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
         [];
 
     return (
-        <TableRow className={styles.tableRow}>
-            <TableBodyCell>
+        <TableRow className={styles.tableRow} role="row">
+            <TableBodyCell role="cell">
                 <Typography variant="subheading" weight="semiBold">
                     {bundle.symbolicName} <Typography variant="caption">[{bundle.bundleId}]</Typography>
                 </Typography>
             </TableBodyCell>
-            <TableBodyCell>
+            <TableBodyCell role="cell">
                 <Badge label={bundle.type || 'bundle'}
                        color={BUNDLE_TYPE_COLOR[bundle.type] || 'accent'}/>
             </TableBodyCell>
-            <TableBodyCell>
+            <TableBodyCell role="cell">
                 <Badge label={bundle.version} color="accent"/>
             </TableBodyCell>
             {updates.length > 0 && (
-                <TableBodyCell>
+                <TableBodyCell role="cell">
                     {updateAvailable && (
                         <Badge label={updates.find(u => u.name === bundle.symbolicName && u.version === bundle.version).available}
                                color="success"/>
@@ -143,7 +143,7 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
                     )}
                 </TableBodyCell>
             )}
-            <TableBodyCell>
+            <TableBodyCell role="cell">
                 <Chip variant="bright"
                       label={bundle.state}
                       color={bundle.state === 'ACTIVE' ? 'success' : 'danger'}
@@ -163,12 +163,12 @@ const ModuleRow = memo(({module, updates, handleUpdate, dependentUpdates, report
                 )}
             </TableBodyCell>
             {isClustered && (
-                <TableBodyCell>
+                <TableBodyCell role="cell">
                     <ClusterDeploymentStatus clusterDeployment={bundle.clusterDeployment}
                                              bundleKey={`${bundle.symbolicName}/${bundle.version}`}/>
                 </TableBodyCell>
             )}
-            <TableBodyCell>
+            <TableBodyCell role="cell">
                 <BundleActions bundle={bundle}
                                refetch={refetch}
                                refreshAllModules={refreshAllModules}

@@ -51,6 +51,7 @@ export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript, title}
                 open={isOpen}
                 maxWidth="md"
                 data-testid="dryrun-result-dialog"
+                PaperProps={{'aria-modal': 'true'}}
                 onClose={onClose}
                 onEnter={handleEnter}
         >

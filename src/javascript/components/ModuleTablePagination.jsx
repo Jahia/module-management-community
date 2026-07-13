@@ -20,7 +20,12 @@ export const ModuleTablePagination = ({
 
     return (
         <div className={styles.paginationContainer}>
-            <Typography variant="body" className={styles.paginationInfo}>
+            {/* A11y: announce count changes on filter/page navigation */}
+            <Typography variant="body"
+                        className={styles.paginationInfo}
+                        role="status"
+                        aria-live="polite"
+            >
                 {t('label.pagination.showing', {
                     from: Math.min(((currentPage - 1) * itemsPerPage) + 1, totalItems),
                     to: Math.min(currentPage * itemsPerPage, totalItems),
