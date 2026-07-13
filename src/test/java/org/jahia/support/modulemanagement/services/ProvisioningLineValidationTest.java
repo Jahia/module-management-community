@@ -48,17 +48,24 @@ public class ProvisioningLineValidationTest {
     }
 
     /**
-     * FINDING (for Stage 7): {@code validateProvisioningLine} matches {@code "karafCommand"}
-     * case-sensitively, so a lowercase {@code karafcommand} key is NOT rejected by this guard.
-     * Documented here as real behaviour; Jahia's provisioning parser treats the operation key as
-     * case-sensitive, so a lowercase key is not a valid op — but the guard is narrower than the
-     * spec assumed and should be reviewed.
+     * Finding #1 fix: {@code validateProvisioningLine} now matches {@code karafCommand}
+     * case-insensitively, so a lowercase {@code karafcommand} (or any casing) key is rejected too —
+     * defence-in-depth against a differently-cased key slipping past the anti-RCE guard.
      */
     @Test
-    public void validateProvisioningLine_lowercaseKarafcommand_notCaught_documentsCaseSensitivity() {
-        assertThatCode(() -> service.validateProvisioningLine(
+    public void validateProvisioningLine_lowercaseKarafcommand_rejected() {
+        assertThatThrownBy(() -> service.validateProvisioningLine(
                 "- karafcommand: \"feature:install evil\"", EXTRACT_DIR_URI))
-                .doesNotThrowAnyException();
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("karafCommand");
+    }
+
+    @Test
+    public void validateProvisioningLine_mixedCaseKarafCommand_rejected() {
+        assertThatThrownBy(() -> service.validateProvisioningLine(
+                "- KarafCoMMand: \"feature:install evil\"", EXTRACT_DIR_URI))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("karafCommand");
     }
 
     // ── S8: url: allowlist ────────────────────────────────────────────────────────

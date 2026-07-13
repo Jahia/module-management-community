@@ -21,8 +21,14 @@ import static org.mockito.Mockito.when;
 
 /**
  * S17 — {@code AbstractModuleManagementServlet.checkAuthorized} rejects null user / guest / a null
- * auth context / a session-derived authentication (anti-CSRF), and accepts a token-authenticated
- * non-guest user that holds the required permission. Security-critical (U9).
+ * auth context / an authenticated user lacking the required API-scope permission, and accepts any
+ * non-guest authenticated user that holds it — including session-derived auth, which is the module's
+ * own same-origin admin-UI mechanism ({@code credentials: 'same-origin'}). Security-critical (U9).
+ *
+ * <p>Finding #3 fix: the previous blanket rejection of session-derived auth blocked the UI's only
+ * call path while adding no security — the API scope is {@code auto_apply: origin: hosted} and
+ * constrained by {@code provisioningAccess}, so it already gates on same-origin + permission. CSRF is
+ * therefore defended by the scope, not by refusing session cookies.
  */
 public class CheckAuthorizedTest {
 
@@ -111,8 +117,39 @@ public class CheckAuthorizedTest {
     }
 
     @Test
-    public void sessionDerivedAuth_rejectedWith401() throws Exception {
+    public void sessionDerivedAuthWithPermission_accepted() throws Exception {
+        // Finding #3: session-derived auth (the admin UI's same-origin cookie call) is now accepted
+        // when the caller holds the origin-scoped, provisioningAccess-constrained API scope. It must
+        // NOT be rejected merely for being session-derived.
         PermissionService perm = mock(PermissionService.class);
+        when(perm.hasPermission(anyString())).thenReturn(true);
+        TestServlet servlet = new TestServlet(perm);
+        HttpServletResponse resp = mockResponse();
+        JahiaUser user = mock(JahiaUser.class);
+        AuthValveContext ctx = mock(AuthValveContext.class);
+        when(ctx.isAuthRetrievedFromSession()).thenReturn(true);
+        HttpServletRequest req = requestWithCtx(ctx);
+
+        try (MockedStatic<JCRSessionFactory> sf = mockStatic(JCRSessionFactory.class);
+             MockedStatic<JahiaUserManagerService> um = mockStatic(JahiaUserManagerService.class)) {
+            JCRSessionFactory factory = mock(JCRSessionFactory.class);
+            when(factory.getCurrentUser()).thenReturn(user);
+            sf.when(JCRSessionFactory::getInstance).thenReturn(factory);
+            um.when(() -> JahiaUserManagerService.isGuest(user)).thenReturn(false);
+
+            JahiaUser result = servlet.checkAuthorized(req, resp, PERM);
+
+            assertThat(result).isSameAs(user);
+            verify(resp, org.mockito.Mockito.never()).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        }
+    }
+
+    @Test
+    public void sessionDerivedAuthWithoutPermission_rejectedWith401() throws Exception {
+        // A session-authenticated caller lacking the scope (e.g. cross-origin, so the hosted scope is
+        // not applied, or no provisioningAccess) is still denied.
+        PermissionService perm = mock(PermissionService.class);
+        when(perm.hasPermission(anyString())).thenReturn(false);
         TestServlet servlet = new TestServlet(perm);
         HttpServletResponse resp = mockResponse();
         JahiaUser user = mock(JahiaUser.class);
