@@ -1,0 +1,10 @@
+query GetFeatures($jahiaOnly: Boolean, $filters: [String]) {
+    admin {
+        modulesManagement {
+            features(jahiaOnly: $jahiaOnly, filters: $filters) {
+                name
+                version
+            }
+        }
+    }
+}

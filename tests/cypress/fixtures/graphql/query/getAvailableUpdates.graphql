@@ -1,0 +1,7 @@
+query GetAvailableUpdates($filters: [String]) {
+    admin {
+        modulesManagement {
+            availableUpdates(filters: $filters)
+        }
+    }
+}

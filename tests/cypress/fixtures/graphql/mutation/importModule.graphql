@@ -1,0 +1,7 @@
+mutation ImportModule($bundleId: Long!, $force: Boolean) {
+    admin {
+        modulesManagement {
+            importModule(bundleId: $bundleId, force: $force)
+        }
+    }
+}
