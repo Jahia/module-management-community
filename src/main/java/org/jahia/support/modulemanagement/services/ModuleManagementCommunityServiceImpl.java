@@ -384,7 +384,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * Strips CR, LF and other ISO control characters from a user-controlled value before it is
      * written to the log, defeating log-forging / log-injection (Sonar javasecurity:S5145).
      */
-    private static String sanitizeForLog(String value) {
+    static String sanitizeForLog(String value) {
         if (value == null) {
             return null;
         }
@@ -606,7 +606,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * stream exceeds the cap. Protects against an oversized / malicious response body
      * (unbounded {@code readAllBytes} could exhaust the heap).
      */
-    private static byte[] readBounded(InputStream in, int maxBytes) throws IOException {
+    static byte[] readBounded(InputStream in, int maxBytes) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         byte[] chunk = new byte[8192];
         int total = 0;
@@ -624,7 +624,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     /**
      * Load the bundled (classpath) copy of the store module list as an offline fallback.
      */
-    private void loadBundledStoreIndex() {
+    void loadBundledStoreIndex() {
         URL resource = getClass().getClassLoader().getResource("modules-repository.moduleList.json");
         if (resource == null) {
             logger.warn("Bundled store module list not found in classpath — update index will remain empty");
@@ -1212,7 +1212,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return result;
     }
 
-    private void copyJARToTmpFile(String jcrPath, String[] fileNameHolder, File tempFile) throws IOException {
+    void copyJARToTmpFile(String jcrPath, String[] fileNameHolder, File tempFile) throws IOException {
         try {
             // Stream JCR binary directly to disk — never holds the full JAR in memory
             jcrTemplate.doExecuteWithSystemSessionAsUser(
@@ -1678,7 +1678,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * @param embedAll       when true, emit ${archiveRoot} URLs; when false, emit mvn: URLs for Maven bundles
      * @param mavenFallbacks zipEntryName → mvn: URL for bundles where embedAll=true but JAR could not be resolved
      */
-    private String buildExportYamlString(List<Bundle> bundles, Map<String, File> embeddedJars,
+    String buildExportYamlString(List<Bundle> bundles, Map<String, File> embeddedJars,
                                          boolean embedAll, Map<String, String> mavenFallbacks) {
         int defaultStartLevel = SettingsBean.getInstance().getModuleStartLevel();
         StringBuilder sb = new StringBuilder();
@@ -1738,7 +1738,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     /**
      * Preview / simple overload — no fallbacks map needed.
      */
-    private String buildExportYamlString(List<Bundle> bundles, Map<String, File> embeddedJars, boolean embedAll) {
+    String buildExportYamlString(List<Bundle> bundles, Map<String, File> embeddedJars, boolean embedAll) {
         return buildExportYamlString(bundles, embeddedJars, embedAll, Collections.emptyMap());
     }
 
@@ -1905,7 +1905,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * canonical path that escapes {@code targetDir}). Extracted from {@link #extractModuleArchive}
      * to keep that loop's cognitive complexity within bounds (Sonar S3776).
      */
-    private File resolveSafeZipEntry(String name, File targetDir) throws IOException {
+    File resolveSafeZipEntry(String name, File targetDir) throws IOException {
         // Security: no path traversal
         if (name.contains("..") || name.startsWith("/")) {
             if (logger.isWarnEnabled()) {
@@ -1934,7 +1934,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      *
      * @return the new running total of bytes written
      */
-    private long copyZipEntry(ZipInputStream zis, File outFile, File targetDir, long totalBytes) throws IOException {
+    long copyZipEntry(ZipInputStream zis, File outFile, File targetDir, long totalBytes) throws IOException {
         long running = totalBytes;
         try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(outFile), 65536)) {
             byte[] buf = new byte[65536];
@@ -1953,7 +1953,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     }
 
     /** Clean up the partial extraction directory and abort with a clear error (C1). */
-    private void abortExtraction(File targetDir, String reason) throws IOException {
+    void abortExtraction(File targetDir, String reason) throws IOException {
         FileUtils.deleteQuietly(targetDir);
         throw new IOException("Rejecting archive — possible zip bomb: " + reason);
     }
@@ -1963,7 +1963,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * operation and ensures every {@code url:} value either resolves under {@code extractDirUri}
      * (an embedded JAR) or is an {@code mvn:} / {@code https:} store URL.
      */
-    private void validateImportedProvisioningYaml(String yaml, String extractDirUri) throws IOException {
+    void validateImportedProvisioningYaml(String yaml, String extractDirUri) throws IOException {
         for (String rawLine : yaml.split("\n")) {
             String line = rawLine.trim();
             if (!line.startsWith("#")) {
@@ -1978,7 +1978,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * or an {@code https:} store URL. Extracted from {@link #validateImportedProvisioningYaml} to
      * keep the loop simple (Sonar S135 / S3776).
      */
-    private void validateProvisioningLine(String line, String extractDirUri) throws IOException {
+    void validateProvisioningLine(String line, String extractDirUri) throws IOException {
         if (line.contains("karafCommand")) {
             throw new IOException("Imported provisioning script must not contain karafCommand operations");
         }
@@ -2006,7 +2006,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return hash >= 0 ? value.substring(0, hash).trim() : value;
     }
 
-    private void validateOsgiBundle(File jarFile, String fileName) throws IOException {
+    void validateOsgiBundle(File jarFile, String fileName) throws IOException {
         if (!fileName.toLowerCase().endsWith(".jar")) {
             throw new IOException("Only .jar files are accepted");
         }
