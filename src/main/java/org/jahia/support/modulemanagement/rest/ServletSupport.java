@@ -42,7 +42,7 @@ final class ServletSupport {
      * Returns {@code true} when {@code origin} (a value such as {@code https://host:443})
      * matches the scheme/host/port the current request was served on.
      */
-    private static boolean isSameOrigin(HttpServletRequest request, String origin) {
+    static boolean isSameOrigin(HttpServletRequest request, String origin) {
         try {
             java.net.URI o = java.net.URI.create(origin);
             String oScheme = o.getScheme();

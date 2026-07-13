@@ -26,7 +26,7 @@ import styles from './ModuleManagementCommunityApp.scss';
 import {Card, CardContent, CardHeader, Divider, TableSortLabel, Tooltip} from '@material-ui/core';
 import dayjs from 'dayjs';
 
-import {getComparator, resolveAllDependentModules} from '../utils/moduleUtils';
+import {getComparator, resolveAllDependentModules, buildModuleFilter, ariaSortFor} from '../utils/moduleUtils';
 import {useModulePreferences} from '../hooks/useModulePreferences';
 import ModuleRow from './ModuleRow';
 import {ModuleTablePagination} from './ModuleTablePagination';
@@ -40,44 +40,8 @@ import PropTypes from 'prop-types';
 
 // ── GraphQL documents ────────────────────────────────────────────────────────
 
-/** Module types that are "Jahia modules" as opposed to plain OSGi bundles. */
-const JAHIA_MODULE_TYPES = ['module', 'system', 'templatesSet'];
-
-/** Aria-sort value for a column header given the active sort column/direction. */
-const ariaSortFor = (property, orderBy, order) => {
-    if (orderBy !== property) {
-        return 'none';
-    }
-
-    return order === 'asc' ? 'ascending' : 'descending';
-};
-
-/**
- * Predicate factory for the installed-modules table filter. Extracted from the
- * component to keep the render function's cognitive complexity within budget.
- */
-const buildModuleFilter = ({updatesOnly, updates, dependentUpdates, typeFilter, bundleTypes, debouncedFilter}) => module => {
-    if (updatesOnly &&
-        !updates.some(u => u.name === module.name) &&
-        !dependentUpdates[module.name]?.length) {
-        return false;
-    }
-
-    if (typeFilter === 'jahia') {
-        const knownType = bundleTypes[module.name];
-        if (knownType && !JAHIA_MODULE_TYPES.includes(knownType)) {
-            return false;
-        }
-    } else if (typeFilter) {
-        const knownType = bundleTypes[module.name];
-        if (knownType && knownType !== typeFilter) {
-            return false;
-        }
-    }
-
-    const needle = debouncedFilter.trim().toLowerCase();
-    return needle === '' || module.name.toLowerCase().includes(needle);
-};
+// JAHIA_MODULE_TYPES, ariaSortFor and buildModuleFilter are defined in ../utils/moduleUtils
+// (extracted so the name/type/updates-only filtering can be unit-tested in isolation).
 
 const INSTALLED_MODULES_QUERY = gql`query {
     admin { modulesManagement { installedModules installedBundleTypes clustered } }

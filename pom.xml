@@ -65,6 +65,15 @@
         <cellar.version>4.1.3-jahia13</cellar.version>
         <yarn.arguments>build:simple</yarn.arguments>
         <export-package>org.jahia.support.modulemanagement.services</export-package>
+        <!-- Test tooling versions (JUnit 4 — the jahia-modules parent pins the surefire-junit4
+             provider, so JUnit 5 tests would be silently skipped as "Tests run: 0"). -->
+        <junit.version>4.13.2</junit.version>
+        <assertj.version>3.27.7</assertj.version>
+        <mockito.version>4.11.0</mockito.version>
+        <jacoco.version>0.8.11</jacoco.version>
+        <!-- Allows the frontend (node/yarn) build to be skipped for pure JUnit runs:
+             mvn -Dfrontend.skip=true test. Defaults to false so the real bundle build is unchanged. -->
+        <frontend.skip>false</frontend.skip>
     </properties>
 
     <scm>
@@ -228,6 +237,36 @@
             <version>3.1.0</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- ── Test scaffolding (test scope only — never OSGi-wired into the bundle) ── -->
+        <dependency>
+            <!-- JUnit 4: the jahia-modules parent pins the surefire-junit4 provider, so JUnit 5
+                 (jupiter) tests are silently not discovered ("Tests run: 0"). Use JUnit 4. -->
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- Inline mock-maker: enables Mockito.mockStatic() for the Jahia static context
+                 (SettingsBean, JCRSessionFactory, JahiaUserManagerService). -->
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-inline</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -262,6 +301,7 @@
                         <configuration>
                             <nodeVersion>v24.14.0</nodeVersion>
                             <yarnVersion>v1.22.22</yarnVersion>
+                            <skip>${frontend.skip}</skip>
                         </configuration>
                     </execution>
                     <execution>
@@ -270,6 +310,9 @@
                         <goals>
                             <goal>yarn</goal>
                         </goals>
+                        <configuration>
+                            <skip>${frontend.skip}</skip>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>yarn post-install</id>
@@ -279,6 +322,7 @@
                         </goals>
                         <configuration>
                             <arguments>${yarn.arguments}</arguments>
+                            <skip>${frontend.skip}</skip>
                         </configuration>
                     </execution>
                     <execution>
@@ -310,6 +354,26 @@
                         <Karaf-Commands>org.jahia.support.modulemanagement.cli</Karaf-Commands>
                     </instructions>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

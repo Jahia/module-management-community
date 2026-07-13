@@ -1,0 +1,7 @@
+query GetInstalledBundleTypes {
+    admin {
+        modulesManagement {
+            installedBundleTypes
+        }
+    }
+}

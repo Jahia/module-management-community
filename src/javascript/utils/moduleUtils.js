@@ -24,6 +24,49 @@ export const getComparator = (order, orderBy) => {
         (a, b) => -descendingComparator(a, b, orderBy);
 };
 
+/** Module types that are "Jahia modules" as opposed to plain OSGi bundles. */
+export const JAHIA_MODULE_TYPES = ['module', 'system', 'templatesSet'];
+
+/** Aria-sort value for a column header given the active sort column/direction. */
+export const ariaSortFor = (property, orderBy, order) => {
+    if (orderBy !== property) {
+        return 'none';
+    }
+
+    return order === 'asc' ? 'ascending' : 'descending';
+};
+
+/**
+ * Predicate factory for the installed-modules table filter. Extracted from the
+ * component to keep the render function's cognitive complexity within budget and
+ * to make the name/type/updates-only filtering unit-testable in isolation.
+ *
+ * Applies name (case-insensitive substring), type (jahia / individual / all) and
+ * updates-only (direct or dependent update) filters together as a logical AND.
+ */
+export const buildModuleFilter = ({updatesOnly, updates, dependentUpdates, typeFilter, bundleTypes, debouncedFilter}) => module => {
+    if (updatesOnly &&
+        !updates.some(u => u.name === module.name) &&
+        !dependentUpdates[module.name]?.length) {
+        return false;
+    }
+
+    if (typeFilter === 'jahia') {
+        const knownType = bundleTypes[module.name];
+        if (knownType && !JAHIA_MODULE_TYPES.includes(knownType)) {
+            return false;
+        }
+    } else if (typeFilter) {
+        const knownType = bundleTypes[module.name];
+        if (knownType && knownType !== typeFilter) {
+            return false;
+        }
+    }
+
+    const needle = debouncedFilter.trim().toLowerCase();
+    return needle === '' || module.name.toLowerCase().includes(needle);
+};
+
 /**
  * Recursively resolve all modules that need to be updated together with a target module.
  * Walks both forward dependencies (modules this one depends on) and reverse dependencies

@@ -1,0 +1,7 @@
+mutation InstallBundleFromJcr($jcrPath: String!) {
+    admin {
+        modulesManagement {
+            installBundleFromJcr(jcrPath: $jcrPath)
+        }
+    }
+}

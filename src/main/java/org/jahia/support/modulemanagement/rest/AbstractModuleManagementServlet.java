@@ -78,17 +78,26 @@ abstract class AbstractModuleManagementServlet extends HttpServlet {
     }
 
     /**
-     * Verifies that the request comes from a non-guest, non-session authenticated user that holds
+     * Verifies that the request comes from a non-guest authenticated user that holds
      * {@code permission}. On failure writes the generic auth error to {@code response} and returns
      * {@code null}; on success returns the authenticated {@link JahiaUser}.
+     *
+     * <p><b>Authorization model (finding #3).</b> {@code permission} is a security-filter API scope
+     * (e.g. {@code module-management-community.upload}) whose scope in the module's authorization YAML
+     * is {@code auto_apply: origin: hosted} and constrained by {@code user_permission: provisioningAccess}.
+     * That scope therefore enforces BOTH the CSRF defence (only same-origin/hosted requests get the
+     * scope applied — a cross-site forged request never does) AND the {@code provisioningAccess}
+     * requirement. We deliberately do <em>not</em> reject session-derived auth here: the module's own
+     * admin UI calls these endpoints with {@code credentials: 'same-origin'} (a session cookie), which
+     * is the intended, CSRF-safe mechanism. Rejecting session auth blocked the UI's only call path while
+     * adding no security (the origin-scoped, provisioningAccess-constrained scope already gates access).
      */
     @Nullable
     protected JahiaUser checkAuthorized(HttpServletRequest request, HttpServletResponse response, String permission)
             throws IOException {
         JahiaUser currentUser = JCRSessionFactory.getInstance().getCurrentUser();
         AuthValveContext ctx = (AuthValveContext) request.getAttribute(AuthValveContext.class.getName());
-        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser)
-                || ctx == null || ctx.isAuthRetrievedFromSession()) {
+        if (currentUser == null || JahiaUserManagerService.isGuest(currentUser) || ctx == null) {
             writeAuthRequired(response);
             return null;
         }
