@@ -318,15 +318,15 @@
       "deploy": "Deploy module",
       "deploySuccess": "Module deployed successfully. The module list has been refreshed.",
       "mode": {
-        "jar": "Deploy single module (.jar)",
+        "jar": "Deploy single module (.jar / .tgz)",
         "yaml": "Apply provisioning script (.yaml / .yml)",
         "zip": "Import snapshot archive (.zip)"
       },
       "dialog": {
         "deploy": "Deploy",
         "deploying": "Uploading and deploying module…",
-        "dropzone": "Drag & drop a .jar file here, or click to select",
-        "hint": "Only valid OSGi bundle JAR files are accepted (max 150 MB).",
+        "dropzone": "Drag & drop a .jar or .tgz file here, or click to select",
+        "hint": "Only valid OSGi bundle JAR files or JavaScript module TGZ files are accepted (max 150 MB).",
         "title": "Deploy / Import module"
       },
       "error": {
@@ -335,7 +335,7 @@
       "success": "Module {{fileName}} deployed successfully",
       "validation": {
         "noFile": "Please select a file",
-        "notJar": "Only .jar files are accepted"
+        "notJar": "Only .jar and .tgz files are accepted"
       }
     },
     "yaml": {

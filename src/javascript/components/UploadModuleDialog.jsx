@@ -13,16 +13,16 @@ const IMPORT_URL = `${window.contextJsParameters?.contextPath || ''}/modules/mod
 // drop-zone aria-label can reflect the currently accepted extension (A11y HIGH-9).
 const MODE_CONFIG = {
     jar: {
-        accept: '.jar',
+        accept: '.jar,.tgz',
         icon: '📦',
-        emojiLabel: 'JAR file',
-        extensions: '.jar',
+        emojiLabel: 'JAR or TGZ file',
+        extensions: '.jar, .tgz',
         dropzoneKey: 'label.upload.dialog.dropzone',
         deployKey: 'label.upload.dialog.deploy',
         uploadingKey: 'label.upload.dialog.deploying',
         hintKey: 'label.upload.dialog.hint',
         validationKey: 'label.upload.validation.notJar',
-        isValid: name => name.endsWith('.jar')
+        isValid: name => name.endsWith('.jar') || name.endsWith('.tgz')
     },
     zip: {
         accept: '.zip',

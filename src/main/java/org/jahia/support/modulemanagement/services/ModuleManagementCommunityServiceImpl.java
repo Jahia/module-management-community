@@ -219,7 +219,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
     }
 
-    /** The empty/not-populated snapshot: no updates map, no check timestamp. */
+    /**
+     * The empty/not-populated snapshot: no updates map, no check timestamp.
+     */
     private static final UpdatesSnapshot EMPTY_SNAPSHOT = new UpdatesSnapshot(null, null);
 
     private final AtomicReference<UpdatesSnapshot> updatesSnapshot = new AtomicReference<>(EMPTY_SNAPSHOT);
@@ -1448,13 +1450,17 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             throw new IOException("Module deployment is only available on processing servers");
         }
 
-        File tempFile = File.createTempFile("module-upload-", ".jar", new File(settingsBean.getTmpContentDiskPath()));
+        boolean isTgz = fileName.toLowerCase().endsWith(".tgz");
+        String tempSuffix = isTgz ? ".tgz" : ".jar";
+        File tempFile = File.createTempFile("module-upload-", tempSuffix, new File(settingsBean.getTmpContentDiskPath()));
         try {
             FileUtils.copyInputStreamToFile(fileStream, tempFile);
-            validateOsgiBundle(tempFile, fileName);
+            if (!isTgz) {
+                validateOsgiBundle(tempFile, fileName);
+            }
 
             String yamlScript = YAML_INSTALL_OR_UPGRADE +
-                    YAML_URL_PREFIX + tempFile.toURI() + "'\n" +
+                    YAML_URL_PREFIX + (isTgz ? "js:" : "") + tempFile.toURI() + "'\n" +
                     YAML_AUTOSTART_TRUE +
                     "  uninstallPreviousVersion: true\n" +
                     "  ignoreChecks: false\n" +
@@ -1952,7 +1958,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return running;
     }
 
-    /** Clean up the partial extraction directory and abort with a clear error (C1). */
+    /**
+     * Clean up the partial extraction directory and abort with a clear error (C1).
+     */
     private void abortExtraction(File targetDir, String reason) throws IOException {
         FileUtils.deleteQuietly(targetDir);
         throw new IOException("Rejecting archive — possible zip bomb: " + reason);
@@ -1995,7 +2003,9 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         }
     }
 
-    /** Strips surrounding quotes and any trailing inline comment from a raw YAML scalar value. */
+    /**
+     * Strips surrounding quotes and any trailing inline comment from a raw YAML scalar value.
+     */
     private static String extractUrlValue(String value) {
         if (value.startsWith("'") || value.startsWith("\"")) {
             char quote = value.charAt(0);
@@ -2008,7 +2018,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
 
     private void validateOsgiBundle(File jarFile, String fileName) throws IOException {
         if (!fileName.toLowerCase().endsWith(".jar")) {
-            throw new IOException("Only .jar files are accepted");
+            throw new IOException("Only .jar and .tgz files are accepted");
         }
         try (java.util.jar.JarFile jar = new java.util.jar.JarFile(jarFile)) {
             java.util.jar.Manifest manifest = jar.getManifest();
