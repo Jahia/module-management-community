@@ -57,7 +57,7 @@
         "@babel/plugin-transform-modules-systemjs": "^7.29.4",
         "@babel/runtime": "^7.26.10",
         "@tootallnate/once": "^2.0.1",
-        "dompurify": "^3.4.11",
+        "dompurify": "^3.4.12",
         "fast-uri": "^3.1.2",
         "flatted": "^3.4.2",
         "form-data": "^3.0.5",
