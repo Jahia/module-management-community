@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Egress filter for the store module index URL (JAHIA-SEC-271, CWE-918).
@@ -24,14 +25,35 @@ import java.util.Set;
  *
  * <p>The policy is deliberately <strong>not</strong> configurable through OSGi: an allow-list stored
  * in the very file the attacker can overwrite would defend nothing. Operators who genuinely run an
- * internal mirror relax it with the JVM system property {@value #ALLOW_INTERNAL_HOSTS_PROPERTY},
- * which is read at launch from the JVM command line rather than from OSGi configuration, so it is
- * not itself reachable by the configuration write this control exists to contain.</p>
+ * internal mirror relax it with the JVM system property {@value #ALLOW_INTERNAL_HOSTS_PROPERTY}.
+ * That property is a system property, not OSGi configuration, so the configuration write this
+ * control exists to contain cannot set it — but it is read live on every call, so anything that can
+ * already call {@code System.setProperty} (the Karaf console, JMX, another bundle, a provisioning
+ * script) or edit {@code karaf/etc/system.properties} can. Those are all root-equivalent on the
+ * node; the property raises the bar well above a {@code .cfg} write without being an absolute
+ * boundary.</p>
  *
- * <p>Known residual gap: the host is resolved here and resolved again by the JVM when the connection
- * is opened, so a resolver that answers differently between the two (DNS rebinding) is not covered.
- * Closing that would mean pinning the connection to the validated address and carrying the original
- * host in the {@code Host} header and TLS SNI by hand; it is out of scope for this control.</p>
+ * <h2>Known residual gaps</h2>
+ * <p>These are documented rather than closed. Each one is a real limit of this control.</p>
+ * <ul>
+ * <li><strong>DNS rebinding.</strong> The host is resolved here and resolved again by the JVM when
+ * the connection is opened, so a name that answers differently between the two is not covered.
+ * Closing it properly would mean pinning the connection to the validated address and carrying the
+ * original host in the {@code Host} header and TLS SNI by hand. Two things limit it in practice, and
+ * both are deployment-dependent rather than guaranteed: the JDK caches positive lookups for 30s by
+ * default, so unless {@code networkaddress.cache.ttl} is set to 0 both lookups hit one cache entry
+ * milliseconds apart; and because only {@code https} is admitted, a rebound internal host must still
+ * present a certificate valid for the attacker's name, leaving a blind TCP-connect probe rather than
+ * a readable response. With {@value #ALLOW_INTERNAL_HOSTS_PROPERTY} enabled, neither limit applies.</li>
+ * <li><strong>NAT64 network-specific prefixes.</strong> The well-known {@code 64:ff9b::/96} and the
+ * local-use {@code 64:ff9b:1::/48} are handled, but RFC 6052 also permits an operator-chosen prefix
+ * of any length carrying the IPv4 address at a length-dependent offset. Those cannot be enumerated,
+ * so a node behind such a translator can still name an internal IPv4 address in IPv6 form.</li>
+ * <li><strong>Forward proxies.</strong> If the JVM is configured with {@code https.proxyHost}, the
+ * hostname is sent in {@code CONNECT} and the proxy resolves it, so the address verdict reached here
+ * no longer describes the destination. The ambiguous leading-zero host labels that a proxy would read
+ * as octal are refused for this reason, but a proxy remains free to resolve a name differently.</li>
+ * </ul>
  */
 public final class StoreIndexUrlValidator {
 
@@ -69,7 +91,9 @@ public final class StoreIndexUrlValidator {
     private static final int IPV4_BENCHMARK_FIRST_OCTET = 198; // 198.18.0.0/15 benchmarking
     private static final int IPV4_BENCHMARK_LOW = 18;
     private static final int IPV4_BENCHMARK_HIGH = 19;
-    private static final int IPV4_RESERVED_FIRST_OCTET = 255; // 255.0.0.0/8
+    private static final int IPV4_RESERVED_FROM_OCTET = 240;  // 240.0.0.0/4 class E, incl. 255.0.0.0/8
+    private static final int IPV4_SIXTOFOUR_RELAY_SECOND = 88;  // 192.88.99.0/24 6to4 relay anycast
+    private static final int IPV4_SIXTOFOUR_RELAY_THIRD = 99;
     private static final int IPV4_BYTES = 4;
     private static final int IPV6_BYTES = 16;
     private static final int IPV6_UNIQUE_LOCAL_MASK = 0xFE;  // fc00::/7
@@ -83,12 +107,27 @@ public final class StoreIndexUrlValidator {
     // and run through the IPv4 policy rather than blanket-refused — otherwise an IPv6-only node
     // could not reach the legitimate public store either. The deprecated forms are simply refused.
     private static final byte[] IPV6_NAT64_PREFIX = {0x00, 0x64, (byte) 0xFF, (byte) 0x9B};
+    // 64:ff9b:1::/48 — RFC 8215's LOCAL-USE translation prefix. Refused outright rather than
+    // unwrapped: RFC 6052 allows the embedded IPv4 at several offsets depending on the prefix
+    // length, so unwrapping one offset would leave the others open, and a local-use prefix is by
+    // definition translating a site's own address space.
+    private static final byte[] IPV6_NAT64_LOCAL_USE_PREFIX = {0x00, 0x64, (byte) 0xFF, (byte) 0x9B, 0x00, 0x01};
     private static final int IPV6_NAT64_EMBEDDED_OFFSET = 12;
     private static final int IPV6_SIXTOFOUR_FIRST = 0x20;   // 2002::/16, 6to4, deprecated
     private static final int IPV6_SIXTOFOUR_SECOND = 0x02;
     private static final int IPV6_TEREDO_FIRST = 0x20;      // 2001:0::/32, Teredo, deprecated
     private static final int IPV6_TEREDO_SECOND = 0x01;
     private static final int IPV4_COMPATIBLE_PREFIX_BYTES = 12; // ::/96, deprecated
+    private static final int IPV4_TRANSLATED_PREFIX_BYTES = 8;  // ::ffff:0:0/96, RFC 6052
+
+    /**
+     * An all-digit host label with a leading zero. The JVM reads {@code 0177} as decimal 177, while
+     * {@code inet_aton(3)} — and therefore many forward proxies — reads it as octal 127. Refusing
+     * the form outright keeps the validator's verdict and the eventual destination in agreement.
+     * A label that merely starts with a zero but is not all digits, such as {@code 0cdn}, is a
+     * perfectly ordinary host name and is left alone.
+     */
+    private static final Pattern AMBIGUOUS_OCTAL_LABEL = Pattern.compile("0[0-9]+");
 
     private StoreIndexUrlValidator() {
         // utility class
@@ -120,6 +159,28 @@ public final class StoreIndexUrlValidator {
      *                                        resolves into a non-routable / internal range
      */
     public static void validate(String candidate) throws StoreIndexUrlRejectedException {
+        String host = validateSyntax(candidate);
+        if (isInternalHostsAllowed()) {
+            logger.warn("Store module index URL '{}' bypasses the egress policy because {} is enabled — "
+                            + "the module will issue requests to an internal or unencrypted endpoint",
+                    candidate.trim(), ALLOW_INTERNAL_HOSTS_PROPERTY);
+            return;
+        }
+        validateResolvedAddresses(candidate.trim(), host);
+    }
+
+    /**
+     * Apply every check that can be decided without asking the resolver anything.
+     *
+     * <p>Kept separate so component activation can vet a freshly written configuration value
+     * without blocking the SCR thread on DNS: a {@code .cfg} naming a host whose resolver hangs
+     * would otherwise stall activation on every write. The address checks still run — on the
+     * asynchronous refresh path, immediately before the socket is opened, which is the only place
+     * they have to hold.</p>
+     *
+     * @return the host component, for a caller that goes on to vet its addresses
+     */
+    public static String validateSyntax(String candidate) throws StoreIndexUrlRejectedException {
         if (candidate == null || candidate.trim().isEmpty()) {
             throw reject("the store module index URL is null or blank");
         }
@@ -134,6 +195,9 @@ public final class StoreIndexUrlValidator {
         if (!uri.isAbsolute()) {
             throw reject("'" + trimmed + "' is not an absolute URL");
         }
+        // Load-bearing: without this, a whole family of authorities — "host;@internal",
+        // "host,@internal", "host%09@internal", "host:443:80@internal" — parses with the INTERNAL
+        // address as the host and the decoy as user info. See the tests named after it.
         if (uri.getUserInfo() != null) {
             throw reject("'" + trimmed + "' embeds credentials in the URL, which is not allowed");
         }
@@ -146,18 +210,26 @@ public final class StoreIndexUrlValidator {
 
         boolean allowInternal = isInternalHostsAllowed();
         validateScheme(trimmed, uri.getScheme(), allowInternal);
+        validateHostLabels(trimmed, host);
 
         String hostName = host.toLowerCase(Locale.ROOT);
         if (!allowInternal && DENIED_HOST_NAMES.contains(hostName)) {
             throw rejectInternal("'" + trimmed + "' names the internal host '" + hostName + "'");
         }
-        if (allowInternal) {
-            logger.warn("Store module index URL '{}' bypasses the egress policy because {} is enabled — "
-                            + "the module will issue requests to an internal or unencrypted endpoint",
-                    trimmed, ALLOW_INTERNAL_HOSTS_PROPERTY);
-            return;
+        return host;
+    }
+
+    private static void validateHostLabels(String url, String host) throws StoreIndexUrlRejectedException {
+        if (host.startsWith("[")) {
+            return; // bracketed IPv6 literal — no dotted labels to misread
         }
-        validateResolvedAddresses(trimmed, host);
+        for (String label : host.split("\\.", -1)) {
+            if (AMBIGUOUS_OCTAL_LABEL.matcher(label).matches()) {
+                throw reject("'" + url + "' contains the host label '" + label + "', whose leading zero this"
+                        + " JVM reads as decimal but a forward proxy or C resolver reads as octal; write the"
+                        + " address without leading zeros");
+            }
+        }
     }
 
     private static void validateScheme(String url, String scheme, boolean allowInternal) throws StoreIndexUrlRejectedException {
@@ -225,11 +297,30 @@ public final class StoreIndexUrlValidator {
         if (isSixToFour(raw) || isTeredo(raw)) {
             return true;
         }
-        if (hasPrefix(raw, IPV6_NAT64_PREFIX) && isZeroRange(raw, IPV6_NAT64_PREFIX.length, IPV6_NAT64_EMBEDDED_OFFSET)) {
-            // 64:ff9b::/96 — judge it by the IPv4 address it carries.
+        if (hasPrefix(raw, IPV6_NAT64_LOCAL_USE_PREFIX)) {
+            return true; // 64:ff9b:1::/48, local use
+        }
+        if (isWellKnownNat64(raw) || isIpv4Translated(raw)) {
+            // 64:ff9b::/96 and ::ffff:0:0/96 — judge them by the IPv4 address they carry.
             return isBlockedEmbeddedIpv4(Arrays.copyOfRange(raw, IPV6_NAT64_EMBEDDED_OFFSET, IPV6_BYTES));
         }
         return false;
+    }
+
+    private static boolean isWellKnownNat64(byte[] raw) {
+        return hasPrefix(raw, IPV6_NAT64_PREFIX)
+                && isZeroRange(raw, IPV6_NAT64_PREFIX.length, IPV6_NAT64_EMBEDDED_OFFSET);
+    }
+
+    /** {@code ::ffff:0:0/96}, RFC 6052's IPv4-translated form — note the 0xFFFF sits two bytes
+     *  earlier than in the IPv4-<em>mapped</em> form, which Java already hands back as an
+     *  {@link java.net.Inet4Address}. */
+    private static boolean isIpv4Translated(byte[] raw) {
+        return isZeroPrefix(raw, IPV4_TRANSLATED_PREFIX_BYTES)
+                && (raw[8] & BYTE_MASK) == BYTE_MASK
+                && (raw[9] & BYTE_MASK) == BYTE_MASK
+                && raw[10] == 0
+                && raw[11] == 0;
     }
 
     /**
@@ -284,7 +375,7 @@ public final class StoreIndexUrlValidator {
         int first = raw[0] & BYTE_MASK;
         int second = raw[1] & BYTE_MASK;
         int third = raw[2] & BYTE_MASK;
-        if (first == IPV4_THIS_NETWORK || first == IPV4_RESERVED_FIRST_OCTET) {
+        if (first == IPV4_THIS_NETWORK || first >= IPV4_RESERVED_FROM_OCTET) {
             return true;
         }
         if (first == IPV4_CGNAT_FIRST_OCTET && second >= IPV4_CGNAT_LOW && second <= IPV4_CGNAT_HIGH) {
@@ -292,6 +383,10 @@ public final class StoreIndexUrlValidator {
         }
         if (first == IPV4_IETF_FIRST_OCTET && second == 0 && third == 0) {
             return true;
+        }
+        if (first == IPV4_IETF_FIRST_OCTET && second == IPV4_SIXTOFOUR_RELAY_SECOND
+                && third == IPV4_SIXTOFOUR_RELAY_THIRD) {
+            return true; // 192.88.99.0/24, the 6to4 relay anycast counterpart of 2002::/16
         }
         return first == IPV4_BENCHMARK_FIRST_OCTET && second >= IPV4_BENCHMARK_LOW && second <= IPV4_BENCHMARK_HIGH;
     }

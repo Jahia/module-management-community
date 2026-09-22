@@ -255,8 +255,9 @@ The value is vetted before every request, and again on every redirect hop:
 | `https` scheme only | `http://…`, `file:///etc/passwd`, `ftp://…` |
 | No credentials in the URL | `https://admin:secret@host/…` |
 | Host must not resolve to a non-routable or internal address | `127.0.0.1`, `[::1]`, `0.0.0.0`, `169.254.169.254` (AWS/GCP/Azure metadata), `10/8`, `172.16/12`, `192.168/16`, `100.64/10` (incl. Alibaba metadata), `fd00::/8`, `fe80::/10`, multicast, `255/8` |
-| IPv6 transition forms are judged by the IPv4 address they carry | `[::127.0.0.1]` and `[::169.254.169.254]` (IPv4-compatible), `[64:ff9b::7f00:1]` (NAT64), `[2002:7f00:1::]` (6to4), `[2001:0:7f00:1::]` (Teredo) |
-| Only RFC 3986 host syntax is accepted, so parser tricks fail closed | `127.1`, `0x7f.0.0.1`, `127.0.0.1.`, `https://evil.com\@169.254.169.254/` |
+| IPv6 transition forms are judged by the IPv4 address they carry | `[::127.0.0.1]` (IPv4-compatible), `[::ffff:0:7f00:1]` (IPv4-translated), `[64:ff9b::7f00:1]` and `[64:ff9b:1::7f00:1]` (NAT64), `[2002:7f00:1::]` (6to4), `[2001:0:7f00:1::]` (Teredo) |
+| Only RFC 3986 host syntax is accepted, so parser tricks fail closed | `127.1`, `0x7f.0.0.1`, `127.0.0.1.`, `https://evil.com\@169.254.169.254/`, `https://host;@169.254.169.254/` |
+| All-digit host labels with a leading zero are refused | `0177.0.0.1` (this JVM reads decimal 177, an `inet_aton` proxy reads octal 127) |
 | Host name not on the internal-name denylist | `localhost`, `metadata`, `metadata.google.internal`, `instance-data` |
 | Redirects are not auto-followed | a 302 from an allowed host to `169.254.169.254` |
 
@@ -278,9 +279,30 @@ Installations using the default `https://store.jahia.com/...` URL are unaffected
 A NAT64-wrapped **public** address (`64:ff9b::5db8:d822`) is still accepted, so an IPv6-only node
 can keep reaching the legitimate store — only the embedded-internal variants are refused.
 
-*Known residual gap:* the host is resolved by the validator and resolved again by the JVM when the
-socket is opened, so a resolver that answers differently between the two (DNS rebinding) is not
-covered by this control.
+#### Known residual gaps
+
+These are documented rather than closed. Each is a real limit of the control.
+
+- **DNS rebinding.** The host is resolved by the validator and resolved again by the JVM when the
+  socket opens, so a name answering differently between the two is not covered. Two things limit it
+  in practice, both deployment-dependent: the JDK caches positive lookups for 30s by default, so
+  unless `networkaddress.cache.ttl=0` both lookups hit one cache entry milliseconds apart; and
+  because only `https` is admitted, a rebound internal host must still present a certificate valid
+  for the attacker's name, leaving a blind TCP-connect probe rather than a readable response. With
+  the escape hatch enabled, neither limit applies.
+- **NAT64 network-specific prefixes.** The well-known `64:ff9b::/96` and local-use `64:ff9b:1::/48`
+  are handled, but RFC 6052 also permits an operator-chosen prefix of any length. Those cannot be
+  enumerated, so a node behind such a translator can still name an internal IPv4 in IPv6 form.
+- **Forward proxies.** With `https.proxyHost` set, the hostname goes out in `CONNECT` and the proxy
+  resolves it, so the address verdict no longer describes the destination.
+- **The filter constrains *where*, not *what*.** An attacker who can rewrite the `.cfg` can still
+  point the catalogue at their own *public* https host. What they can do with a catalogue they
+  control is a separate concern from this control — see the `downloadUrl` handling in
+  `updateModules`.
+- **The escape hatch is not a hard boundary.** It is a system property, so an OSGi configuration
+  write cannot set it, but it is read live and anything that can call `System.setProperty` (Karaf
+  console, JMX, another bundle, a provisioning script) or edit `karaf/etc/system.properties` can.
+  Those are root-equivalent on the node.
 
 ## Contributing
 

@@ -591,11 +591,17 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
      * reactivate this component — which schedules a refresh on its own. A rejected value therefore
      * falls back to the shipped default rather than being carried forward, so the forged request is
      * never issued at all.</p>
+     *
+     * <p>Only the resolver-free checks run here; see
+     * {@link StoreIndexUrlValidator#validateSyntax(String)} for why.</p>
      */
     private String resolveStoreModuleListUrl(String configuredUrl) {
-        String candidate = StringUtils.defaultIfBlank(configuredUrl, STORE_MODULE_LIST_URL);
+        String candidate = StringUtils.defaultIfBlank(configuredUrl, STORE_MODULE_LIST_URL).trim();
         try {
-            StoreIndexUrlValidator.validate(candidate);
+            // Syntax only: the address checks need DNS, and this runs on the SCR activation thread,
+            // where a hanging resolver would stall the whole component. They run instead on the
+            // asynchronous refresh path, immediately before the socket is opened.
+            StoreIndexUrlValidator.validateSyntax(candidate);
             return candidate;
         } catch (StoreIndexUrlRejectedException e) {
             if (e.isPolicyViolation()) {

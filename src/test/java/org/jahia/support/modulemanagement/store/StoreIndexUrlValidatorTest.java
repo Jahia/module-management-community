@@ -199,6 +199,115 @@ public class StoreIndexUrlValidatorTest {
         assertRejected("https://[::ffff:127.0.0.1]/modules.json");
     }
 
+    // ── authority parser tricks ─────────────────────────────────────────────────
+    // These are the shapes where java.net.URI and java.net.URL disagree, and they are the reason
+    // the userInfo and null-host checks must not be relaxed or refactored away. In every case below
+    // `new URL(...).getHost()` returns 169.254.169.254 — the checks are all that stand in the way.
+
+    /**
+     * Each of these parses as a <em>server-based</em> authority whose host is the internal address
+     * and whose user info is the decoy name. Only the {@code getUserInfo() != null} check refuses
+     * them; there is nothing internal-looking about the host string itself to catch.
+     */
+    @Test
+    public void rejectsTheUserInfoDecoyFamily() {
+        assertRejected("https://legit.example.com;@169.254.169.254/x");
+        assertRejected("https://legit.example.com,@169.254.169.254/x");
+        assertRejected("https://legit.example.com!@169.254.169.254/x");
+        assertRejected("https://legit.example.com$@169.254.169.254/x");
+        assertRejected("https://legit.example.com=@169.254.169.254/x");
+        assertRejected("https://legit.example.com&@169.254.169.254/x");
+        assertRejected("https://legit.example.com+@169.254.169.254/x");
+        assertRejected("https://legit.example.com%09@169.254.169.254/x");
+        assertRejected("https://legit.example.com%2f@169.254.169.254/x");
+        assertRejected("https://legit.example.com:443:80@169.254.169.254/x");
+    }
+
+    @Test
+    public void theUserInfoDecoyFamilyIsRejectedForEmbeddingCredentialsSpecifically() {
+        // Arrange + Act: pin the reason, not just the outcome — if a refactor started reporting
+        // these as "no parseable host" it would mean the authority is being parsed differently.
+        try {
+            StoreIndexUrlValidator.validate("https://legit.example.com;@169.254.169.254/x");
+            fail("expected rejection");
+        } catch (StoreIndexUrlRejectedException e) {
+            // Assert
+            assertTrue("was: " + e.getMessage(), e.getMessage().contains("embeds credentials"));
+        }
+    }
+
+    @Test
+    public void rejectsBackslashAndControlCharacterAuthorities() {
+        // java.net.URL resolves the host of the first two to 169.254.169.254; URI refuses them, and
+        // nothing is connected to unless URI parsing succeeded first.
+        assertRejected("https://legit.example.com\\@169.254.169.254/x");
+        assertRejected("https://legit.example.com]@169.254.169.254/x");
+        assertRejected("https://legit.example.com\t@169.254.169.254/x");
+        assertRejected("https://legit.example.com%00@169.254.169.254/x");
+        assertRejected("https:/\\169.254.169.254/x");
+    }
+
+    @Test
+    public void rejectsAuthoritiesThatLeaveUriWithoutAHost() {
+        assertRejected("https://a@b@169.254.169.254/x");
+        assertRejected("https://legit.example.com\u3002169.254.169.254/x"); // ideographic full stop
+        assertRejected("https://legit.example.com:+443/x");
+        assertRejected("https://169%2e254%2e169%2e254/x");
+    }
+
+    @Test
+    public void rejectsAmbiguousLeadingZeroHostLabelsThatAProxyWouldReadAsOctal() {
+        // This JVM reads 0177 as decimal 177, an inet_aton-based proxy reads it as octal 127, so the
+        // validator's verdict would not describe where the request actually goes.
+        assertRejected("https://0177.0.0.1/modules.json");
+        assertRejected("https://0177.00.00.01/modules.json");
+    }
+
+    @Test
+    public void acceptsAHostLabelThatMerelyStartsWithAZero() throws Exception {
+        // Arrange: only all-digit labels are ambiguous; 0cdn is an ordinary host name and the rule
+        // must not sweep it up. Checked through the resolver-free pass so the test stays offline.
+        StoreIndexUrlValidator.validateSyntax("https://0cdn.example.com/modules.json");
+        StoreIndexUrlValidator.validateSyntax("https://0.example.com/modules.json");
+    }
+
+    // ── resolver-free pass ──────────────────────────────────────────────────────
+
+    @Test
+    public void syntaxPassAcceptsAHostItNeverResolves() throws Exception {
+        // Arrange + Act: a name that cannot resolve is fine for the syntax pass, which is what lets
+        // component activation vet a config value without blocking on DNS.
+        String host = StoreIndexUrlValidator.validateSyntax(
+                "https://no-such-host.invalid/modules-repository.moduleList.json");
+
+        // Assert
+        assertEquals("no-such-host.invalid", host);
+    }
+
+    @Test
+    public void syntaxPassStillEnforcesSchemeCredentialsAndInternalNames() {
+        // Arrange: skipping DNS must not mean skipping everything else.
+        String[] rejected = {
+                "http://93.184.216.34/x",
+                "file:///etc/passwd",
+                "https://admin:secret@93.184.216.34/x",
+                "https://localhost/x",
+                "https://metadata.google.internal/x",
+                "https://0177.0.0.1/x",
+                "   ",
+        };
+
+        // Act + Assert
+        for (String url : rejected) {
+            try {
+                StoreIndexUrlValidator.validateSyntax(url);
+                fail("expected the syntax pass to reject " + url);
+            } catch (StoreIndexUrlRejectedException expected) {
+                assertTrue(expected.getMessage().length() > 0);
+            }
+        }
+    }
+
     // ── IPv6 transition addresses that smuggle an IPv4 target ───────────────────
     // None of these are caught by InetAddress.isLoopbackAddress() and friends: Java hands back a
     // plain Inet6Address with every predicate false, so each one needs its own rule.
@@ -251,6 +360,36 @@ public class StoreIndexUrlValidatorTest {
         // Arrange: only 2001:0000::/32 is Teredo — 2001:db8::/32 and friends are ordinary unicast
         // and must not be swept up with it.
         assertAccepted("https://[2001:4860:4860::8888]/modules.json");
+    }
+
+    @Test
+    public void rejectsLocalUseNat64Prefix() {
+        // 64:ff9b:1::/48 is RFC 8215's local-use translation prefix. It is refused outright rather
+        // than unwrapped, because RFC 6052 puts the embedded IPv4 at a prefix-length-dependent
+        // offset, so unwrapping one offset would leave the others open.
+        assertRejected("https://[64:ff9b:1::7f00:1]/modules.json");
+        assertRejected("https://[64:ff9b:1::a9fe:a9fe]/modules.json");
+        assertRejected("https://[64:ff9b:1:0:0:7f00:1:0]/modules.json");
+    }
+
+    @Test
+    public void rejectsIpv4TranslatedLoopbackAndMetadata() {
+        // ::ffff:0:0/96 — the 0xFFFF sits two bytes earlier than in the IPv4-mapped form, so Java
+        // returns an Inet6Address here and none of its predicates fire.
+        assertRejected("https://[::ffff:0:7f00:1]/modules.json");
+        assertRejected("https://[::ffff:0:a9fe:a9fe]/modules.json");
+    }
+
+    @Test
+    public void rejectsClassEReservedRange() {
+        assertRejected("https://240.0.0.1/modules.json");
+        assertRejected("https://254.169.254.169/modules.json");
+    }
+
+    @Test
+    public void rejectsSixToFourRelayAnycastRange() {
+        // 192.88.99.0/24 is the IPv4 counterpart of the already-refused 2002::/16.
+        assertRejected("https://192.88.99.1/modules.json");
     }
 
     // ── operator escape hatch ───────────────────────────────────────────────────
