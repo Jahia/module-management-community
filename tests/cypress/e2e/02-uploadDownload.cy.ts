@@ -94,11 +94,12 @@ describe('Upload / Download module functionality', () => {
             });
         });
 
-        it('defaults to JAR mode with "Deploy single module (.jar)" selected', () => {
+        it('defaults to JAR mode with "Deploy single module (.jar / .tgz)" selected', () => {
             openUploadDialog();
             cy.get('[data-testid="upload-module-dialog"]').within(() => {
                 cy.get('input[type="radio"][value="jar"]').should('be.checked');
-                cy.contains('Deploy single module (.jar)').should('be.visible');
+                // Label key label.upload.mode.jar — covers .tgz too, since JS modules ship as tarballs
+                cy.contains('Deploy single module (.jar / .tgz)').should('be.visible');
             });
         });
 
@@ -110,10 +111,11 @@ describe('Upload / Download module functionality', () => {
             });
         });
 
-        it('shows a drop zone with JAR hint text in JAR mode', () => {
+        it('shows a drop zone with JAR/TGZ hint text in JAR mode', () => {
             openUploadDialog();
             cy.get('[data-testid="upload-module-dialog"]').within(() => {
-                cy.contains('Drag & drop a .jar file here').should('be.visible');
+                // Label key label.upload.dialog.dropzone
+                cy.contains('Drag & drop a .jar or .tgz file here').should('be.visible');
             });
         });
 
@@ -158,11 +160,11 @@ describe('Upload / Download module functionality', () => {
             });
         });
 
-        it('file input accepts only .jar files in JAR mode', () => {
+        it('file input accepts .jar and .tgz files in JAR mode', () => {
             openUploadDialog();
             cy.get('[data-testid="upload-module-dialog"]')
                 .find('input[type="file"]')
-                .should('have.attr', 'accept', '.jar');
+                .should('have.attr', 'accept', '.jar,.tgz');
         });
 
         it('file input accepts only .zip files in ZIP mode', () => {
