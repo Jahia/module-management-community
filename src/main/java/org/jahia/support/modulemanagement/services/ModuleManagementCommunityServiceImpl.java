@@ -44,6 +44,9 @@ import org.jahia.support.modulemanagement.ExportOptions;
 import org.jahia.support.modulemanagement.ModuleManagementCommunityService;
 import org.jahia.support.modulemanagement.UpdateModulesResult;
 import org.jahia.support.modulemanagement.config.ModuleManagementCommunityConfig;
+import org.jahia.support.modulemanagement.store.StoreIndexHttpFetcher;
+import org.jahia.support.modulemanagement.store.StoreIndexUrlRejectedException;
+import org.jahia.support.modulemanagement.store.StoreIndexUrlValidator;
 import org.ops4j.pax.url.mvn.MavenResolver;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
@@ -64,7 +67,6 @@ import javax.jcr.Node;
 import javax.jcr.RepositoryException;
 import javax.jcr.query.Query;
 import java.io.*;
-import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -112,8 +114,10 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     private static final String YAML_AUTOSTART_TRUE = "  autoStart: true\n";
     // siteKey must be a simple identifier to be safe in YAML / karaf commands
     private static final Pattern SITE_KEY_PATTERN = Pattern.compile("^[a-zA-Z0-9_-]+$");
-    // Cap the store-index download to defend against an oversized / malicious response body
-    private static final int MAX_STORE_INDEX_BYTES = 32 * 1024 * 1024; // 32 MB
+    // Cap the store-index read to defend against an oversized / malicious response body
+    private static final int MAX_STORE_INDEX_BYTES = StoreIndexHttpFetcher.MAX_STORE_INDEX_BYTES;
+    // Same cap, applied to an admin-supplied provisioning YAML upload
+    private static final int MAX_UPLOAD_BYTES = 32 * 1024 * 1024; // 32 MB
     // Zip-bomb defences for archive import
     private static final long MAX_TOTAL_UNCOMPRESSED_BYTES = 1024L * 1024 * 1024; // 1 GB
     private static final int MAX_ZIP_ENTRIES = 10_000;
@@ -232,7 +236,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
     @Activate
     public void activate(ModuleManagementCommunityConfig config, BundleContext bundleContext) {
         this.bundleContext = bundleContext;
-        this.storeModuleListUrl = StringUtils.defaultIfBlank(config.storeModuleListUrl(), STORE_MODULE_LIST_URL);
+        this.storeModuleListUrl = resolveStoreModuleListUrl(config.storeModuleListUrl());
         this.jahiaVersion = new org.osgi.framework.Version(Jahia.VERSION);
         logger.info("ModuleManagementCommunityService activated — Jahia {} — store index URL: {}",
                 jahiaVersion, storeModuleListUrl);
@@ -580,47 +584,58 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         return latestVersionStr;
     }
 
+    /**
+     * Vet the configured store module index URL before it is ever used (JAHIA-SEC-271).
+     *
+     * <p>The value comes from an OSGi configuration file, and a write to that file makes Felix SCR
+     * reactivate this component — which schedules a refresh on its own. A rejected value therefore
+     * falls back to the shipped default rather than being carried forward, so the forged request is
+     * never issued at all.</p>
+     *
+     * <p>Only the resolver-free checks run here; see
+     * {@link StoreIndexUrlValidator#validateSyntax(String)} for why.</p>
+     */
+    private String resolveStoreModuleListUrl(String configuredUrl) {
+        String candidate = StringUtils.defaultIfBlank(configuredUrl, STORE_MODULE_LIST_URL).trim();
+        try {
+            // Syntax only: the address checks need DNS, and this runs on the SCR activation thread,
+            // where a hanging resolver would stall the whole component. They run instead on the
+            // asynchronous refresh path, immediately before the socket is opened.
+            StoreIndexUrlValidator.validateSyntax(candidate);
+            return candidate;
+        } catch (StoreIndexUrlRejectedException e) {
+            if (e.isPolicyViolation()) {
+                logger.error("{} Falling back to the default store module index URL {}",
+                        e.getMessage(), STORE_MODULE_LIST_URL);
+            } else {
+                logger.warn("{} Falling back to the default store module index URL {}",
+                        e.getMessage(), STORE_MODULE_LIST_URL);
+            }
+            return STORE_MODULE_LIST_URL;
+        }
+    }
+
     @Override
     public void refreshStoreIndex() {
         logger.info("Refreshing store module index from {}", storeModuleListUrl);
         try {
-            HttpURLConnection conn = (HttpURLConnection) new URL(storeModuleListUrl).openConnection();
-            conn.setConnectTimeout(10_000);
-            conn.setReadTimeout(60_000);
-            conn.setRequestProperty("Accept", "application/json");
-            String json;
-            try (InputStream in = new BufferedInputStream(conn.getInputStream())) {
-                json = new String(readBounded(in, MAX_STORE_INDEX_BYTES), StandardCharsets.UTF_8);
-            }
+            String json = StoreIndexHttpFetcher.fetchJson(storeModuleListUrl);
             Map<String, StoreModuleEntry> newIndex = buildStoreIndex(json);
             storeModuleIndex.set(Collections.unmodifiableMap(newIndex));
             updatesSnapshot.set(EMPTY_SNAPSHOT); // invalidate update cache
             logger.info("Store module index refreshed from URL: {} modules indexed", newIndex.size());
+        } catch (StoreIndexUrlRejectedException e) {
+            if (e.isPolicyViolation()) {
+                logger.error("{} Using the bundled store module index instead.", e.getMessage());
+            } else {
+                logger.warn("{} Using the bundled store module index instead.", e.getMessage());
+            }
+            loadBundledStoreIndex();
         } catch (Exception e) {
             logger.warn("Failed to fetch store module index from URL ({}): {} — trying bundled fallback",
                     storeModuleListUrl, e.getMessage());
             loadBundledStoreIndex();
         }
-    }
-
-    /**
-     * Read at most {@code maxBytes} from {@code in}, aborting with an {@link IOException} if the
-     * stream exceeds the cap. Protects against an oversized / malicious response body
-     * (unbounded {@code readAllBytes} could exhaust the heap).
-     */
-    private static byte[] readBounded(InputStream in, int maxBytes) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        byte[] chunk = new byte[8192];
-        int total = 0;
-        int read;
-        while ((read = in.read(chunk)) != -1) {
-            total += read;
-            if (total > maxBytes) {
-                throw new IOException("Store index response exceeds the maximum allowed size of " + maxBytes + " bytes");
-            }
-            buffer.write(chunk, 0, read);
-        }
-        return buffer.toByteArray();
     }
 
     /**
@@ -633,7 +648,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
             return;
         }
         try (InputStream in = resource.openStream()) {
-            String json = new String(readBounded(in, MAX_STORE_INDEX_BYTES), StandardCharsets.UTF_8);
+            String json = new String(StoreIndexHttpFetcher.readBounded(in, MAX_STORE_INDEX_BYTES), StandardCharsets.UTF_8);
             Map<String, StoreModuleEntry> newIndex = buildStoreIndex(json);
             storeModuleIndex.set(Collections.unmodifiableMap(newIndex));
             updatesSnapshot.set(EMPTY_SNAPSHOT);
@@ -1492,7 +1507,7 @@ public class ModuleManagementCommunityServiceImpl implements ModuleManagementCom
         // upload permission plus non-session authentication enforced in the servlet. Because the raw
         // script may contain arbitrary provisioning operations, this method must never be exposed to
         // lower-privileged callers.
-        String yamlContent = new String(readBounded(yamlStream, MAX_STORE_INDEX_BYTES), StandardCharsets.UTF_8);
+        String yamlContent = new String(StoreIndexHttpFetcher.readBounded(yamlStream, MAX_UPLOAD_BYTES), StandardCharsets.UTF_8);
         if (yamlContent.isBlank()) {
             throw new IOException("Uploaded YAML file is empty");
         }

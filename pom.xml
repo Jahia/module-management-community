@@ -227,6 +227,13 @@
             <version>3.1.0</version>
             <scope>provided</scope>
         </dependency>
+        <!-- Unit tests -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
