@@ -240,6 +240,43 @@ All module management operations (GraphQL queries/mutations and REST endpoints) 
 - **Configuration:** `/src/main/resources/META-INF/configurations/org.jahia.bundles.api.authorization-modulemanagementcommunity.yml`
 - **Note:** These are high-privilege operations that allow bundle deployment, execution, and potential RCE. Grant carefully; typically only admins and DevOps teams should have access.
 
+### Store module index egress policy
+
+`storeModuleListUrl` (OSGi PID `org.jahia.support.modulemanagement.services.ModuleManagementCommunityService`)
+is fetched by the Jahia JVM, which makes it a server-side request forgery sink. Because the component
+declares `configurationPolicy = REQUIRE` with no `@Modified` method, any write to its `.cfg` makes
+Felix SCR reactivate it — and activation schedules a store index refresh on its own. A configuration
+write therefore turns straight into an outbound request, with no further admin action.
+
+The value is vetted before every request, and again on every redirect hop:
+
+| Rule | Rejected examples |
+|------|-------------------|
+| `https` scheme only | `http://…`, `file:///etc/passwd`, `ftp://…` |
+| No credentials in the URL | `https://admin:secret@host/…` |
+| Host must not resolve to a non-routable or internal address | `127.0.0.1`, `[::1]`, `0.0.0.0`, `169.254.169.254` (AWS/GCP/Azure metadata), `10/8`, `172.16/12`, `192.168/16`, `100.64/10` (incl. Alibaba metadata), `fd00::/8`, `fe80::/10`, multicast |
+| Host name not on the internal-name denylist | `localhost`, `metadata`, `metadata.google.internal`, `instance-data` |
+| Redirects are not auto-followed | a 302 from an allowed host to `169.254.169.254` |
+
+A rejected value is logged at `ERROR` and replaced by the shipped default; the module then serves the
+catalogue bundled in the jar, so update detection degrades rather than failing.
+
+**Upgrade impact.** The policy is intentionally *not* configurable through OSGi — an allow-list stored
+in the file an attacker can overwrite would defend nothing. If you point `storeModuleListUrl` at an
+**internal mirror** (a private IP, a `localhost` proxy, or plain `http`), that configuration stops
+working on upgrade: the module logs the rejection and falls back to the public store URL. Restore it
+by setting the following on the Jahia JVM, which also permits plain `http`:
+
+```
+-Djahia.modulemanagement.storeIndex.allowInternalHosts=true
+```
+
+Installations using the default `https://store.jahia.com/...` URL are unaffected and need no change.
+
+*Known residual gap:* the host is resolved by the validator and resolved again by the JVM when the
+socket is opened, so a resolver that answers differently between the two (DNS rebinding) is not
+covered by this control.
+
 ## Contributing
 
 Contributions are welcome! Please open issues or submit pull requests.

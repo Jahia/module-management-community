@@ -39,7 +39,12 @@ public @interface ModuleManagementCommunityConfig {
     @AttributeDefinition(
             name = "Store Module List URL",
             description = "URL of the Jahia store module catalogue JSON used to detect available updates " +
-                    "for Jahia modules without requiring Maven metadata resolution."
+                    "for Jahia modules without requiring Maven metadata resolution. " +
+                    "Must be an https URL whose host does not resolve into a loopback, link-local, private " +
+                    "or otherwise non-routable range (JAHIA-SEC-271, CWE-918); a rejected value is logged " +
+                    "and replaced by the default. Set the JVM system property " +
+                    "jahia.modulemanagement.storeIndex.allowInternalHosts=true to point this at an " +
+                    "internal mirror."
     )
     String storeModuleListUrl() default "https://store.jahia.com/en/sites/private-app-store/contents/modules-repository.moduleList.json";
 
