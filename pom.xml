@@ -54,7 +54,7 @@
     <groupId>org.jahia.support.modules</groupId>
     <artifactId>module-management-community</artifactId>
     <name>module-management-community</name>
-    <version>1.0.1</version>
+    <version>1.0.2-SNAPSHOT</version>
     <packaging>bundle</packaging>
     <description>This is the custom module (module-management-community) for running on a Jahia server.</description>
 
@@ -70,7 +70,7 @@
         <connection>scm:git:git@github.com:Jahia/module-management-community.git</connection>
         <developerConnection>scm:git:git@github.com:Jahia/module-management-community.git</developerConnection>
         <url>https://github.com/Jahia/module-management-community</url>
-        <tag>1_0_1</tag>
+        <tag>main</tag>
     </scm>
 
     <repositories>
