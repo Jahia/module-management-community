@@ -199,6 +199,60 @@ public class StoreIndexUrlValidatorTest {
         assertRejected("https://[::ffff:127.0.0.1]/modules.json");
     }
 
+    // ── IPv6 transition addresses that smuggle an IPv4 target ───────────────────
+    // None of these are caught by InetAddress.isLoopbackAddress() and friends: Java hands back a
+    // plain Inet6Address with every predicate false, so each one needs its own rule.
+
+    @Test
+    public void rejectsIpv4CompatibleIpv6Loopback() {
+        assertRejected("https://[::127.0.0.1]/modules.json");
+    }
+
+    @Test
+    public void rejectsIpv4CompatibleIpv6CloudMetadata() {
+        assertRejected("https://[::169.254.169.254]/latest/meta-data/");
+    }
+
+    @Test
+    public void rejectsNat64WrappedLoopback() {
+        assertRejected("https://[64:ff9b::7f00:1]/modules.json");
+    }
+
+    @Test
+    public void rejectsNat64WrappedCloudMetadata() {
+        assertRejected("https://[64:ff9b::a9fe:a9fe]/latest/meta-data/");
+    }
+
+    @Test
+    public void rejectsNat64WrappedPrivateAddress() {
+        assertRejected("https://[64:ff9b::a00:5]/modules.json");
+    }
+
+    @Test
+    public void acceptsNat64WrappedPublicAddressSoIpv6OnlyNodesStillReachTheStore() throws Exception {
+        // Arrange: on an IPv6-only network the legitimate public store resolves through NAT64, so a
+        // blanket refusal of 64:ff9b::/96 would break update detection rather than secure it.
+        // 64:ff9b::5db8:d822 == 93.184.216.34.
+        assertAccepted("https://[64:ff9b::5db8:d822]/modules-repository.moduleList.json");
+    }
+
+    @Test
+    public void rejectsSixToFourAddress() {
+        assertRejected("https://[2002:7f00:1::]/modules.json");
+    }
+
+    @Test
+    public void rejectsTeredoAddress() {
+        assertRejected("https://[2001:0:7f00:1::]/modules.json");
+    }
+
+    @Test
+    public void acceptsAnOrdinaryGlobalIpv6AddressOutsideTheTeredoPrefix() throws Exception {
+        // Arrange: only 2001:0000::/32 is Teredo — 2001:db8::/32 and friends are ordinary unicast
+        // and must not be swept up with it.
+        assertAccepted("https://[2001:4860:4860::8888]/modules.json");
+    }
+
     // ── operator escape hatch ───────────────────────────────────────────────────
 
     @Test

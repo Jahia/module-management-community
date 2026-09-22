@@ -254,7 +254,9 @@ The value is vetted before every request, and again on every redirect hop:
 |------|-------------------|
 | `https` scheme only | `http://…`, `file:///etc/passwd`, `ftp://…` |
 | No credentials in the URL | `https://admin:secret@host/…` |
-| Host must not resolve to a non-routable or internal address | `127.0.0.1`, `[::1]`, `0.0.0.0`, `169.254.169.254` (AWS/GCP/Azure metadata), `10/8`, `172.16/12`, `192.168/16`, `100.64/10` (incl. Alibaba metadata), `fd00::/8`, `fe80::/10`, multicast |
+| Host must not resolve to a non-routable or internal address | `127.0.0.1`, `[::1]`, `0.0.0.0`, `169.254.169.254` (AWS/GCP/Azure metadata), `10/8`, `172.16/12`, `192.168/16`, `100.64/10` (incl. Alibaba metadata), `fd00::/8`, `fe80::/10`, multicast, `255/8` |
+| IPv6 transition forms are judged by the IPv4 address they carry | `[::127.0.0.1]` and `[::169.254.169.254]` (IPv4-compatible), `[64:ff9b::7f00:1]` (NAT64), `[2002:7f00:1::]` (6to4), `[2001:0:7f00:1::]` (Teredo) |
+| Only RFC 3986 host syntax is accepted, so parser tricks fail closed | `127.1`, `0x7f.0.0.1`, `127.0.0.1.`, `https://evil.com\@169.254.169.254/` |
 | Host name not on the internal-name denylist | `localhost`, `metadata`, `metadata.google.internal`, `instance-data` |
 | Redirects are not auto-followed | a 302 from an allowed host to `169.254.169.254` |
 
@@ -272,6 +274,9 @@ by setting the following on the Jahia JVM, which also permits plain `http`:
 ```
 
 Installations using the default `https://store.jahia.com/...` URL are unaffected and need no change.
+
+A NAT64-wrapped **public** address (`64:ff9b::5db8:d822`) is still accepted, so an IPv6-only node
+can keep reaching the legitimate store — only the embedded-internal variants are refused.
 
 *Known residual gap:* the host is resolved by the validator and resolved again by the JVM when the
 socket is opened, so a resolver that answers differently between the two (DNS rebinding) is not
