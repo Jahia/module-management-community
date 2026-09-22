@@ -166,31 +166,67 @@ describe('Module Management Community — features & accessibility', () => {
     // ===========================================================================
 
     describe('Bundle details — dependency & version tabs', () => {
-        // Module-management-community declares a Jahia module dependency
-        // (graphql-dxm-provider), so its "Module dependencies" tab + graph render —
-        // and its details dialog opens reliably with a small, fast-rendering graph.
+        // Exercises the "Bundle dependencies" tab, NOT "Module dependencies".
+        //
+        // The original comment here claimed module-management-community declares a Jahia module
+        // dependency on graphql-dxm-provider, so the "Module dependencies" tab would render. That
+        // is false: graphql-dxm-provider is a Maven `provided` dependency (compile-time only). The
+        // built manifest carries no Jahia-Depends header and requires no com.jahia.modules
+        // .dependencies capability, so GqlBundle#getModuleDependencyGraph — which walks exactly
+        // that namespace — returns a mermaid header with no '-->' edges, and BundleDetails' TABS
+        // condition correctly hides the tab. The tests only ever passed when the pre-filter
+        // `.first()` click opened some OTHER bundle's dialog.
+        //
+        // getDependencyGraph walks osgi.wiring.package instead, which this module has in
+        // abundance, so "Bundle dependencies" is the tab that genuinely renders here. It serves
+        // the same purpose for this block: a graph tab that activates and exposes the Mermaid
+        // render with its screen-reader text alternative.
         const depModule = testBundle
 
+        // Re-resolved from the document on every retry, deliberately.
+        //
+        // The tab list is built from bundle data that arrives after the dialog is already
+        // visible (BundleDetails TABS: `condition: b => b.moduleDependenciesGraph?.includes('-->')`),
+        // so React replaces the dialog subtree once it lands. Capturing the dialog first —
+        // with `.within()` or with `cy.get(dialog).contains(...)` — pins a subject to the
+        // pre-data render, and Cypress then retries against a detached node: it reports
+        // either "No elements in the current DOM matched" or an internal
+        // "Cannot read properties of undefined (reading 'selector')" while describing the
+        // stale subject. Both were observed in the same run in which the sibling assertion
+        // passed. A single `cy.contains(selector, content)` has no captured parent, so each
+        // retry starts from the live DOM.
+        const bundleDepsTab = () =>
+            cy.contains('[data-testid="bundle-details-dialog"] button', 'Bundle dependencies', {timeout: 20000})
+
+        // Mirrors the sequence spec 01 uses at "opens the bundle details dialog", which passes
+        // reliably. The name filter is debounced and refetches, so the table must be OBSERVED to
+        // reduce to the single matching row before anything is clicked. Clicking straight after
+        // typing lands on a row the table is about to replace and the click is silently
+        // swallowed — the failure screenshots show the filter correctly reduced to one row with
+        // no dialog open at all, which is that swallowed click and not a slow render.
         const openDetailsFor = (name: string) => {
             visitPage()
             filterByName(name)
-            cy.get('[aria-label="Show details"]', { timeout: 20000 }).first().click()
-            cy.get('[data-testid="bundle-details-dialog"]', { timeout: 15000 }).should('be.visible')
+            cy.contains('Showing 1 to 1 of 1 modules', {timeout: 20000}).should('be.visible')
+            cy.get('[aria-label="Show details"]', {timeout: 20000}).first().should('be.visible')
+            cy.get('[aria-label="Show details"]').first().click()
+            // Assert the dialog's CONTENT, not merely its presence: it proves the right bundle's
+            // dialog opened, which a bare presence check cannot.
+            cy.contains('[data-testid="bundle-details-dialog"]', name, {timeout: 15000}).should('be.visible')
+            // Settle on the tab too: a visible dialog does not imply the dependency data has
+            // arrived, and every assertion below depends on it.
+            bundleDepsTab().should('be.visible')
         }
 
-        it('shows a "Module dependencies" tab for a module with dependencies', () => {
+        it('shows a "Bundle dependencies" tab for a module with dependencies', () => {
             openDetailsFor(depModule)
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
-                cy.contains('button', 'Module dependencies').should('be.visible')
-            })
+            bundleDepsTab().should('be.visible')
         })
 
-        it('selecting the "Module dependencies" tab activates it and keeps the dialog open', () => {
+        it('selecting the "Bundle dependencies" tab activates it and keeps the dialog open', () => {
             openDetailsFor(depModule)
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
-                cy.contains('button', 'Module dependencies').click()
-                cy.contains('button', 'Module dependencies').should('have.attr', 'aria-selected', 'true')
-            })
+            bundleDepsTab().click()
+            bundleDepsTab().should('have.attr', 'aria-selected', 'true')
             cy.get('[data-testid="bundle-details-dialog"]').should('be.visible')
         })
 
@@ -198,10 +234,8 @@ describe('Module Management Community — features & accessibility', () => {
             openDetailsFor(depModule)
             // Activate the tab first (deterministic), then assert the graph region —
             // the Mermaid/ELK render is asynchronous, so query with a generous timeout.
-            cy.get('[data-testid="bundle-details-dialog"]').contains('button', 'Module dependencies').click()
-            cy.get('[data-testid="bundle-details-dialog"]')
-                .contains('button', 'Module dependencies')
-                .should('have.attr', 'aria-selected', 'true')
+            bundleDepsTab().click()
+            bundleDepsTab().should('have.attr', 'aria-selected', 'true')
             // Mermaid graph: role="img" with an accessible name, plus a visually-hidden
             // "<from> depends on <to>" edge list as the AAA text alternative.
             cy.get('[data-testid="bundle-details-dialog"] [role="img"]', { timeout: 30000 })
