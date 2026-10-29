@@ -27,11 +27,11 @@ const toArray = val => {
     return String(val).split(/[,\n]/).map(s => s.trim()).filter(Boolean);
 };
 
-// A11y B-006: use real heading element instead of styled Typography
+// A11y B-006: a real heading element
 const SectionTitle = ({children}) => (
-    <h3 className={styles.sectionTitle}>
+    <Typography variant="heading" component="h3" className={styles.sectionTitle}>
         {children}
-    </h3>
+    </Typography>
 );
 
 SectionTitle.propTypes = {children: PropTypes.node};
@@ -40,7 +40,6 @@ const ChipGroup = ({items, color = 'default', getTitle, isColumn = false}) => (
     <div className={isColumn ? styles.chipGroupColumn : styles.chipGroup}>
         {items.map(item => (
             <Chip key={item}
-                  variant="outlined"
                   label={item}
                   color={color}
                   title={getTitle ? getTitle(item) : undefined}/>

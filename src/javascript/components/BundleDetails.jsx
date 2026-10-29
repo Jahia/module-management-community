@@ -3,7 +3,6 @@ import {useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
 import {
-    Badge,
     Button,
     Chip,
     Close,
@@ -14,7 +13,6 @@ import {
     ModalHeader,
     Reload,
     Replay,
-    Rocket,
     Separator,
     Switch,
     Tab,
@@ -23,17 +21,11 @@ import {
     Warning
 } from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
+import {stateLabel, stateTone} from '../utils/moduleStates';
 import styles from './BundleDetails.scss';
 import Mermaid from './Mermaid';
 import BundleInfo from './BundleInfo';
 import UnresolvedRequirementsTab from './UnresolvedRequirementsTab';
-
-const BUNDLE_TYPE_COLOR = {
-    module: 'success',
-    templatesSet: 'success',
-    system: 'accent',
-    bundle: 'accent'
-};
 
 const TABS = [
     {id: 'details', labelKey: 'label.bundle.tab.details'},
@@ -210,15 +202,17 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
         <>
             <header className={styles.bundleDetailsHeader}>
                 <div className={styles.bundleDetailsTitle}>
-                    <Typography id="bundle-details-title" variant="title" component="h2">{bundleDisplayName}</Typography>
-                    <Badge label={'v' + bundle.version} color="accent"/>
-                    <Badge label={bundle.type || 'bundle'}
-                           color={BUNDLE_TYPE_COLOR[bundle.type] || BUNDLE_TYPE_COLOR.bundle}/>
-                    <Chip variant="bright"
-                          label={bundle.state}
-                          color={bundle.state === 'ACTIVE' ? 'success' : 'danger'}
-                          icon={<Rocket/>}/>
-                    <Typography variant="caption" className={styles.bundleId}>[{bundle.bundleId}]</Typography>
+                    <Typography id="bundle-details-title" variant="title" component="h2" className={styles.bundleDetailsName}>
+                        {bundleDisplayName}
+                    </Typography>
+                    <Chip label={bundle.version} color="default" data-testid="bundle-details-version"/>
+                    <Chip label={t(`label.bundle.type.${bundle.type || 'bundle'}`, {defaultValue: bundle.type})}
+                          color="default"
+                          data-testid="bundle-details-type"/>
+                    <Chip label={stateLabel(t, bundle.state)} color={stateTone(bundle.state)} data-testid="bundle-details-state"/>
+                    <Typography variant="caption" className={styles.bundleId}>
+                        {t('label.bundle.details.bundleIdShort', {id: bundle.bundleId})}
+                    </Typography>
                 </div>
                 <div className={styles.bundleDetailsHeaderActions}>
                     {(bundle.type === 'module' || bundle.type === 'templatesSet') && (
@@ -356,8 +350,8 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                         {site.siteKey}
                                     </Typography>
                                     <div className={styles.siteControl}>
-                                        <Badge label={site.deployed ? t('label.bundle.sites.enabled') : t('label.bundle.sites.disabled')}
-                                               color={site.deployed ? 'success' : 'danger'}/>
+                                        <Chip label={site.deployed ? t('label.bundle.sites.enabled') : t('label.bundle.sites.disabled')}
+                                              color={site.deployed ? 'success' : 'default'}/>
                                         <Switch checked={site.deployed}
                                                 value={site.siteKey}
                                                 aria-label={t('label.bundle.sites.toggleAriaLabel', {
@@ -419,11 +413,11 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                                         <div className={styles.versionItemHeader}>
                                                             <Chip label={v.version} color={isCurrent ? 'default' : 'accent'}/>
                                                             {isCurrent ? (
-                                                                <Badge label={t('label.bundle.versions.current')} color="success"/>
+                                                                <Chip label={t('label.bundle.versions.current')} color="success"/>
                                                             ) : (
-                                                                <Badge
+                                                                <Chip
                                                                     label={isUpgrade ? t('label.bundle.versions.upgrade') : t('label.bundle.versions.downgrade')}
-                                                                    color={isUpgrade ? 'success' : 'danger'}
+                                                                    color={isUpgrade ? 'accent' : 'warning'}
                                                                 />
                                                             )}
                                                             {jcrEntry && (
@@ -494,9 +488,9 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                                     <div className={styles.versionItemInfo}>
                                                         <div className={styles.versionItemHeader}>
                                                             <Chip label={v.version} color="accent"/>
-                                                            <Badge
+                                                            <Chip
                                                                 label={isUpgrade ? t('label.bundle.versions.upgrade') : t('label.bundle.versions.downgrade')}
-                                                                color={isUpgrade ? 'success' : 'danger'}
+                                                                color={isUpgrade ? 'accent' : 'warning'}
                                                             />
                                                             <Chip label={t('label.bundle.versions.inJcr')} color="default"/>
                                                         </div>

@@ -29,7 +29,11 @@
     gap: var(--moon-spacing-medium);
     justify-content: space-between;
     align-items: center;
-    padding: var(--moon-spacing-small) var(--moon-spacing-medium);
+    padding: var(--moon-spacing-medium) var(--moon-spacing-large);
+}
+
+.bundleDetailsName {
+    margin-right: var(--moon-spacing-small);
 }
 
 .bundleDetailsTitle {
@@ -98,16 +102,13 @@
 }
 
 .infoSection {
-    padding: 4px 0 12px;
+    padding: var(--moon-spacing-small) 0 var(--moon-spacing-medium);
 }
 
 .sectionTitle {
-    margin-bottom: 10px;
-    padding-bottom: 4px;
+    margin: 0 0 var(--moon-spacing-small);
 
     color: var(--moon-color-gray_dark);
-
-    border-bottom: 1px solid var(--moon-color-gray_light);
 }
 
 .identityGrid {
@@ -147,8 +148,6 @@
     font-weight: 600;
     font-size: 0.75rem;              /* A11y B-014: was 11px, now relative unit ≥12px */
     color: var(--moon-color-gray_dark);   /* A11y B-004: lift to dark for ≥7:1 */
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
 }
 
 .chipGroup {
@@ -398,10 +397,8 @@
     font-weight: 600;
     font-size: 0.75rem;  /* A11y D-002: was 11px absolute — now relative unit */
     color: var(--moon-color-gray_dark);  /* A11y D-002: lifted from gray60 for ≥7:1 */
-    letter-spacing: 0.05em;
     white-space: nowrap;
     text-align: left;
-    text-transform: uppercase;
 
     border-bottom: 1px solid var(--moon-color-gray_light);
 }

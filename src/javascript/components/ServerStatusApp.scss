@@ -19,8 +19,9 @@
     align-items: flex-start;
 }
 
+/* A11y: the gray of Moonstone is below 4.5:1 on white. */
 .summaryLabel {
-    color: var(--moon-color-gray);
+    color: var(--moon-color-gray_dark);
 }
 
 .sectionTitle {
@@ -29,6 +30,17 @@
 
 .tableWrapper {
     overflow: auto;
+}
+
+/* The severity filter is the top band of the probes table, as the filter row is for the modules table. */
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--moon-spacing-small);
+    align-items: center;
+    padding: var(--moon-spacing-small) calc(var(--moon-spacing-small) + var(--moon-spacing-nano));
+
+    border-bottom: 1px solid var(--moon-color-gray_light);
 }
 
 /* DataTable rows have a fixed height, so a probe with a message grows its row. */
@@ -49,7 +61,7 @@
 .probeMessage {
     max-height: 160px;
 
-    color: var(--moon-color-gray);
+    color: var(--moon-color-gray_dark);
     white-space: pre-wrap;
     word-break: break-word;
 

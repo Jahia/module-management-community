@@ -1,13 +1,13 @@
 import React, {useEffect} from 'react';
 import {useTranslation} from 'react-i18next';
-import {Badge, Loader, Typography} from '@jahia/moonstone';
+import {Chip, Loader, Typography} from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
 import {dependentUpdatesOf, useBundleRow} from '../hooks/useBundleRow';
+import {stateLabel, stateTone} from '../utils/moduleStates';
 import ClusterDeploymentStatus from './ClusterDeploymentStatus';
 import RowActions from './RowActions';
+import StatusDot from './StatusDot';
 import styles from './ModuleManagementCommunityApp.scss';
-
-const stateColor = state => (state === 'ACTIVE' ? 'success' : 'danger');
 
 const moduleShape = PropTypes.shape({
     name: PropTypes.string.isRequired,
@@ -35,11 +35,11 @@ const AvailableCell = ({module, updates}) => {
     const dependents = dependentUpdatesOf(bundle, updates);
     return (
         <div className={styles.badges}>
-            {module.available && <Badge label={module.available} color="success"/>}
+            {module.available && <Chip label={module.available} color="accent"/>}
             {dependents.length > 0 && (
-                <Badge label={t('label.table.cells.dependent', {modules: dependents.join(', ')})}
-                       color="accent"
-                       title={dependents.join(', ')}/>
+                <Chip label={t('label.table.cells.dependent', {modules: dependents.join(', ')})}
+                      color="accent"
+                      title={dependents.join(', ')}/>
             )}
         </div>
     );
@@ -54,16 +54,19 @@ const StateCell = ({module, isClustered}) => {
     const {t} = useTranslation('module-management-community');
     const {bundle} = useBundleRow(module);
     const clusterState = isClustered ? bundle?.clusterState : undefined;
+    // The cluster state shows only when it differs from the state of this node.
     return (
-        <div className={styles.badges}>
-            <Badge label={module.state} color={stateColor(module.state)}/>
-            {clusterState && clusterState !== 'UNKNOWN' && (
-                <Badge label={clusterState} color={stateColor(clusterState)} title={t('label.table.cells.clusterstate')}/>
+        <div className={styles.states}>
+            <StatusDot tone={stateTone(module.state)}>{stateLabel(t, module.state)}</StatusDot>
+            {clusterState && clusterState !== 'UNKNOWN' && clusterState !== module.state && (
+                <StatusDot tone={stateTone(clusterState)} title={t('label.table.cells.clusterstate')}>
+                    {stateLabel(t, clusterState)}
+                </StatusDot>
             )}
             {clusterState === 'UNKNOWN' && (
-                <Badge label={t('label.cluster.state.not.sync.short')}
-                       color="accent"
-                       title={t('label.cluster.state.not.sync.long')}/>
+                <Chip label={t('label.cluster.state.not.sync.short')}
+                      color="accent"
+                      title={t('label.cluster.state.not.sync.long')}/>
             )}
         </div>
     );
@@ -165,7 +168,7 @@ export const buildModuleColumns = ({t, updates, isClustered, onDependentUpdates,
     isClustered && {
         key: 'clusterNodes',
         label: t('label.table.cells.cluster.nodes.state'),
-        width: '400px',
+        width: '300px',
         isScrollable: true,
         render: ({data}) => <ClusterNodesCell module={data}/>
     },

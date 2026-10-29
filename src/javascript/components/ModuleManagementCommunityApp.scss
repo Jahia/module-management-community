@@ -17,6 +17,16 @@
     overflow: auto;
 }
 
+/* A DataTable row is a wrapping flex row, so a table wider than the screen would push its last cells to a second line. The row stays on one line, and the Paper scrolls. */
+.tableWrapper tr {
+    flex-wrap: nowrap;
+}
+
+/* The Name column grows from zero, so it keeps a width of its own when the other columns take the row. */
+.tableWrapper tr > :first-child {
+    min-width: 240px;
+}
+
 /* The doubled class outranks the radius of Paper, because the filter row above it has the top corners. */
 .tableWrapper.tableWrapper {
     border-top-left-radius: 0;
@@ -85,12 +95,26 @@
     padding: var(--moon-spacing-big);
 }
 
-/* Cluster node status (used by ClusterDeploymentStatus): one line, which the cell scrolls when it is too long. */
+/* The state of a row, and its cluster state below it when the two differ. */
+.states {
+    display: flex;
+    flex-direction: column;
+    gap: var(--moon-spacing-nano);
+    align-items: flex-start;
+}
+
+/* Cluster node status (used by ClusterDeploymentStatus): one line for each node, which the cell scrolls when it is too long. */
 .clusterStatus {
     display: flex;
-    flex-wrap: nowrap;
-    gap: var(--moon-spacing-small);
-    align-items: center;
+    flex-direction: column;
+    gap: var(--moon-spacing-nano);
+    align-items: flex-start;
+    padding: var(--moon-spacing-small) 0;
+}
+
+/* The state labels of the nodes line up, so the node names start at the same place. */
+.nodeState {
+    min-width: 64px;
 }
 
 .noClusterData {

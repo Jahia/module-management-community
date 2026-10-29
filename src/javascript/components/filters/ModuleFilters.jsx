@@ -1,6 +1,6 @@
 import React, {useCallback, useRef, useState} from 'react';
 import * as PropTypes from 'prop-types';
-import {Add, Button, Input, Menu, Typography} from '@jahia/moonstone';
+import {Add, Button, Input, Menu} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
 import {FilterChip} from './FilterChip';
 import {ActionMenuItem, CheckMenuItem} from '../menu/MenuItems';
@@ -13,21 +13,20 @@ const ADDABLE_FILTERS = ['state', 'updates'];
 
 const toggleValue = (values, value) => (values.includes(value) ? values.filter(v => v !== value) : [...values, value]);
 
-const NameFilter = ({filters, onChange, ...chip}) => {
+/** The name filter stays open in the filter row, and the table follows each key the user types. */
+const NameFilter = ({filters, onChange}) => {
     const {t} = useTranslation('module-management-community');
-    const name = t('label.filters.name');
     return (
-        <FilterChip {...chip} id="name" name={name} value={filters.name} onClear={() => onChange('name', '')}>
-            <div className={styles.editorBody}>
-                <Input value={filters.name}
-                       placeholder={t('label.input.filterBySymbolicName')}
-                       aria-label={name}
-                       data-testid="filter-name"
-                       onChange={event => onChange('name', event.target.value)}
-                       onClear={() => onChange('name', '')}/>
-                <Typography variant="caption" className={styles.secondary}>{t('label.filters.nameHint')}</Typography>
-            </div>
-        </FilterChip>
+        <div className={styles.nameFilter}>
+            <Input variant="search"
+                   size="big"
+                   value={filters.name}
+                   placeholder={t('label.input.filterBySymbolicName')}
+                   aria-label={t('label.filters.name')}
+                   data-testid="filter-name"
+                   onChange={event => onChange('name', event.target.value)}
+                   onClear={() => onChange('name', '')}/>
+        </div>
     );
 };
 
@@ -151,7 +150,7 @@ export const ModuleFilters = ({filters, states, hasUpdates, onChange}) => {
 
     return (
         <div className={styles.filters} data-testid="module-filters">
-            <NameFilter {...chip('name')} filters={filters} onChange={onChange}/>
+            <NameFilter filters={filters} onChange={onChange}/>
             <TypeFilter {...chip('type')} filters={filters} onChange={onChange}/>
             {added.map(id => (id === 'state' ?
                 <StateFilter key={id} {...chip(id)} filters={filters} states={states} onChange={onChange}/> :

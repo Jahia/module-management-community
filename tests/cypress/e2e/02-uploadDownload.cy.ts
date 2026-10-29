@@ -42,12 +42,10 @@ describe('Upload / Download module functionality', () => {
         cy.get('[data-testid="more-actions-btn"]').click();
     };
 
-    /** Type a name in the Name filter chip, then close its editor */
+    /** Type a name in the name filter, which is always open in the filter row */
     const filterByName = (name: string) => {
-        cy.get('[data-testid="filter-chip"][data-filter="name"] [data-testid="filter-chip-edit"]').click();
         cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).clear();
         cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).type(name);
-        cy.get('[data-testid="filter-editor-close"]').click();
     };
 
     const openUploadDialog = () => {

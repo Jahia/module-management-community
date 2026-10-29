@@ -9,7 +9,7 @@ export const registerRoutes = () => {
 
     registry.add('adminRoute', `${COMP_NAME}`, {
         targets: ['administration-server-systemComponents:33'],
-        label: 'Module Management Community',
+        label: 'Module Management (Community)',
         isSelectable: true,
         requiredPermission: 'adminTemplates',
         render: () => registry.get('route', 'requireCoreLicenseRoot').render() || <ModuleManagementCommunityEntry/>
@@ -17,7 +17,7 @@ export const registerRoutes = () => {
 
     registry.add('adminRoute', 'server-status-community', {
         targets: ['administration-server-systemComponents:34'],
-        label: 'Server Status Community',
+        label: 'Server Status (Community)',
         icon: <ServerStatusNavIcon/>,
         isSelectable: true,
         requiredPermission: 'adminTemplates',

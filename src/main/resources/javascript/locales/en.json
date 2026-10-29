@@ -30,7 +30,8 @@
           "consumes": "Consumes",
           "none": "None",
           "provides": "Provides"
-        }
+        },
+        "bundleIdShort": "Bundle ID {{id}}"
       },
       "sites": {
         "actions": {
@@ -55,7 +56,8 @@
       "type": {
         "bundle": "Bundle",
         "module": "Module",
-        "system": "System"
+        "system": "System",
+        "templatesSet": "Templates set"
       },
       "unresolvedReqs": {
         "alertMissing": "{{count}} mandatory dependency/dependencies completely absent from this server — install the missing bundle(s) to resolve.",
@@ -221,6 +223,21 @@
         "green": "Server status: OK",
         "yellow": "Server status: Warning",
         "red": "Server status: Error"
+      },
+      "severity": {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low",
+        "debug": "Debug"
+      },
+      "severityFilter": {
+        "label": "Severity",
+        "critical": "Critical",
+        "high": "High and above",
+        "medium": "Medium and above",
+        "low": "Low and above",
+        "debug": "All"
       }
     },
     "showDetails": "Show details",
@@ -404,7 +421,6 @@
     },
     "filters": {
       "name": "Name",
-      "nameHint": "Shows the modules whose symbolic name contains this text.",
       "type": "Type",
       "state": "State",
       "updates": "Updates",
@@ -420,7 +436,16 @@
       "menu": "Auto refresh every 30 s"
     },
     "refreshBundleSuccess": "Bundle refreshed successfully",
-    "refreshBundleError": "An error occurred while refreshing the bundle"
+    "refreshBundleError": "An error occurred while refreshing the bundle",
+    "state": {
+      "active": "Active",
+      "resolved": "Resolved",
+      "installed": "Installed",
+      "starting": "Starting",
+      "stopping": "Stopping",
+      "uninstalled": "Uninstalled",
+      "unknown": "Unknown"
+    }
   },
   "help": {
     "url": "https://store.jahia.com/contents/modules-repository/org/jahia/modules/module-management-community.html"

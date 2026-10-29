@@ -25,6 +25,7 @@ describe('Module Management Community', () => {
     };
 
     const filterChip = (id: string) => `[data-testid="filter-chip"][data-filter="${id}"]`;
+    const nameFilter = () => cy.get(`[data-testid="module-filters"] input[placeholder="${nameFilterPlaceholder}"]`);
 
     /** Open the editor of a filter chip */
     const openFilter = (id: string) => {
@@ -36,12 +37,10 @@ describe('Module Management Community', () => {
         cy.get('[data-testid="filter-editor-close"]').click();
     };
 
-    /** Type a name in the Name filter chip, then close its editor */
+    /** Type a name in the name filter, which is always open in the filter row */
     const filterByName = (name: string) => {
-        openFilter('name');
-        cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).clear();
-        cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).type(name);
-        closeFilterEditor();
+        nameFilter().clear();
+        nameFilter().type(name);
     };
 
     const toggleType = (type: string) => {
@@ -96,8 +95,9 @@ describe('Module Management Community', () => {
             cy.contains('th', 'Actions').should('be.visible');
         });
 
-        it('renders the Name and Type filter chips and the Add filter button', () => {
-            cy.get(filterChip('name')).should('be.visible');
+        it('renders the name filter open, the Type filter chip and the Add filter button', () => {
+            nameFilter().should('be.visible').and('have.value', '');
+            cy.get(filterChip('name')).should('not.exist');
             cy.get(filterChip('type')).should('be.visible');
             cy.get('[data-testid="filter-add"]').should('be.visible');
         });
@@ -145,9 +145,11 @@ describe('Module Management Community', () => {
             totalItems().should('have.text', '1-1 of 1');
         });
 
-        it('fills the Name chip with the filter value', () => {
-            filterByName(testBundle);
-            cy.get(filterChip('name')).should('contain.text', testBundle);
+        it('filters the rows as the user types, with no click to open the filter', () => {
+            nameFilter().type('module-management-comm');
+            cy.contains('tr', testBundle).should('be.visible');
+            totalItems().should('have.text', '1-1 of 1');
+            nameFilter().should('have.value', 'module-management-comm');
         });
 
         it('entering a non-existent name shows the no-match message', () => {
@@ -155,10 +157,10 @@ describe('Module Management Community', () => {
             cy.get('[data-testid="modules-empty"]').should('contain.text', 'No module matches the filters.');
         });
 
-        it('the clear button of the Name chip restores the full list', () => {
+        it('emptying the name filter restores the full list', () => {
             filterByName('zzz-absolutely-does-not-exist-xyz');
             cy.get('[data-testid="modules-empty"]').should('be.visible');
-            cy.get(`${filterChip('name')} [data-testid="filter-chip-clear"]`).click();
+            nameFilter().clear();
             totalItems().invoke('text').should('match', /^1-\d+ of \d+$/);
         });
 
@@ -167,6 +169,7 @@ describe('Module Management Community', () => {
             filterByName('zzz-absolutely-does-not-exist-xyz');
             cy.get('[data-testid="filter-clear"]').should('not.be.disabled').click();
             totalItems().invoke('text').should('match', /^1-\d+ of \d+$/);
+            nameFilter().should('have.value', '');
             cy.get(filterChip('type')).should('contain.text', 'module, system, templatesSet');
         });
     });
@@ -257,9 +260,10 @@ describe('Module Management Community', () => {
             });
         });
 
-        it('shows an "ACTIVE" state Badge for the running module', () => {
+        it('shows the "Active" state of the running module in sentence case', () => {
             cy.contains('tr', testBundle).within(() => {
-                cy.contains('ACTIVE').should('be.visible');
+                cy.contains('Active').should('be.visible');
+                cy.contains('ACTIVE').should('not.exist');
             });
         });
 
@@ -297,22 +301,16 @@ describe('Module Management Community', () => {
             cy.get('[data-testid="bundle-details-dialog"]').should('contain.text', testBundle);
         });
 
-        it('shows a version badge beginning with "v" in the header', () => {
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
-                cy.contains(/^v\d+/).should('be.visible');
-            });
+        it('shows the version in the header', () => {
+            cy.get('[data-testid="bundle-details-version"]').invoke('text').should('match', /^\d+\.\d+/);
         });
 
-        it('shows the "module" type badge in the header', () => {
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
-                cy.contains('module').should('be.visible');
-            });
+        it('shows the "Module" type in the header', () => {
+            cy.get('[data-testid="bundle-details-type"]').should('have.text', 'Module');
         });
 
-        it('shows an "ACTIVE" state Chip in the header', () => {
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
-                cy.contains('ACTIVE').should('be.visible');
-            });
+        it('shows the "Active" state in the header', () => {
+            cy.get('[data-testid="bundle-details-state"]').should('have.text', 'Active');
         });
 
         it('shows Refresh and Close action buttons in the dialog header', () => {

@@ -75,17 +75,10 @@
     flex: none;
 }
 
-.editorBody {
-    display: flex;
-    flex-direction: column;
-    gap: var(--moon-spacing-small);
-    align-items: flex-start;
-    width: 336px;
-    padding: var(--moon-spacing-small) var(--moon-spacing-medium);
-}
-
-.secondary {
-    color: var(--moon-color-gray);
+/* The name filter is the first item of the filter row, always open. */
+.nameFilter {
+    flex: 0 1 300px;
+    min-width: 200px;
 }
 
 .menuFooter {

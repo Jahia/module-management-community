@@ -9,6 +9,7 @@ import {
     Check,
     Chip,
     DataTable,
+    Dropdown,
     EmptyData,
     Header,
     LayoutContent,
@@ -23,11 +24,11 @@ import {useModulePreferences} from '../hooks/useModulePreferences';
 import styles from './ServerStatusApp.scss';
 
 const SERVER_STATUS_QUERY = gql`
-    query GetServerStatus {
+    query GetServerStatus($severity: GqlProbeSeverity) {
         admin {
             jahia {
                 version { release buildDate build }
-                healthCheck(severity: HIGH) {
+                healthCheck(severity: $severity) {
                     status { health }
                     probes {
                         name description severity
@@ -39,6 +40,9 @@ const SERVER_STATUS_QUERY = gql`
     }`;
 
 const SEVERITY_ORDER = {CRITICAL: 1, HIGH: 2, MEDIUM: 3, LOW: 4, DEBUG: 5};
+
+// The healthCheck field returns the probes of the given severity and above.
+const SEVERITY_FILTERS = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'DEBUG'];
 const STATUS_ORDER = {RED: 1, YELLOW: 2, GREEN: 3};
 
 const HEALTH_CHIP = {
@@ -102,7 +106,10 @@ const buildProbeColumns = t => [
         label: t('label.sam.probes.severity'),
         isSortable: true,
         width: '120px',
-        sortFn: (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
+        sortFn: (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
+        render: ({value}) => (
+            <Typography variant="body">{t(`label.sam.severity.${value.toLowerCase()}`, {defaultValue: value})}</Typography>
+        )
     },
     {
         key: 'status',
@@ -129,12 +136,20 @@ SummaryItem.propTypes = {
 export const ServerStatusApp = () => {
     const {t} = useTranslation('module-management-community');
     // A11y HIGH-8 (WCAG 2.2.4): only poll when the user has enabled auto-refresh
-    const [preferences] = useModulePreferences();
-    const {data, error, loading, refetch} = useQuery(SERVER_STATUS_QUERY, {
+    const [preferences, setPreferences] = useModulePreferences();
+    const severity = preferences.probeSeverity;
+    const {data: currentData, previousData, error, loading, refetch} = useQuery(SERVER_STATUS_QUERY, {
+        variables: {severity},
         fetchPolicy: 'network-only',
         notifyOnNetworkStatusChange: true,
         pollInterval: preferences.autoRefresh ? 30000 : 0
     });
+    // The previous result stays on screen while the probes of another severity load.
+    const data = currentData || previousData;
+    const severityOptions = useMemo(() => SEVERITY_FILTERS.map(value => ({
+        value,
+        label: t(`label.sam.severityFilter.${value.toLowerCase()}`)
+    })), [t]);
 
     const jahia = data?.admin?.jahia;
     const version = jahia?.version;
@@ -178,10 +193,18 @@ export const ServerStatusApp = () => {
                 <Typography variant="heading" component="h2" className={styles.sectionTitle}>
                     {t('label.sam.probes.title')}
                 </Typography>
-                {probes.length === 0 ? (
-                    <EmptyData message={t('label.sam.probes.none')}/>
-                ) : (
-                    <Paper hasPadding={false} className={styles.tableWrapper} data-testid="server-status-probes">
+                <Paper hasPadding={false} className={styles.tableWrapper} data-testid="server-status-probes">
+                    <div className={styles.filters}>
+                        <Typography variant="body">{t('label.sam.severityFilter.label')}</Typography>
+                        <Dropdown variant="outlined"
+                                  data={severityOptions}
+                                  value={severity}
+                                  data-testid="server-status-severity"
+                                  onChange={(event, item) => setPreferences({...preferences, probeSeverity: item.value})}/>
+                    </div>
+                    {probes.length === 0 ? (
+                        <EmptyData message={t('label.sam.probes.none')}/>
+                    ) : (
                         <DataTable
                             enableSorting
                             primaryKey="name"
@@ -190,8 +213,8 @@ export const ServerStatusApp = () => {
                             columns={columns}
                             aria-label={t('label.sam.probes.title')}
                         />
-                    </Paper>
-                )}
+                    )}
+                </Paper>
             </>
         );
     }
