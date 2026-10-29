@@ -193,6 +193,16 @@
     color: var(--moon-color-gray_dark);   /* A11y C-015: lifted from gray60 for ≥7:1 */
 }
 
+/* The negative margin lines the chevron up with the body, as the action bar lines its first icon up with the title. */
+.manifestToggle {
+    margin-left: calc(-1 * var(--moon-spacing-small));
+}
+
+/* A11y: the accent of Moonstone is below 4.5:1 on white, so the toggle takes the dark accent. The attributes outrank the colors of the ghost Button. */
+.manifestToggle.manifestToggle[data-variant]:not(:disabled) {
+    color: var(--moon-color-accent_dark);
+}
+
 .manifestTable {
     width: 100%;
     margin-top: 10px;
@@ -232,17 +242,12 @@
 
 /* ── BundleDetails — Sites tab ── */
 
-.siteActionButtons {
+/* The action bar of the Sites tab: ghost buttons whose first icon lines up with the body, as in the action bar of the header. */
+.siteActions {
     display: flex;
-    gap: 12px;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-
-    border-bottom: 1px solid var(--moon-color-gray_light);
-}
-
-.siteActionButton {
-    flex: 1;
+    flex-wrap: wrap;
+    gap: var(--moon-spacing-nano);
+    margin: 0 0 var(--moon-spacing-small) calc(-1 * var(--moon-spacing-small));
 }
 
 .siteList {

@@ -95,11 +95,12 @@ describe('Module Management Community', () => {
             cy.contains('th', 'Actions').should('be.visible');
         });
 
-        it('renders the name filter open, the Type filter chip and the Add filter button', () => {
+        it('renders the name filter open and the Type and State filter chips, with no Add filter button', () => {
             nameFilter().should('be.visible').and('have.value', '');
             cy.get(filterChip('name')).should('not.exist');
             cy.get(filterChip('type')).should('be.visible');
-            cy.get('[data-testid="filter-add"]').should('be.visible');
+            cy.get(filterChip('state')).should('be.visible');
+            cy.get('[data-testid="filter-add"]').should('not.exist');
         });
 
         it('defaults the Type filter to the Jahia module types', () => {

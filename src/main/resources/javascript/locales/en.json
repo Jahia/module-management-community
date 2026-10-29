@@ -41,7 +41,8 @@
           "disableAllSitesExceptSystem": "Disable module on all sites except system",
           "enable": "Enable module",
           "enableAllSites": "Enable module on all sites",
-          "enableAllSitesExceptSystem": "Enable module on all sites except system"
+          "enableAllSitesExceptSystem": "Enable module on all sites except system",
+          "title": "Site actions"
         },
         "disabled": "Disabled",
         "enabled": "Enabled"
@@ -426,7 +427,6 @@
       "state": "State",
       "updates": "Updates",
       "updatesValue": "available only",
-      "add": "Add filter",
       "clear": "Clear filters",
       "clearOne": "Clear the {{name}} filter",
       "chipName": "{{name}}:",

@@ -4,6 +4,8 @@ import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
 import {
     Button,
+    Cancel,
+    Check,
     Chip,
     Close,
     CloudUpload,
@@ -324,30 +326,34 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
 
                 {activeTab === 'sites' && (
                     <div>
-                        <div className={styles.siteActionButtons}>
-                            <Button variant="outlined"
+                        <div role="toolbar"
+                             aria-label={t('label.bundle.sites.actions.title')}
+                             className={styles.siteActions}
+                             data-testid="bundle-sites-actions"
+                        >
+                            <Button variant="ghost"
                                     size="default"
-                                    color="accent"
+                                    color="default"
+                                    icon={<Check/>}
                                     label={t('label.bundle.sites.actions.enableAllSites')}
-                                    className={styles.siteActionButton}
                                     onClick={() => handleBulkSites(true, false)}/>
-                            <Button variant="outlined"
+                            <Button variant="ghost"
                                     size="default"
-                                    color="accent"
+                                    color="default"
+                                    icon={<Check/>}
                                     label={t('label.bundle.sites.actions.enableAllSitesExceptSystem')}
-                                    className={styles.siteActionButton}
                                     onClick={() => handleBulkSites(true, true)}/>
-                            <Button variant="outlined"
+                            <Button variant="ghost"
                                     size="default"
-                                    color="accent"
+                                    color="default"
+                                    icon={<Cancel/>}
                                     label={t('label.bundle.sites.actions.disableAllSites')}
-                                    className={styles.siteActionButton}
                                     onClick={() => handleBulkSites(false, false)}/>
-                            <Button variant="outlined"
+                            <Button variant="ghost"
                                     size="default"
-                                    color="accent"
+                                    color="default"
+                                    icon={<Cancel/>}
                                     label={t('label.bundle.sites.actions.disableAllSitesExceptSystem')}
-                                    className={styles.siteActionButton}
                                     onClick={() => handleBulkSites(false, true)}/>
                         </div>
                         <ul className={styles.siteList}>

@@ -54,10 +54,6 @@
     border-left-color: var(--moon-color-accent_plain40);
 }
 
-.addFilter.addFilter[data-variant]:not(:disabled) {
-    color: var(--moon-color-accent_dark);
-}
-
 /* A long value ends with an ellipsis, and the title of the button holds the full label. */
 .chipValue {
     max-width: 400px;
