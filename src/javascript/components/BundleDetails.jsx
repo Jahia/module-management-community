@@ -197,24 +197,43 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
     // Prefer the human-readable Bundle-Name from the manifest; fall back to symbolic name
     const bundleDisplayName = bundle.manifest?.find(e => e.key === 'Bundle-Name')?.value || bundle.symbolicName;
 
-    // The content of the modal BundleDetailsDialog opens: a header with badges and actions, the tabs and the tab panel
+    // The content of the modal BundleDetailsDialog opens: a header with the title, the badges and an action bar,
+    // the tabs and the tab panel
     return (
         <>
             <header className={styles.bundleDetailsHeader}>
-                <div className={styles.bundleDetailsTitle}>
-                    <Typography id="bundle-details-title" variant="heading" component="h2" className={styles.bundleDetailsName}>
-                        {bundleDisplayName}
-                    </Typography>
-                    <Chip label={bundle.version} color="default" data-testid="bundle-details-version"/>
-                    <Chip label={t(`label.bundle.type.${bundle.type || 'bundle'}`, {defaultValue: bundle.type})}
-                          color="default"
-                          data-testid="bundle-details-type"/>
-                    <Chip label={stateLabel(t, bundle.state)} color={stateTone(bundle.state)} data-testid="bundle-details-state"/>
-                    <Typography variant="caption" className={styles.bundleId}>
-                        {t('label.bundle.details.bundleIdShort', {id: bundle.bundleId})}
-                    </Typography>
+                <div className={styles.bundleDetailsTitleRow}>
+                    <div className={styles.bundleDetailsTitle}>
+                        <Typography id="bundle-details-title" variant="heading" component="h2" className={styles.bundleDetailsName}>
+                            {bundleDisplayName}
+                        </Typography>
+                        <Chip label={bundle.version} color="default" data-testid="bundle-details-version"/>
+                        <Chip label={t(`label.bundle.type.${bundle.type || 'bundle'}`, {defaultValue: bundle.type})}
+                              color="default"
+                              data-testid="bundle-details-type"/>
+                        <Chip label={stateLabel(t, bundle.state)} color={stateTone(bundle.state)} data-testid="bundle-details-state"/>
+                        <Typography variant="caption" className={styles.bundleId}>
+                            {t('label.bundle.details.bundleIdShort', {id: bundle.bundleId})}
+                        </Typography>
+                    </div>
+                    <Button variant="ghost"
+                            size="default"
+                            color="default"
+                            icon={<Close/>}
+                            label={t('label.close')}
+                            onClick={() => close(false)}/>
                 </div>
-                <div className={styles.bundleDetailsHeaderActions}>
+                <div role="toolbar"
+                     aria-label={t('label.bundle.details.actions')}
+                     className={styles.bundleDetailsActions}
+                     data-testid="bundle-details-actions"
+                >
+                    <Button variant="ghost"
+                            size="default"
+                            color="default"
+                            icon={<Reload/>}
+                            label={t('label.refresh')}
+                            onClick={() => refetch()}/>
                     {(bundle.type === 'module' || bundle.type === 'templatesSet') && (
                         <Button variant="ghost"
                                 size="default"
@@ -224,18 +243,6 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                 title={t('label.importModule.tooltip')}
                                 onClick={handleForceImport}/>
                     )}
-                    <Button variant="ghost"
-                            size="default"
-                            color="default"
-                            icon={<Reload/>}
-                            label={t('label.refresh')}
-                            onClick={() => refetch()}/>
-                    <Button variant="ghost"
-                            size="default"
-                            color="default"
-                            icon={<Close/>}
-                            label={t('label.close')}
-                            onClick={() => close(false)}/>
                 </div>
             </header>
 

@@ -31,7 +31,8 @@
           "none": "None",
           "provides": "Provides"
         },
-        "bundleIdShort": "Bundle ID {{id}}"
+        "bundleIdShort": "Bundle ID {{id}}",
+        "actions": "Module actions"
       },
       "sites": {
         "actions": {

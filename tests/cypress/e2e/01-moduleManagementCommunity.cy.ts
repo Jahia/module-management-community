@@ -313,9 +313,13 @@ describe('Module Management Community', () => {
             cy.get('[data-testid="bundle-details-state"]').should('have.text', 'Active');
         });
 
-        it('shows Refresh and Close action buttons in the dialog header', () => {
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
+        it('shows Refresh and Force reimport content in an action bar above the tabs, and Close beside the title', () => {
+            cy.get('[data-testid="bundle-details-actions"]').within(() => {
                 cy.contains('button', 'Refresh').should('be.visible');
+                cy.contains('button', 'Force reimport content').should('be.visible');
+                cy.contains('button', 'Close').should('not.exist');
+            });
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Close').should('be.visible');
             });
         });

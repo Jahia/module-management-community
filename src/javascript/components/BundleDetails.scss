@@ -22,14 +22,20 @@
     height: 80vh;
 }
 
+/* The header holds the title row, then the action bar, as the header of a Jahia screen does. */
 .bundleDetailsHeader {
     display: flex;
     flex-shrink: 0;
-    flex-direction: row;
+    flex-direction: column;
+    gap: var(--moon-spacing-small);
+    padding: var(--moon-spacing-medium) var(--moon-spacing-medium) var(--moon-spacing-small);
+}
+
+.bundleDetailsTitleRow {
+    display: flex;
     gap: var(--moon-spacing-medium);
     justify-content: space-between;
     align-items: center;
-    padding: var(--moon-spacing-medium);
 }
 
 .bundleDetailsName {
@@ -43,11 +49,12 @@
     align-items: center;
 }
 
-.bundleDetailsHeaderActions {
+/* The negative margin lines the icon of the first ghost button up with the title. */
+.bundleDetailsActions {
     display: flex;
-    flex-shrink: 0;
-    flex-direction: row;
-    gap: var(--moon-spacing-small);
+    flex-wrap: wrap;
+    gap: var(--moon-spacing-nano);
+    margin-left: calc(-1 * var(--moon-spacing-small));
 }
 
 .bundleId {
