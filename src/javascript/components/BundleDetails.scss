@@ -29,7 +29,7 @@
     gap: var(--moon-spacing-medium);
     justify-content: space-between;
     align-items: center;
-    padding: var(--moon-spacing-medium) var(--moon-spacing-large);
+    padding: var(--moon-spacing-medium);
 }
 
 .bundleDetailsName {
@@ -78,6 +78,11 @@
     min-height: 44px;  /* A11y D-003: WCAG 2.5.5 AAA 44px target */
 }
 
+/* The tab labels line up with the title and the body, 16px from the edge: a tab adds a 4px margin and an 8px padding, and the doubled class outranks the padding of the moonstone tab row. */
+.bundleDetailsTabs.bundleDetailsTabs {
+    padding-left: 3px;
+}
+
 /* Two classes outrank the gray of a moonstone tab; the selected tab keeps its accent colour */
 .bundleDetailsTabs .tabDefault { color: var(--moon-color-gray_dark); } /* A11y: moonstone gray is below 4.5:1 */
 .bundleDetailsTabs .tabDanger { color: var(--moon-color-danger); }
@@ -111,11 +116,15 @@
     color: var(--moon-color-gray_dark);
 }
 
+/* The size and the line height of the body variant of Moonstone Typography, which a dt or a dd does not carry. */
 .identityGrid {
     display: grid;
     grid-template-columns: 160px 1fr;
     gap: 6px 16px;
     align-items: baseline;
+
+    font-size: 14px;
+    line-height: 19px;
 }
 
 /* A11y C-010: explicit div wrapper preserves dl semantics across all AT/browser combos */

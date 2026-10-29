@@ -202,7 +202,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
         <>
             <header className={styles.bundleDetailsHeader}>
                 <div className={styles.bundleDetailsTitle}>
-                    <Typography id="bundle-details-title" variant="title" component="h2" className={styles.bundleDetailsName}>
+                    <Typography id="bundle-details-title" variant="heading" component="h2" className={styles.bundleDetailsName}>
                         {bundleDisplayName}
                     </Typography>
                     <Chip label={bundle.version} color="default" data-testid="bundle-details-version"/>

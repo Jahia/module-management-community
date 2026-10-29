@@ -29,7 +29,7 @@ const toArray = val => {
 
 // A11y B-006: a real heading element
 const SectionTitle = ({children}) => (
-    <Typography variant="heading" component="h3" className={styles.sectionTitle}>
+    <Typography variant="subheading" weight="semiBold" component="h3" className={styles.sectionTitle}>
         {children}
     </Typography>
 );
