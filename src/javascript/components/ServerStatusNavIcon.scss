@@ -1,0 +1,32 @@
+/* The right margin keeps the dot off the label of the entry. */
+.root {
+    position: relative;
+
+    display: inline-flex;
+    margin-right: var(--moon-spacing-nano);
+}
+
+/* The dot sits on the top-right corner of the icon, as a notification badge does. */
+.dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+
+    width: 8px;
+    height: 8px;
+
+    border: 1px solid var(--moon-color-white);
+    border-radius: 50%;
+}
+
+.GREEN {
+    background-color: var(--moon-color-success);
+}
+
+.YELLOW {
+    background-color: var(--moon-color-warning);
+}
+
+.RED {
+    background-color: var(--moon-color-danger);
+}

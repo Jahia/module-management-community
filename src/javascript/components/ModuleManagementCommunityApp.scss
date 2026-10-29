@@ -1,340 +1,99 @@
-.header {
-    display: flex;
-    flex-direction: row;
-    justify-content: flex-start;
-    align-items: center;
-    min-height: 64px;
+/* The wrapper of LayoutContent wraps its flex column, so the content takes the width of the table instead of the page. */
+.layout {
+    flex-wrap: nowrap;
+    width: 100%;
 }
 
-.title {
-    margin: 2%;
-
-    color: var(--color-gray_dark);
-}
-
-.titleWrapper {
-    margin-left: var(--spacing-medium);
-}
-
-.noConnection {
-    margin: 5% 0 5% 43%;
-
-    color: var(--color-gray_dark);
-}
-
-.icon {
-    margin-bottom: 2%;
-
-    color: var(--color-gray_light);
-
-    opacity: 1 !important;
-}
-
-.iconActive {
-    margin-bottom: 2%;
-
-    color: var(--color-accent);
-}
-
-.noSites {
+/* The filter row is the top band of the table. */
+.tableArea {
     display: flex;
     flex-direction: column;
-    justify-content: space-evenly;
-    align-items: center;
-    min-height: 180px;
+    min-height: 0;
 }
 
-.action {
-    flex: 0 0 auto !important;
-    align-self: center !important;
-    margin-top: 0 !important;
-    margin-right: 2% !important;
+.tableWrapper {
+    min-height: 0;
+
+    overflow: auto;
 }
 
-.actionGroup {
-    display: flex;
-    gap: var(--spacing-small);
-    justify-content: space-between;
-    align-content: space-evenly;
-    align-items: center;
-    margin-top: var(--spacing-medium);
-
-    /* WCAG 2.5.5 / 2.5.8 — uniform 44 px touch target for every child button
-       (icon-only buttons were already 44 px via .dotMenuBtn / .tuneBtn;
-       labelled Moonstone Buttons were rendering at ~32 px — lift them to match). */
-    button {
-        min-height: 44px !important;
-    }
+/* The doubled class outranks the radius of Paper, because the filter row above it has the top corners. */
+.tableWrapper.tableWrapper {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
-/* Cluster actions panel */
-.columnMenu {
-    display: flex;
-    flex-direction: column;
-    margin-right: 16px;
-    padding: 8px;
+/* DataTable renders the pager after the table, inside the scrolling Paper, so the pager sticks to the bottom of the Paper. */
+.stickyPagination.stickyPagination {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    z-index: 5;
 
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    border-top: 1px solid var(--moon-color-gray_light);
+
+    background-color: var(--moon-color-white);
 }
 
-.fixedWidthButton {
-    flex-grow: 2;
-    width: initial;
-    min-width: initial;
-}
+.moduleName {
+    min-width: 0;
 
-/* Loading states */
-.flexCenter {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-}
+    text-overflow: ellipsis;
 
-.flex {
-    flex: 1 1 auto;
-}
-
-/* ─── Accessibility utilities ─────────────────────────────────────────────── */
-
-/* Visually hidden but screen-reader accessible */
-.srOnly {
-    position: absolute;
-
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-
-    white-space: nowrap;
-
-    border: 0;
     overflow: hidden;
-    clip: rect(0, 0, 0, 0);
 }
 
-/* 3-dot "More actions" menu trigger */
-.dotMenuBtn {
-    @media (prefers-reduced-motion: no-preference) {
-        transition: background-color 0.15s ease; /* A11y B-007 */
-    }
-
-    display: inline-flex;
-    flex-shrink: 0;
-    justify-content: center;
-    align-items: center;
-    min-width: 44px;   /* A11y B-001: 44×44 px minimum target size */
-    min-height: 44px;
-    padding: 0;
-
-    font-weight: bold;
-    font-size: 20px;
-    color: var(--color-accent);
-    line-height: 1;
-
-    border: 1px solid var(--color-accent);
-    border-radius: 4px;
-    background: transparent;
-    cursor: pointer;
-
-    /* A11y B-026: explicit focus indicator */
-    &:focus-visible {
-        outline: 3px solid var(--color-accent);
-        outline-offset: 2px;
-    }
-
-    &:hover { background-color: rgba(0, 0, 0, 0.06); }
-    &:active { background-color: rgba(0, 0, 0, 0.12); }
+.bundleId {
+    color: var(--moon-color-gray);
 }
 
-/* Table column headers & filters */
-.columnFilterInput {
-    display: block;
-    box-sizing: border-box;
-    width: 200px;
-    margin-top: 6px;
-    margin-bottom: 8px;
-    padding: 4px 6px;
-
-    font-size: 12px;
-
-    border: 1px solid #767676;  /* A11y A-019: ≥3:1 non-text contrast on white */
-    border-radius: 4px;
-
-    &:focus-visible {
-        outline: 3px solid var(--color-accent);
-        outline-offset: 2px;
-    }
-}
-
-.columnHeaderCell {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-}
-
-.columnHeaderRow {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-}
-
-/* A11y CRITICAL-4: native button used as the sort control */
-.sortableHeaderBtn {
-    display: inline-flex;
-    gap: 4px;
-    align-items: center;
-    padding: 0;
-
-    color: inherit;
-    text-align: left;
-
-    border: 0;
-    background: none;
-    cursor: pointer;
-
-    &:focus-visible {
-        outline: 3px solid var(--color-accent);
-        outline-offset: 2px;
-    }
-}
-
-.columnCheckboxLabel {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    margin-top: 6px;
-    margin-bottom: 8px;
-
-    white-space: nowrap;
-
-    cursor: pointer;
-}
-
-.tableRow {
-    height: fit-content;
-    margin-top: 0.1rem;
-    margin-bottom: 0.1rem;
-    padding-bottom: 4px;
-
-    border-bottom: 1px solid var(--color-gray_light);
-}
-
-/* Pagination */
-.paginationContainer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 0;
-    padding: 8px 16px;
-}
-
-.paginationControls {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-}
-
-.itemsPerPageSelect {
-    padding: 4px 8px;
-
-    border: 1px solid #767676;  /* A11y A-019: ≥3:1 non-text contrast */
-    border-radius: 4px;
-
-    &:focus-visible {
-        outline: 3px solid var(--color-accent);
-        outline-offset: 2px;
-    }
-}
-
-.paginationInfo {
-    color: #374151;  /* A11y C-011: lifted from #666 (~5.2:1) to ~10:1 — meets AAA */
-}
-
-/* Cluster node status (used by ClusterDeploymentStatus) */
-.clusterStatus {
+.badges {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--moon-spacing-small);
+    align-items: center;
 }
 
-.clusterNode {
-    min-width: 60px;
+/* Row actions: the icon buttons show while the pointer is on the row or the focus is in it, and the ⋮ menu always shows. */
+.rowActions {
+    display: flex;
+    gap: var(--moon-spacing-nano);
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.hoverActions {
+    display: flex;
+    align-items: center;
+
+    opacity: 0;
+}
+
+.row:hover .hoverActions,
+.row:focus-within .hoverActions {
+    opacity: 1;
+}
+
+/* A flex box drops the line box of an inline span, so the button sits in the middle of the row. */
+.menuAnchor {
+    display: flex;
+}
+
+.dialogMessage {
+    display: flex;
+    justify-content: center;
+    padding: var(--moon-spacing-big);
+}
+
+/* Cluster node status (used by ClusterDeploymentStatus): one line, which the cell scrolls when it is too long. */
+.clusterStatus {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--moon-spacing-small);
+    align-items: center;
 }
 
 .noClusterData {
     font-style: italic;
-    color: var(--color-gray_dark);  /* A11y C-003: lifted from gray60 for ≥7:1 */
-}
-
-/* Icon + label layout inside MUI menu items */
-.menuItemContent {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-
-    svg {
-        flex-shrink: 0;
-        width: 18px;
-        height: 18px;
-    }
-}
-
-/* Redefines the Moonstone danger token darker within a scoped subtree so a
-   destructive Button (white text on --moon-color-danger) reaches ≥4.5:1.
-   Applied via PaperProps so it travels with a portaled dialog. */
-.dangerScope {
-    --moon-color-danger: #840d0f;  /* WCAG 1.4.3: was #f44053 (3.68:1) → ~10:1 */
-}
-
-/* Menu section header (disabled label used as divider in the ⋮ menu) */
-.menuSectionHeader {
-    font-weight: 700 !important;
-    font-size: 0.75rem !important;  /* A11y C-003: was 11px absolute — now relative unit */
-    color: var(--color-gray_dark) !important;  /* A11y C-003: lifted from gray60 for ≥7:1 */
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-
-    opacity: 1 !important;
-
-    pointer-events: none;
-}
-
-.marginBorder {
-    margin-right: var(--spacing-small);
-    margin-left: var(--spacing-small);
-}
-
-/* ─── Status badge / chip contrast (WCAG 1.4.3) ──────────────────────────── */
-/* Moonstone's "bright" success/danger chips and success/danger badges render
-   near-white text on --moon-color-success (#6abb6d, 2.31:1) and
-   --moon-color-danger (#f44053, 3.62:1) — both below the 4.5:1 minimum.
-   Swap in the darker _dark palette tokens (#267729 ≈ 5.6:1, #840d0f ≈ 10:1),
-   scoped to this module so the rest of the Jahia shell is untouched. The
-   [class*=…] selectors match Moonstone's hashed module classnames robustly. */
-:global {
-    #module-management-community-root {
-        [class*="_moonstone-chip_bright"][class*="_moonstone-color_success"],
-        [class*="_moonstone-badge"][class*="_moonstone-badge_success"] {
-            background-color: var(--moon-color-success_dark, #267729) !important;
-        }
-
-        [class*="_moonstone-chip_bright"][class*="_moonstone-color_danger"],
-        [class*="_moonstone-badge"][class*="_moonstone-badge_danger"] {
-            background-color: var(--moon-color-danger_dark, #840d0f) !important;
-        }
-    }
-}
-
-/* ─── Global motion preference ───────────────────────────────────────────── */
-/* A11y B-007: respect OS-level reduce-motion preference */
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        transition-duration: 0.01ms !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-    }
+    color: var(--moon-color-gray_dark);
 }

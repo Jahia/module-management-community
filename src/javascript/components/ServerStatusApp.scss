@@ -1,0 +1,57 @@
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--moon-spacing-medium);
+    width: 100%;
+}
+
+.summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--moon-spacing-big);
+    padding: var(--moon-spacing-medium);
+}
+
+.summaryItem {
+    display: flex;
+    flex-direction: column;
+    gap: var(--moon-spacing-nano);
+    align-items: flex-start;
+}
+
+.summaryLabel {
+    color: var(--moon-color-gray);
+}
+
+.sectionTitle {
+    color: var(--moon-color-gray_dark);
+}
+
+.tableWrapper {
+    overflow: auto;
+}
+
+/* DataTable rows have a fixed height, so a probe with a message grows its row. */
+.tableWrapper tr {
+    height: auto;
+    min-height: 48px;
+}
+
+.probeInfo {
+    display: flex;
+    flex-direction: column;
+    gap: var(--moon-spacing-nano);
+    padding: var(--moon-spacing-small) 0;
+
+    white-space: normal;
+}
+
+.probeMessage {
+    max-height: 160px;
+
+    color: var(--moon-color-gray);
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    overflow: auto;
+}

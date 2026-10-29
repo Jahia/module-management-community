@@ -1,59 +1,45 @@
 .dialogContent {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--moon-spacing-medium);
     min-height: 180px;
-    padding: 16px 24px !important;
-}
-
-.modeGroup {
-    display: flex;
-    flex-direction: row !important;
-    gap: 16px;
-    padding-bottom: 4px;
-
-    border-bottom: 1px solid var(--color-gray_light, #eee);
-
-    :global(.MuiFormControlLabel-root) {
-        margin-right: 8px;
-    }
 }
 
 .dropZone {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--moon-spacing-small);
     justify-content: center;
     align-items: center;
     min-height: 120px;
-    padding: 24px;
+    padding: var(--moon-spacing-large);
 
-    border: 2px dashed var(--color-gray_light, #ccc);
-    border-radius: 8px;
-    background-color: var(--color-gray_light_hover, rgba(0, 0, 0, 0.02));
+    border: 2px dashed var(--moon-color-gray_light);
+    border-radius: var(--moon-radius);
+    background-color: var(--moon-color-gray_light_plain20);
     cursor: pointer;
 
     transition: border-color 0.2s, background-color 0.2s;
 
     &:hover {
-        border-color: var(--color-accent, #0062b3);
-        background-color: rgba(0, 98, 179, 0.04);
+        border-color: var(--moon-color-accent);
+        background-color: var(--moon-color-accent_light_plain20);
     }
 }
 
 .dropZoneDragging {
-    border-color: var(--color-accent, #0062b3);
-    background-color: rgba(0, 98, 179, 0.08);
+    border-color: var(--moon-color-accent);
+    background-color: var(--moon-color-accent_plain20);
 }
 
 .dropZoneSelected {
     border-style: solid;
-    border-color: var(--color-success, #279e5e);
-    background-color: rgba(39, 158, 94, 0.04);
+    border-color: var(--moon-color-success);
+    background-color: var(--moon-color-success_plain20);
 }
 
 .dropZoneHint {
-    color: var(--color-gray_dark); /* A11y MED: lifted from #666 for ≥7:1 */
+    color: var(--moon-color-gray_dark); /* A11y MED: lifted from #666 for ≥7:1 */
     text-align: center;
 }
 
@@ -67,42 +53,30 @@
 }
 
 .fileSize {
-    color: var(--color-gray_dark); /* A11y MED: lifted from #666 for ≥7:1 */
+    color: var(--moon-color-gray_dark); /* A11y MED: lifted from #666 for ≥7:1 */
 }
 
 .statusRow {
     display: flex;
     flex-direction: row;
-    gap: 12px;
+    gap: var(--moon-spacing-small);
     align-items: center;
-    padding: 12px 16px;
+    padding: var(--moon-spacing-small) var(--moon-spacing-medium);
 
-    border-radius: 6px;
-    background-color: rgba(0, 0, 0, 0.04);
+    border-radius: var(--moon-radius);
+    background-color: var(--moon-color-gray_light_plain20);
 }
 
 .statusSuccess {
-    border: 1px solid rgba(39, 158, 94, 0.3);
-    background-color: rgba(39, 158, 94, 0.08);
+    border: 1px solid var(--moon-color-success);
+    background-color: var(--moon-color-success_plain20);
 }
 
 .statusError {
-    border: 1px solid rgba(220, 53, 69, 0.3);
-    background-color: rgba(220, 53, 69, 0.08);
+    border: 1px solid var(--moon-color-danger);
+    background-color: var(--moon-color-danger_plain20);
 }
 
 .helperText {
-    color: var(--color-gray_dark) !important; /* A11y MED: lifted from #666 for ≥7:1 */
-}
-
-.dialogActions {
-    gap: 12px;
-    justify-content: flex-end;
-    padding: 8px 24px 16px !important;
-}
-
-.typeControl {
-    & span:nth-child(2) {
-        color: #1a1a1a !important;
-    }
+    color: var(--moon-color-gray_dark); /* A11y MED: lifted from #666 for ≥7:1 */
 }

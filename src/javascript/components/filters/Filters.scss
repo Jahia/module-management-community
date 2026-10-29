@@ -1,0 +1,97 @@
+.filters {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--moon-spacing-small);
+    align-items: center;
+    padding: var(--moon-spacing-small) calc(var(--moon-spacing-small) + var(--moon-spacing-nano));
+
+    border-bottom: 1px solid var(--moon-color-gray_light);
+    border-radius: 4px 4px 0 0;
+
+    background-color: var(--moon-color-white);
+}
+
+/* A flex box drops the line box of an inline span, so the button sits in the middle of the filter row. */
+.chip {
+    display: flex;
+}
+
+/* Moonstone has no dashed or tinted Button. The doubled class and the attributes outrank the colors of the outlined Button. */
+.chipEmpty.chipEmpty[data-variant] {
+    color: var(--moon-color-gray_dark);
+
+    border: 1px dashed var(--moon-color-gray_plain60);
+
+    background-color: var(--moon-color-gray_light_plain20);
+}
+
+.chipEmpty.chipEmpty[data-variant]:hover:not(:disabled) {
+    color: var(--moon-color-gray_dark);
+
+    border-color: var(--moon-color-gray);
+
+    background-color: var(--moon-color-gray_light_plain40);
+}
+
+.chipFilled.chipFilled[data-variant][data-color] {
+    color: var(--moon-color-accent_dark_contrast);
+
+    border-color: var(--moon-color-accent_plain20);
+
+    background-color: var(--moon-color-accent_plain20);
+}
+
+.chipFilled.chipFilled[data-variant][data-color]:hover:not(:disabled) {
+    color: var(--moon-color-accent_dark_contrast);
+
+    border-color: var(--moon-color-accent_plain40);
+
+    background-color: var(--moon-color-accent_plain40);
+}
+
+.chipClear.chipClear[data-variant][data-color] {
+    border-left-color: var(--moon-color-accent_plain40);
+}
+
+.addFilter.addFilter[data-variant]:not(:disabled) {
+    color: var(--moon-color-accent_dark);
+}
+
+/* A long value ends with an ellipsis, and the title of the button holds the full label. */
+.chipValue {
+    max-width: 400px;
+}
+
+.chipValue > span {
+    min-width: 0;
+
+    text-overflow: ellipsis;
+
+    overflow: hidden;
+}
+
+.chipValue > svg {
+    flex: none;
+}
+
+.editorBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--moon-spacing-small);
+    align-items: flex-start;
+    width: 336px;
+    padding: var(--moon-spacing-small) var(--moon-spacing-medium);
+}
+
+.secondary {
+    color: var(--moon-color-gray);
+}
+
+.menuFooter {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--moon-spacing-small);
+
+    border-top: 1px solid var(--moon-color-gray_light);
+}

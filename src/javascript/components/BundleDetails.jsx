@@ -1,9 +1,27 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
-import {Badge, Button, Chip, Close, CloudUpload, Reload, Replay, Rocket, Separator, Switch, Typography, Warning} from '@jahia/moonstone';
-import {Dialog, DialogActions, DialogContent, DialogTitle} from '@material-ui/core';
+import {
+    Badge,
+    Button,
+    Chip,
+    Close,
+    CloudUpload,
+    Modal,
+    ModalBody,
+    ModalFooter,
+    ModalHeader,
+    Reload,
+    Replay,
+    Rocket,
+    Separator,
+    Switch,
+    Tab,
+    TabItem,
+    Typography,
+    Warning
+} from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
 import styles from './BundleDetails.scss';
 import Mermaid from './Mermaid';
@@ -68,8 +86,6 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
     // Tracks pending install for the downgrade confirmation dialog.
     // Shape: null | { source: 'store', version } | { source: 'jcr', version, jcrPath }
     const [confirmInstall, setConfirmInstall] = useState(null);
-    // A11y HIGH-6: refs to each tab button so keyboard nav can move DOM focus
-    const tabRefs = useRef({});
 
     useEffect(() => {
         setBundle(initialBundle);
@@ -189,14 +205,15 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
     // Prefer the human-readable Bundle-Name from the manifest; fall back to symbolic name
     const bundleDisplayName = bundle.manifest?.find(e => e.key === 'Bundle-Name')?.value || bundle.symbolicName;
 
+    // The content of the modal BundleDetailsDialog opens: a header with badges and actions, the tabs and the tab panel
     return (
-        <DialogContent className={styles.bundleDetailsContainer}>
-            <div className={styles.bundleDetailsHeader}>
+        <>
+            <header className={styles.bundleDetailsHeader}>
                 <div className={styles.bundleDetailsTitle}>
                     <Typography id="bundle-details-title" variant="title" component="h2">{bundleDisplayName}</Typography>
                     <Badge label={'v' + bundle.version} color="accent"/>
                     <Badge label={bundle.type || 'bundle'}
-                           color={BUNDLE_TYPE_COLOR[bundle.type] || 'default'}/>
+                           color={BUNDLE_TYPE_COLOR[bundle.type] || BUNDLE_TYPE_COLOR.bundle}/>
                     <Chip variant="bright"
                           label={bundle.state}
                           color={bundle.state === 'ACTIVE' ? 'success' : 'danger'}
@@ -226,33 +243,27 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                             label={t('label.close')}
                             onClick={() => close(false)}/>
                 </div>
-            </div>
+            </header>
 
             {/* A11y A-009: import result as live alert region */}
             {importResult && (
-                <div
+                <Typography
+                    variant="body"
+                    component="div"
                     role={importResult.success ? 'status' : 'alert'}
                     aria-live={importResult.success ? 'polite' : 'assertive'}
                     aria-atomic="true"
-                    style={{
-                        padding: '8px 16px',
-                        margin: '4px 0',
-                        borderRadius: '4px',
-                        backgroundColor: importResult.success ? 'var(--color-success_light)' : 'var(--color-danger_light)',
-                        color: importResult.success ? 'var(--color-success_dark)' : 'var(--color-danger_dark)',
-                        fontSize: '13px'
-                    }}
+                    className={`${styles.resultMessage} ${importResult.success ? styles.resultSuccess : styles.resultError}`}
                 >
                     {importResult.message}
-                </div>
+                </Typography>
             )}
 
             <Separator variant="horizontal" spacing="none"/>
 
-            {/* A11y A-007 / C-007 / C-012: ARIA tablist with native <button> (guaranteed attr forwarding)
-                 and Arrow-key / Home / End keyboard navigation (roving tabindex) */}
-            <div role="tablist"
-                 aria-label={t('label.bundle.tabs.label', 'Bundle detail sections')}
+            {/* A11y A-007 / C-007 / C-012: moonstone tablist (role="tab", aria-selected)
+                 with Arrow-key / Home / End keyboard navigation (roving tabindex) */}
+            <Tab aria-label={t('label.bundle.tabs.label', 'Bundle detail sections')}
                  className={styles.bundleDetailsTabs}
                  onKeyDown={e => {
                      const idx = visibleTabs.findIndex(tab => tab.id === activeTab);
@@ -271,7 +282,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                          e.preventDefault();
                          setActiveTab(nextId);
                          // A11y HIGH-6: move DOM focus to the newly-activated tab button
-                         tabRefs.current[nextId]?.focus();
+                         e.currentTarget.querySelector('#tab-' + nextId)?.focus();
                      }
                  }}
             >
@@ -280,37 +291,31 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                     const color = tab.getColor ?
                         tab.getColor(bundle, isActive) :
                         (isActive ? 'accent' : 'default');
-                    const colorClass = color === 'accent' ? styles.tabBtnAccent :
-                        color === 'danger' ? styles.tabBtnDanger :
-                        color === 'warning' ? styles.tabBtnWarning : '';
+                    // The selected tab takes the accent colour of moonstone
+                    const colorClass = color === 'danger' ? styles.tabDanger :
+                        color === 'warning' ? styles.tabWarning :
+                        color === 'default' ? styles.tabDefault : '';
                     return (
-                        <button
+                        <TabItem
                             key={tab.id}
-                            ref={el => {
-                                tabRefs.current[tab.id] = el;
-                            }}
-                            type="button"
-                            role="tab"
-                            tabIndex={isActive ? 0 : -1}
-                            aria-selected={isActive}
-                            aria-controls={`tabpanel-${tab.id}`}
                             id={`tab-${tab.id}`}
-                            className={`${styles.tabBtn} ${colorClass} ${isActive ? styles.tabBtnActive : ''}`}
+                            label={t(tab.labelKey)}
+                            isSelected={isActive}
+                            tabIndex={isActive ? 0 : -1}
+                            aria-controls={`tabpanel-${tab.id}`}
+                            className={`${styles.tabItem} ${colorClass}`}
                             onClick={() => setActiveTab(tab.id)}
-                        >
-                            {t(tab.labelKey)}
-                        </button>
+                        />
                     );
                 })}
-            </div>
+            </Tab>
 
             <Separator variant="horizontal" spacing="none"/>
 
             {/* A11y A-007: tabpanel role with labelledby */}
-            <div id={`tabpanel-${activeTab}`}
-                 role="tabpanel"
-                 aria-labelledby={`tab-${activeTab}`}
-                 className={styles.bundleDetailsContent}
+            <ModalBody id={`tabpanel-${activeTab}`}
+                       role="tabpanel"
+                       aria-labelledby={`tab-${activeTab}`}
             >
                 {activeTab === 'details' && (
                     <BundleInfo bundle={bundle}/>
@@ -320,25 +325,25 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                     <div>
                         <div className={styles.siteActionButtons}>
                             <Button variant="outlined"
-                                    size="normal"
+                                    size="default"
                                     color="accent"
                                     label={t('label.bundle.sites.actions.enableAllSites')}
                                     className={styles.siteActionButton}
                                     onClick={() => handleBulkSites(true, false)}/>
                             <Button variant="outlined"
-                                    size="normal"
+                                    size="default"
                                     color="accent"
                                     label={t('label.bundle.sites.actions.enableAllSitesExceptSystem')}
                                     className={styles.siteActionButton}
                                     onClick={() => handleBulkSites(true, true)}/>
                             <Button variant="outlined"
-                                    size="normal"
+                                    size="default"
                                     color="accent"
                                     label={t('label.bundle.sites.actions.disableAllSites')}
                                     className={styles.siteActionButton}
                                     onClick={() => handleBulkSites(false, false)}/>
                             <Button variant="outlined"
-                                    size="normal"
+                                    size="default"
                                     color="accent"
                                     label={t('label.bundle.sites.actions.disableAllSitesExceptSystem')}
                                     className={styles.siteActionButton}
@@ -382,21 +387,16 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                         <div className={styles.versionsTab}>
                             {/* A11y A-009: install result as live alert region */}
                             {installVersionResult && (
-                                <div
+                                <Typography
+                                    variant="body"
+                                    component="div"
                                     role={installVersionResult.success ? 'status' : 'alert'}
                                     aria-live={installVersionResult.success ? 'polite' : 'assertive'}
                                     aria-atomic="true"
-                                    style={{
-                                        padding: '8px 16px',
-                                        marginBottom: '12px',
-                                        borderRadius: '4px',
-                                        backgroundColor: installVersionResult.success ? 'var(--color-success_light)' : 'var(--color-danger_light)',
-                                        color: installVersionResult.success ? 'var(--color-success_dark)' : 'var(--color-danger_dark)',
-                                        fontSize: '13px'
-                                    }}
+                                    className={`${styles.resultMessage} ${installVersionResult.success ? styles.resultSuccess : styles.resultError}`}
                                 >
                                     {installVersionResult.message}
-                                </div>
+                                </Typography>
                             )}
 
                             {/* ── Store catalogue versions ── */}
@@ -417,7 +417,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                                 <li key={v.version} className={styles.versionItem}>
                                                     <div className={styles.versionItemInfo}>
                                                         <div className={styles.versionItemHeader}>
-                                                            <Badge label={v.version} color={isCurrent ? 'default' : 'accent'}/>
+                                                            <Chip label={v.version} color={isCurrent ? 'default' : 'accent'}/>
                                                             {isCurrent ? (
                                                                 <Badge label={t('label.bundle.versions.current')} color="success"/>
                                                             ) : (
@@ -427,7 +427,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                                                 />
                                                             )}
                                                             {jcrEntry && (
-                                                                <Badge label={t('label.bundle.versions.inJcr')} color="default"/>
+                                                                <Chip label={t('label.bundle.versions.inJcr')} color="default"/>
                                                             )}
                                                         </div>
                                                     </div>
@@ -493,12 +493,12 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                                 <li key={v.jcrPath} className={styles.versionItem}>
                                                     <div className={styles.versionItemInfo}>
                                                         <div className={styles.versionItemHeader}>
-                                                            <Badge label={v.version} color="accent"/>
+                                                            <Chip label={v.version} color="accent"/>
                                                             <Badge
                                                                 label={isUpgrade ? t('label.bundle.versions.upgrade') : t('label.bundle.versions.downgrade')}
                                                                 color={isUpgrade ? 'success' : 'danger'}
                                                             />
-                                                            <Badge label={t('label.bundle.versions.inJcr')} color="default"/>
+                                                            <Chip label={t('label.bundle.versions.inJcr')} color="default"/>
                                                         </div>
                                                         <Typography variant="caption" className={styles.versionMeta}>
                                                             {v.fileName} &nbsp;·&nbsp; {sizeKb} &nbsp;·&nbsp; {date}
@@ -533,44 +533,43 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                 {activeTab === 'unresolvedReqs' && (
                     <UnresolvedRequirementsTab bundle={bundle}/>
                 )}
-            </div>
+            </ModalBody>
 
             {/* A11y A-023: aria-labelledby/describedby on downgrade confirm dialog */}
-            <Dialog open={Boolean(confirmInstall)}
-                    aria-labelledby="confirm-install-title"
-                    aria-describedby="confirm-install-desc"
-                    PaperProps={{role: 'alertdialog', 'aria-modal': 'true'}}
-                    onClose={() => setConfirmInstall(null)}
+            <Modal isOpen={Boolean(confirmInstall)}
+                   size="medium"
+                   role="alertdialog"
+                   aria-labelledby="confirm-install-title"
+                   aria-describedby="confirm-install-desc"
+                   onOpenChange={open => !open && setConfirmInstall(null)}
             >
-                <DialogTitle id="confirm-install-title">
-                    <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                        <Warning color="var(--color-warning)" aria-hidden="true"/>
-                        {t('label.bundle.versions.confirm.title')}
-                    </div>
-                </DialogTitle>
-                <DialogContent id="confirm-install-desc">
-                    <Typography variant="body">
-                        {t('label.bundle.versions.confirm.message')}
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button variant="ghost"
-                            size="big"
-                            label={t('label.cancel')}
-                            onClick={() => setConfirmInstall(null)}/>
-                    <Button variant="default"
-                            size="big"
-                            color="danger"
-                            icon={<Replay/>}
-                            label={t('label.bundle.versions.confirm.proceed')}
-                            onClick={() => {
-                                const target = confirmInstall;
-                                setConfirmInstall(null);
-                                executeInstall(target);
-                            }}/>
-                </DialogActions>
-            </Dialog>
-        </DialogContent>
+                <>
+                    <ModalHeader id="confirm-install-title" title={t('label.bundle.versions.confirm.title')}/>
+                    <ModalBody id="confirm-install-desc" className={styles.confirmBody}>
+                        <Warning color="yellow" aria-hidden="true" className={styles.confirmIcon}/>
+                        <Typography variant="body">
+                            {t('label.bundle.versions.confirm.message')}
+                        </Typography>
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button variant="ghost"
+                                size="big"
+                                label={t('label.cancel')}
+                                onClick={() => setConfirmInstall(null)}/>
+                        <Button variant="default"
+                                size="big"
+                                color="danger"
+                                icon={<Replay/>}
+                                label={t('label.bundle.versions.confirm.proceed')}
+                                onClick={() => {
+                                    const target = confirmInstall;
+                                    setConfirmInstall(null);
+                                    executeInstall(target);
+                                }}/>
+                    </ModalFooter>
+                </>
+            </Modal>
+        </>
     );
 };
 

@@ -6,16 +6,16 @@
           "modules": "Module dependencies",
           "nodeTypes": "Node type dependencies"
         },
-          "identity": {
-            "builtAt": "Built at",
-            "bundleId": "Bundle ID",
-            "description": "Description",
-            "license": "License",
-            "name": "Name",
-            "symbolicName": "Symbolic name",
-            "vendor": "Vendor",
-            "version": "Version"
-          },
+        "identity": {
+          "builtAt": "Built at",
+          "bundleId": "Bundle ID",
+          "description": "Description",
+          "license": "License",
+          "name": "Name",
+          "symbolicName": "Symbolic name",
+          "vendor": "Vendor",
+          "version": "Version"
+        },
         "manifest": {
           "hide": "Hide full manifest",
           "show": "Show full manifest"
@@ -44,51 +44,51 @@
         "disabled": "Disabled",
         "enabled": "Enabled"
       },
-        "tab": {
-          "bundleDeps": "Bundle dependencies",
-          "details": "Details",
-          "moduleDeps": "Module dependencies",
-          "sites": "Sites",
-          "unresolvedReqs": "Unresolved requirements",
-          "versions": "Version history"
+      "tab": {
+        "bundleDeps": "Bundle dependencies",
+        "details": "Details",
+        "moduleDeps": "Module dependencies",
+        "sites": "Sites",
+        "unresolvedReqs": "Unresolved requirements",
+        "versions": "Version history"
+      },
+      "type": {
+        "bundle": "Bundle",
+        "module": "Module",
+        "system": "System"
+      },
+      "unresolvedReqs": {
+        "alertMissing": "{{count}} mandatory dependency/dependencies completely absent from this server — install the missing bundle(s) to resolve.",
+        "alertConflict": "{{count}} mandatory dependency/dependencies found on this server but cannot be wired — check for version conflicts or circular dependencies.",
+        "bannerMissing": "{{count}} missing mandatory dependency/dependencies — see 'Unresolved requirements' tab for details.",
+        "bannerConflict": "{{count}} wiring conflict(s) detected — see 'Unresolved requirements' tab for details.",
+        "col": {
+          "namespace": "Type",
+          "requirement": "Requirement",
+          "status": "Status"
         },
-        "type": {
+        "filter": {
+          "allStatuses": "All statuses",
+          "allTypes": "All types",
+          "clear": "Clear filters",
+          "noResults": "No requirements match the current filters.",
+          "searchReq": "Search requirement…",
+          "showing": "{{count}} of {{total}}"
+        },
+        "ns": {
           "bundle": "Bundle",
-          "module": "Module",
-          "system": "System"
+          "host": "Fragment host",
+          "module": "Jahia module",
+          "nodeType": "Node type",
+          "package": "Package"
         },
-        "unresolvedReqs": {
-          "alertMissing": "{{count}} mandatory dependency/dependencies completely absent from this server — install the missing bundle(s) to resolve.",
-          "alertConflict": "{{count}} mandatory dependency/dependencies found on this server but cannot be wired — check for version conflicts or circular dependencies.",
-          "bannerMissing": "{{count}} missing mandatory dependency/dependencies — see 'Unresolved requirements' tab for details.",
-          "bannerConflict": "{{count}} wiring conflict(s) detected — see 'Unresolved requirements' tab for details.",
-          "col": {
-            "namespace": "Type",
-            "requirement": "Requirement",
-            "status": "Status"
-          },
-          "filter": {
-            "allStatuses": "All statuses",
-            "allTypes": "All types",
-            "clear": "Clear filters",
-            "noResults": "No requirements match the current filters.",
-            "searchReq": "Search requirement…",
-            "showing": "{{count}} of {{total}}"
-          },
-          "ns": {
-            "bundle": "Bundle",
-            "host": "Fragment host",
-            "module": "Jahia module",
-            "nodeType": "Node type",
-            "package": "Package"
-          },
-          "status": {
-            "conflict": "⚠ Version conflict",
-            "conflictHint": "A bundle providing this capability exists but cannot be wired — check for version mismatch or circular dependency.",
-            "missing": "❌ Missing",
-            "missingHint": "No bundle in this server exports a capability matching this requirement. Install the missing dependency."
-          }
-        },
+        "status": {
+          "conflict": "⚠ Version conflict",
+          "conflictHint": "A bundle providing this capability exists but cannot be wired — check for version mismatch or circular dependency.",
+          "missing": "❌ Missing",
+          "missingHint": "No bundle in this server exports a capability matching this requirement. Install the missing dependency."
+        }
+      },
       "versions": {
         "confirm": {
           "message": "Module downgrade is not officially supported. The module will be installed in stopped state — you can start it manually. Do you want to continue?",
@@ -135,13 +135,19 @@
     "errors": {
       "loadingModuleData": "An error occurred while loading module data",
       "loadingVanityUrl": "An error occurred while loading data",
-      "moduleNotFound": "Module not found"
+      "moduleNotFound": "Module not found",
+      "loadingModules": "An error occurred while loading the modules"
     },
     "fetchUpdates": "Fetching updates",
     "help": "Help",
     "menu": {
       "more": "More actions",
-      "title": "Actions menu"
+      "section": {
+        "updates": "Updates",
+        "modules": "Modules"
+      },
+      "updateOptions": "Update options…",
+      "updateOptionsModified": "Update options… (modified)"
     },
     "importModule": {
       "button": "Force reimport content",
@@ -155,10 +161,6 @@
       "dryRun": "Dry run",
       "dryRunDesc": "Simulate the update without applying any changes. The provisioning script will be shown for review.",
       "filterBySymbolicName": "Filter by bundle symbolic name",
-      "filterByType": {
-        "jahia": "Jahia modules",
-        "all": "All types (inc. bundles)"
-      },
       "group": {
         "display": "Display",
         "updateOptions": "Update options"
@@ -187,30 +189,39 @@
     "moduleVersion": "Current version of the module: {{version}}",
     "noUpdatesAvailable": "No updates available",
     "pagination": {
-      "next": "Next",
-      "previous": "Previous",
-      "showing": "Showing {{from}} to {{to}} of {{total}} modules"
+      "itemsPerPage": "Rows per page",
+      "of": "of"
     },
     "refresh": "Refresh",
     "refreshBundle": "Refresh bundle",
     "sam": {
-      "buildDate": "Build Date: {{date}}",
-      "buildNumber": "Build Number: {{number}}",
       "errorStatus": "An error occurred while loading the server status",
-      "loadingStatus": "Loading server status",
       "probes": {
         "description": "Description",
         "name": "Name",
         "noDescription": "No description available",
         "severity": "Severity",
         "status": "Status",
-        "title": "Probes"
+        "title": "Probes",
+        "none": "No probe reported a status."
       },
       "status": "Server status",
       "statusGreen": "All probes are running",
       "statusRed": "Some probes are not running",
       "statusYellow": "Some probes are not running, but the server is still functional",
-      "version": "Jahia Version: {{version}}"
+      "health": {
+        "green": "OK",
+        "yellow": "Warning",
+        "red": "Error"
+      },
+      "versionLabel": "Jahia version",
+      "buildDateLabel": "Build date",
+      "buildNumberLabel": "Build number",
+      "navStatus": {
+        "green": "Server status: OK",
+        "yellow": "Server status: Warning",
+        "red": "Server status: Error"
+      }
     },
     "showDetails": "Show details",
     "startBundle": "Start bundle",
@@ -219,7 +230,6 @@
     "stopBundle": "Stop bundle",
     "stopBundleError": "An error occurred while stopping the bundle",
     "stopBundleSuccess": "Bundle stopped successfully",
-    "subtitle": " Allows to install, update, and manage Jahia modules and if in cluster have an overview of the cluster state",
     "synchronizeBundlesError": "An error occurred while synchronizing bundles",
     "synchronizeBundlesSuccess": "Bundles synchronized successfully",
     "pullBundlesError": "An error occurred while pulling bundles",
@@ -232,7 +242,8 @@
         "pull": "Pull",
         "push": "Push",
         "sync": "Synchronize",
-        "title": "Actions"
+        "title": "Actions",
+        "menu": "Actions of {{name}}"
       },
       "cells": {
         "available": "Available version",
@@ -245,7 +256,8 @@
         "name": "Module name",
         "state": "State",
         "type": "Type",
-        "version": "Installed version"
+        "version": "Installed version",
+        "dependent": "Dependent: {{modules}}"
       },
       "title": "Installed modules"
     },
@@ -336,7 +348,8 @@
       "validation": {
         "noFile": "Please select a file",
         "notJar": "Only .jar and .tgz files are accepted"
-      }
+      },
+      "module": "Upload module"
     },
     "yaml": {
       "dialog": {
@@ -365,7 +378,8 @@
       "title": "Install from store",
       "viewOnStore": "View on Jahia Store"
     },
-    "generateScript": {      "menuItem": "Generate provisioning script",
+    "generateScript": {
+      "menuItem": "Generate provisioning script",
       "title": "Generate provisioning script",
       "subtitle": "Select the modules to include. Only stable (non-SNAPSHOT) versions are available. Drop the generated YAML into any Jahia server's patches/provisioning folder to replay this module set.",
       "includeTypes": "Include types:",
@@ -384,7 +398,29 @@
       "result": {
         "title": "Provisioning script — module set"
       }
-    }
+    },
+    "serverStatus": {
+      "title": "Server status"
+    },
+    "filters": {
+      "name": "Name",
+      "nameHint": "Shows the modules whose symbolic name contains this text.",
+      "type": "Type",
+      "state": "State",
+      "updates": "Updates",
+      "updatesValue": "available only",
+      "add": "Add filter",
+      "clear": "Clear filters",
+      "clearOne": "Clear the {{name}} filter",
+      "chipName": "{{name}}:",
+      "noMatch": "No module matches the filters."
+    },
+    "noModules": "No module is installed.",
+    "autoRefresh": {
+      "menu": "Auto refresh every 30 s"
+    },
+    "refreshBundleSuccess": "Bundle refreshed successfully",
+    "refreshBundleError": "An error occurred while refreshing the bundle"
   },
   "help": {
     "url": "https://store.jahia.com/contents/modules-repository/org/jahia/modules/module-management-community.html"
