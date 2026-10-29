@@ -1,11 +1,22 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import * as PropTypes from 'prop-types';
-import {Button, Loader, Typography} from '@jahia/moonstone';
-import {Dialog, DialogActions, DialogContent, DialogTitle} from '@material-ui/core';
+import {
+    Badge,
+    Button,
+    Checkbox,
+    Loader,
+    Modal,
+    ModalBody,
+    ModalFooter,
+    ModalHeader,
+    OpenInNew,
+    SearchInput,
+    Typography
+} from '@jahia/moonstone';
 import {useLazyQuery, useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
-import styles from './GenerateScriptDialog.scss';
+import styles from './InstallFromStoreDialog.scss';
 
 const STORE_MODULES_QUERY = gql`query {
     admin { modulesManagement { storeModules { symbolicName title icon latestVersion storeUrl } } }
@@ -15,16 +26,17 @@ const INSTALL_STORE_MODULES_MUTATION = gql`mutation ($symbolicNames: [String]!) 
     admin { modulesManagement { installStoreModules(symbolicNames: $symbolicNames) } }
 }`;
 
+const TITLE_ID = 'install-from-store-dialog-title';
+
 // Single store-module row — extracted to keep the dialog's cognitive complexity low.
 const StoreModuleRow = ({module, isChecked, isDisabled, onToggle, viewLabel}) => (
     <label
         className={`${styles.moduleRow} ${isChecked ? styles.moduleRowChecked : ''}`}
     >
-        <input
-            type="checkbox"
-            className={styles.checkbox}
+        <Checkbox
+            value={module.symbolicName}
             checked={isChecked}
-            disabled={isDisabled}
+            isDisabled={isDisabled}
             onChange={() => onToggle(module.symbolicName)}
         />
         {/* A11y A-013: decorative emoji hidden from AT */}
@@ -41,16 +53,14 @@ const StoreModuleRow = ({module, isChecked, isDisabled, onToggle, viewLabel}) =>
             <span role="img" aria-hidden="true" className={styles.moduleIconPlaceholder}>📦</span>
         )}
         <span className={styles.moduleTitleBlock}>
-            <Typography variant="body" className={styles.moduleTitle}>
+            <Typography variant="body" weight="semiBold" className={styles.moduleTitle}>
                 {module.title || module.symbolicName}
             </Typography>
             <Typography variant="caption" className={styles.moduleSymbolicName}>
                 {module.symbolicName}
             </Typography>
         </span>
-        <span className={`${styles.badge} ${styles.badge_module}`}>
-            {module.latestVersion}
-        </span>
+        <Badge label={module.latestVersion} color="accent"/>
         {/* A11y A-012 / MED target-size: descriptive aria-label on store link */}
         {module.storeUrl && (
             <a
@@ -61,7 +71,7 @@ const StoreModuleRow = ({module, isChecked, isDisabled, onToggle, viewLabel}) =>
                 aria-label={viewLabel}
                 onClick={e => e.stopPropagation()}
             >
-                <span aria-hidden="true">↗</span>
+                <OpenInNew aria-hidden="true"/>
             </a>
         )}
     </label>
@@ -116,6 +126,13 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
         loadModules();
     }, [loadModules]);
 
+    // The catalogue reloads, and the selection resets, each time the modal opens
+    useEffect(() => {
+        if (isOpen) {
+            handleOpen();
+        }
+    }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const toggleModule = useCallback(name => {
         setSelected(prev => {
             const next = new Set(prev);
@@ -167,139 +184,140 @@ export const InstallFromStoreDialog = ({isOpen, onClose, onInstallSuccess}) => {
     const visibleSelected = filteredModules.filter(m => selected.has(m.symbolicName)).length;
     const isInstalling = status === 'installing';
 
+    // Escape and a click outside the modal close it, except while the installation runs
+    const handleOpenChange = open => {
+        if (!open && !isInstalling) {
+            handleClose();
+        }
+    };
+
     return (
-        <Dialog
-            fullWidth
-            open={isOpen}
-            maxWidth="md"
+        <Modal
+            isOpen={isOpen}
+            size="full"
+            className={styles.modal}
             data-testid="install-from-store-dialog"
-            PaperProps={{'aria-modal': 'true'}}
-            onClose={isInstalling ? undefined : handleClose}
-            onEnter={handleOpen}
+            aria-labelledby={TITLE_ID}
+            onOpenChange={handleOpenChange}
         >
-            <DialogTitle disableTypography>
-                <Typography variant="title" component="h2">{t('label.installFromStore.title')}</Typography>
-                <Typography variant="body" className={styles.subtitle}>
+            <>
+                <ModalHeader id={TITLE_ID} title={t('label.installFromStore.title')}>
                     {t('label.installFromStore.subtitle')}
-                </Typography>
-            </DialogTitle>
+                </ModalHeader>
 
-            <DialogContent className={styles.content}>
-                {/* Search + bulk actions */}
-                <div className={styles.searchRow}>
-                    {/* A11y A-016: programmatic label for search input */}
-                    <label htmlFor="store-search" className={styles.srOnly}>
-                        {t('label.installFromStore.searchPlaceholder')}
-                    </label>
-                    <input
-                        id="store-search"
-                        type="text"
-                        className={styles.searchInput}
-                        placeholder={t('label.installFromStore.searchPlaceholder')}
-                        value={search}
-                        disabled={isInstalling}
-                        onChange={e => setSearch(e.target.value)}
-                    />
-                    <Button variant="ghost"
-                            size="small"
-                            label={t('label.generateScript.selectAll')}
-                            isDisabled={isInstalling || filteredModules.length === 0}
-                            onClick={selectAll}/>
-                    <Button variant="ghost"
-                            size="small"
-                            label={t('label.generateScript.clearAll')}
-                            isDisabled={isInstalling || selected.size === 0}
-                            onClick={clearAll}/>
-                </div>
+                <ModalBody className={styles.content}>
+                    {/* Search + bulk actions */}
+                    <div className={styles.searchRow}>
+                        {/* A11y A-016: programmatic label for search input */}
+                        <SearchInput
+                            id="store-search"
+                            className={styles.searchInput}
+                            aria-label={t('label.installFromStore.searchPlaceholder')}
+                            placeholder={t('label.installFromStore.searchPlaceholder')}
+                            value={search}
+                            isDisabled={isInstalling}
+                            onChange={e => setSearch(e.target.value)}
+                            onClear={() => setSearch('')}
+                        />
+                        <Button variant="ghost"
+                                size="small"
+                                label={t('label.generateScript.selectAll')}
+                                isDisabled={isInstalling || filteredModules.length === 0}
+                                onClick={selectAll}/>
+                        <Button variant="ghost"
+                                size="small"
+                                label={t('label.generateScript.clearAll')}
+                                isDisabled={isInstalling || selected.size === 0}
+                                onClick={clearAll}/>
+                    </div>
 
-                {/* Module list */}
-                <div className={styles.moduleList}>
-                    {/* A11y C-005: loader with role="status" */}
-                    {loading && (
-                        <div style={{display: 'flex', alignItems: 'center', gap: 8, padding: 16}}
-                             role="status"
-                             aria-live="polite"
-                        >
-                            <Loader size="small"/>
-                            <Typography variant="body">{t('label.loading')}</Typography>
+                    {/* Module list */}
+                    <div className={styles.moduleList}>
+                        {/* A11y C-005: loader with role="status" */}
+                        {loading && (
+                            <div className={styles.loading} role="status" aria-live="polite">
+                                <Loader size="small"/>
+                                <Typography variant="body">{t('label.loading')}</Typography>
+                            </div>
+                        )}
+
+                        {error && (
+                            <Typography variant="body" className={styles.empty}>
+                                {t('label.installFromStore.loadError')}
+                            </Typography>
+                        )}
+
+                        {!loading && !error && filteredModules.length === 0 && (
+                            <Typography variant="body" className={styles.empty}>
+                                {search ? t('label.installFromStore.noResults') : t('label.installFromStore.noneAvailable')}
+                            </Typography>
+                        )}
+
+                        {!loading && !error && filteredModules.map(m => (
+                            <StoreModuleRow
+                                key={m.symbolicName}
+                                module={m}
+                                isChecked={selected.has(m.symbolicName)}
+                                isDisabled={isInstalling}
+                                viewLabel={t('label.installFromStore.viewOnStoreAriaLabel', {name: m.title || m.symbolicName, defaultValue: `View ${m.title || m.symbolicName} on store (opens in new window)`})}
+                                onToggle={toggleModule}
+                            />
+                        ))}
+                    </div>
+
+                    {/* A11y A-009: status feedback as live regions; A-013: emoji aria roles */}
+                    {status === 'success' && (
+                        <div className={styles.statusSuccess} role="status" aria-live="polite">
+                            <Typography variant="body">
+                                <span role="img" aria-label="Success">✅</span> {statusMessage}
+                            </Typography>
                         </div>
                     )}
 
-                    {error && (
-                        <Typography variant="body" className={styles.empty}>
-                            {t('label.installFromStore.loadError')}
-                        </Typography>
+                    {status === 'error' && (
+                        <div className={styles.statusError} role="alert" aria-live="assertive">
+                            <Typography variant="body">
+                                <span role="img" aria-label="Warning">⚠️</span> {statusMessage}
+                            </Typography>
+                        </div>
                     )}
 
-                    {!loading && !error && filteredModules.length === 0 && (
-                        <Typography variant="body" className={styles.empty}>
-                            {search ? t('label.installFromStore.noResults') : t('label.installFromStore.noneAvailable')}
+                    {/* Summary */}
+                    {!loading && !error && (
+                        <Typography variant="caption" className={styles.summary}>
+                            {t('label.installFromStore.summary', {
+                                selected: visibleSelected,
+                                total: filteredModules.length,
+                                totalStore: allModules.length
+                            })}
                         </Typography>
                     )}
+                </ModalBody>
 
-                    {!loading && !error && filteredModules.map(m => (
-                        <StoreModuleRow
-                            key={m.symbolicName}
-                            module={m}
-                            isChecked={selected.has(m.symbolicName)}
-                            isDisabled={isInstalling}
-                            viewLabel={t('label.installFromStore.viewOnStoreAriaLabel', {name: m.title || m.symbolicName, defaultValue: `View ${m.title || m.symbolicName} on store (opens in new window)`})}
-                            onToggle={toggleModule}
-                        />
-                    ))}
-                </div>
-
-                {/* A11y A-009: status feedback as live regions; A-013: emoji aria roles */}
-                {status === 'success' && (
-                    <div className={styles.statusSuccess} role="status" aria-live="polite">
-                        <Typography variant="body">
-                            <span role="img" aria-label="Success">✅</span> {statusMessage}
-                        </Typography>
-                    </div>
-                )}
-
-                {status === 'error' && (
-                    <div className={styles.statusError} role="alert" aria-live="assertive">
-                        <Typography variant="body">
-                            <span role="img" aria-label="Warning">⚠️</span> {statusMessage}
-                        </Typography>
-                    </div>
-                )}
-
-                {/* Summary */}
-                {!loading && !error && (
-                    <Typography variant="caption" className={styles.summary}>
-                        {t('label.installFromStore.summary', {
-                            selected: visibleSelected,
-                            total: filteredModules.length,
-                            totalStore: allModules.length
-                        })}
-                    </Typography>
-                )}
-            </DialogContent>
-
-            <DialogActions className={styles.actions}>
-                <Button
-                    variant="ghost"
-                    size="big"
-                    label={status === 'success' ? t('label.close') : t('label.cancel')}
-                    isDisabled={isInstalling}
-                    onClick={handleClose}
-                />
-                {status !== 'success' && (
+                {/* The footer lays its children out right to left: the primary action comes first */}
+                <ModalFooter>
                     <Button
-                        variant="default"
+                        variant="ghost"
                         size="big"
-                        color="accent"
-                        label={isInstalling ?
-                            t('label.installFromStore.installing') :
-                            t('label.installFromStore.install', {count: visibleSelected})}
-                        isDisabled={visibleSelected === 0 || isInstalling}
-                        onClick={handleInstall}
+                        label={status === 'success' ? t('label.close') : t('label.cancel')}
+                        isDisabled={isInstalling}
+                        onClick={handleClose}
                     />
-                )}
-            </DialogActions>
-        </Dialog>
+                    {status !== 'success' && (
+                        <Button
+                            variant="default"
+                            size="big"
+                            color="accent"
+                            label={isInstalling ?
+                                t('label.installFromStore.installing') :
+                                t('label.installFromStore.install', {count: visibleSelected})}
+                            isDisabled={visibleSelected === 0 || isInstalling}
+                            onClick={handleInstall}
+                        />
+                    )}
+                </ModalFooter>
+            </>
+        </Modal>
     );
 };
 

@@ -1,90 +1,31 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {useMutation, useQuery} from '@apollo/client';
+import {useApolloClient, useMutation, useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
 import {useNotifications} from '@jahia/react-material';
-import {
-    Button,
-    DeletePermanently,
-    Download,
-    Loader,
-    Reload,
-    Separator,
-    Server,
-    Switch,
-    Table,
-    TableBody,
-    TableHead,
-    TableHeadCell,
-    TableRow,
-    Typography,
-    Upload
-} from '@jahia/moonstone';
-import styles from './ModuleManagementCommunityApp.scss';
-// A11y: MUI Menu/MenuItem give real role="menu"/role="menuitem" semantics,
-// Escape-to-close and focus return — none of which the Moonstone Menu provides
-// (it renders <menu role="list"> with plain <li> and injects an unlabeled search).
-import {Card, CardContent, CardHeader, Divider, Menu, MenuItem, TableSortLabel, Tooltip} from '@material-ui/core';
+import {Banner, Button, DataTable, EmptyData, Header, Help, LayoutContent, Paper} from '@jahia/moonstone';
 import dayjs from 'dayjs';
-
+import styles from './ModuleManagementCommunityApp.scss';
 import {getComparator, resolveAllDependentModules} from '../utils/moduleUtils';
+import {buildModuleFilter, DEFAULT_FILTERS, isDefaultFilters, toStateName} from '../utils/moduleFilters';
 import {useModulePreferences} from '../hooks/useModulePreferences';
-import ModuleRow from './ModuleRow';
-import {ModuleTablePagination} from './ModuleTablePagination';
+import {BUNDLE_ROW_QUERY} from '../hooks/useBundleRow';
+import {buildModuleColumns} from './moduleColumns';
+import {ModulesActionBar} from './ModulesActionBar';
+import {ModuleFilters} from './filters/ModuleFilters';
 import {UploadModuleDialog} from './UploadModuleDialog';
 import {ExportModulesDialog} from './ExportModulesDialog';
 import {DryRunResultDialog} from './DryRunResultDialog';
-import {UpdateOptionsPopover} from './UpdateOptionsPopover';
 import {GenerateScriptDialog} from './GenerateScriptDialog';
 import {InstallFromStoreDialog} from './InstallFromStoreDialog';
-import PropTypes from 'prop-types';
 
 // ── GraphQL documents ────────────────────────────────────────────────────────
 
-/** Module types that are "Jahia modules" as opposed to plain OSGi bundles. */
-const JAHIA_MODULE_TYPES = ['module', 'system', 'templatesSet'];
-
-/** Aria-sort value for a column header given the active sort column/direction. */
-const ariaSortFor = (property, orderBy, order) => {
-    if (orderBy !== property) {
-        return 'none';
-    }
-
-    return order === 'asc' ? 'ascending' : 'descending';
-};
-
-/**
- * Predicate factory for the installed-modules table filter. Extracted from the
- * component to keep the render function's cognitive complexity within budget.
- */
-const buildModuleFilter = ({updatesOnly, updates, dependentUpdates, typeFilter, bundleTypes, debouncedFilter}) => module => {
-    if (updatesOnly &&
-        !updates.some(u => u.name === module.name) &&
-        !dependentUpdates[module.name]?.length) {
-        return false;
-    }
-
-    if (typeFilter === 'jahia') {
-        const knownType = bundleTypes[module.name];
-        if (knownType && !JAHIA_MODULE_TYPES.includes(knownType)) {
-            return false;
-        }
-    } else if (typeFilter) {
-        const knownType = bundleTypes[module.name];
-        if (knownType && knownType !== typeFilter) {
-            return false;
-        }
-    }
-
-    const needle = debouncedFilter.trim().toLowerCase();
-    return needle === '' || module.name.toLowerCase().includes(needle);
-};
-
-const INSTALLED_MODULES_QUERY = gql`query {
+const INSTALLED_MODULES_QUERY = gql`query InstalledModules {
     admin { modulesManagement { installedModules installedBundleTypes clustered } }
 }`;
 
-const AVAILABLE_UPDATES_QUERY = gql`query {
+const AVAILABLE_UPDATES_QUERY = gql`query AvailableUpdates {
     admin { modulesManagement { availableUpdates lastUpdateTime } }
 }`;
 
@@ -106,203 +47,150 @@ const PUSH_MUTATION = gql`mutation { admin { modulesManagement { pushBundles } }
 const PULL_MUTATION = gql`mutation { admin { modulesManagement { pullBundles } } }`;
 const CLEANUP_JCR_MUTATION = gql`mutation { admin { modulesManagement { cleanupJcrVersions } } }`;
 
-// ── SortableHeader ────────────────────────────────────────────────────────────
+const ITEMS_PER_PAGE_OPTIONS = [20, 50, 100, 200];
+const DEFAULT_ITEMS_PER_PAGE = 100;
 
-// A11y CRITICAL-4: real <button> whose accessible name includes the current sort
-// direction, so screen-reader users hear e.g. "Module name, sorted ascending".
-// The visible label text and the sort icon are preserved; aria-sort stays on the th.
-const SortableHeader = ({property, label, order, orderBy, onSort}) => {
-    const {t} = useTranslation('module-management-community');
-    const isActive = orderBy === property;
-    const directionLabel = isActive ?
-        (order === 'asc' ?
-            t('label.table.sort.ascending', 'sorted ascending') :
-            t('label.table.sort.descending', 'sorted descending')) :
-        t('label.table.sort.notSorted', 'not sorted, activate to sort ascending');
+/** Splits an entry of the form "name/version:value" into its three parts. */
+const parseEntry = entry => ({
+    name: entry.substring(0, entry.indexOf('/')).trim(),
+    version: entry.substring(entry.indexOf('/') + 1, entry.indexOf(':')).trim(),
+    value: entry.substring(entry.indexOf(':') + 1).trim()
+});
 
-    return (
-        <button
-            type="button"
-            className={styles.sortableHeaderBtn}
-            aria-label={`${label}, ${directionLabel}`}
-            onClick={() => onSort(property)}
-        >
-            <Typography variant="body" weight="semiBold" aria-hidden="true">{label}</Typography>
-            <TableSortLabel
-                component="span"
-                active={isActive}
-                classes={{icon: isActive ? styles.iconActive : styles.icon}}
-                direction={isActive ? order : 'asc'}
-                aria-hidden="true"
-                tabIndex={-1}
-            />
-        </button>
-    );
-};
-
-SortableHeader.propTypes = {
-    property: PropTypes.string,
-    label: PropTypes.string,
-    order: PropTypes.string,
-    orderBy: PropTypes.string,
-    onSort: PropTypes.func
-};
-
-// ── Cluster menu items ──────────────────────────────────────────────────────
-
-// Cluster operations sub-menu. Returns a flat *array* of elements (not a
-// component) so they become direct children of the MUI <Menu> — MUI's MenuList
-// manages roving focus per child, and a wrapper component would hide them as one.
-const buildClusterMenuItems = ({isClustered, t, onOperation}) => {
-    if (!isClustered) {
-        return [];
-    }
-
-    const operations = [
-        {key: 'synchronize', labelKey: 'label.table.actions.sync', Icon: Reload},
-        {key: 'push', labelKey: 'label.table.actions.push', Icon: Upload},
-        {key: 'pull', labelKey: 'label.table.actions.pull', Icon: Download}
-    ];
-
-    return [
-        <Divider key="cluster-divider"/>,
-        <MenuItem key="cluster-title" disabled className={styles.menuSectionHeader}>
-            <span className={styles.menuItemContent}><Server aria-hidden="true"/>{t('label.cluster.ops.title')}</span>
-        </MenuItem>,
-        ...operations.map(({key, labelKey, Icon}) => (
-            <MenuItem key={key} onClick={() => onOperation(key)}>
-                <span className={styles.menuItemContent}><Icon aria-hidden="true"/>{t(labelKey)}</span>
-            </MenuItem>
-        ))
-    ];
-};
+/** Maps "symbolicName:type" entries to {symbolicName: type}. */
+const parseBundleTypes = entries => Object.fromEntries((entries || [])
+    .map(entry => [entry.substring(0, entry.indexOf(':')), entry.substring(entry.indexOf(':') + 1)])
+    .filter(([name]) => name));
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 const ModuleManagementCommunityApp = () => {
     const notificationContext = useNotifications();
     const {t} = useTranslation('module-management-community');
+    const client = useApolloClient();
     const [preferences, setPreferences] = useModulePreferences();
 
-    const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('name');
-    const [updates, setUpdates] = useState([]);
-    const [modules, setModules] = useState([]);
-    const [filter, setFilter] = useState('');
-    const [debouncedFilter, setDebouncedFilter] = useState('');
-    // Default: show only Jahia module types (module / system / templatesSet).
-    // The special value 'jahia' means "all Jahia module types"; '' means truly all (includes bundles).
-    const [typeFilter, setTypeFilter] = useState('jahia');
-    const [bundleTypes, setBundleTypes] = useState({});
+    const [sortBy, setSortBy] = useState('name');
+    const [sortDirection, setSortDirection] = useState('ascending');
+    const [filters, setFilters] = useState(DEFAULT_FILTERS);
     const [dependentUpdates, setDependentUpdates] = useState({});
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(20);
+    const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
     const [isUploadOpen, setIsUploadOpen] = useState(false);
     const [isExportOpen, setIsExportOpen] = useState(false);
     const [isGenerateScriptOpen, setIsGenerateScriptOpen] = useState(false);
     const [isInstallFromStoreOpen, setIsInstallFromStoreOpen] = useState(false);
-    const [menuAnchor, setMenuAnchor] = useState(null);
     const [dryRunResult, setDryRunResult] = useState(null);
 
     // ── Queries ────────────────────────────────────────────────────────────────
 
     const {
-        data: initialData, error: initialError, loading: initialLoading,
+        data: installedData, error: installedError, loading: installedLoading,
         refetch: refreshAllModules
     } = useQuery(INSTALLED_MODULES_QUERY, {
         fetchPolicy: 'cache-and-network',
+        notifyOnNetworkStatusChange: true,
         // A11y B-005: only poll when user has auto-refresh enabled
-        pollInterval: preferences.autoRefresh ? 30000 : 0,
-        initialFetchPolicy: 'network-only'
+        pollInterval: preferences.autoRefresh ? 30000 : 0
     });
 
-    const {data, error, loading, refetch} = useQuery(AVAILABLE_UPDATES_QUERY, {
-        fetchPolicy: 'cache-and-network', initialFetchPolicy: 'standby'
+    const {data: updatesData, error: updatesError, loading: updatesLoading, refetch: refetchUpdates} = useQuery(AVAILABLE_UPDATES_QUERY, {
+        fetchPolicy: 'cache-and-network',
+        notifyOnNetworkStatusChange: true
     });
 
     // ── Mutations ──────────────────────────────────────────────────────────────
 
-    const [updateAll] = useMutation(UPDATE_MODULES_MUTATION, {
-        variables: {
-            filter: [],
-            dryRun: preferences.dryRun,
-            autostart: preferences.autostart,
-            uninstall: preferences.uninstallPrevious,
-            onStartup: preferences.onStartup
-        }
-    });
+    const [updateAll] = useMutation(UPDATE_MODULES_MUTATION);
     const [synchronize] = useMutation(SYNCHRONIZE_MUTATION);
     const [push] = useMutation(PUSH_MUTATION);
     const [pull] = useMutation(PULL_MUTATION);
     const [cleanupJcr] = useMutation(CLEANUP_JCR_MUTATION);
 
-    // ── Effects ────────────────────────────────────────────────────────────────
+    // ── Derived data ───────────────────────────────────────────────────────────
 
+    const modulesManagement = installedData?.admin?.modulesManagement;
+    const isClustered = Boolean(modulesManagement?.clustered);
+    const lastUpdateTime = updatesData?.admin?.modulesManagement?.lastUpdateTime;
+    const lastUpdate = lastUpdateTime ? dayjs(lastUpdateTime).format('DD/MM/YYYY HH:mm') : undefined;
+
+    const updates = useMemo(() => (updatesData?.admin?.modulesManagement?.availableUpdates || [])
+        .map(parseEntry)
+        .map(({name, version, value}) => ({name, version, available: value})), [updatesData]);
+
+    const modules = useMemo(() => {
+        const bundleTypes = parseBundleTypes(modulesManagement?.installedBundleTypes);
+        return (modulesManagement?.installedModules || [])
+            .filter(m => m && m.includes('/') && m.includes(':'))
+            .map(parseEntry)
+            .map(({name, version, value}) => ({
+                id: `${name}/${version}`,
+                name,
+                version,
+                state: toStateName(value),
+                type: bundleTypes[name] || 'bundle',
+                available: updates.find(u => u.name === name && u.version === version)?.available || '',
+                clusterNodes: '',
+                actions: ''
+            }));
+    }, [modulesManagement, updates]);
+
+    const states = useMemo(() => [...new Set(modules.map(m => m.state))].sort(), [modules]);
+
+    const hasUpdate = useCallback(name =>
+        updates.some(u => u.name === name) || dependentUpdates[name]?.length > 0, [updates, dependentUpdates]);
+
+    const filteredModules = useMemo(() => modules
+        .filter(buildModuleFilter({filters, hasUpdate}))
+        .sort(getComparator(sortDirection === 'descending' ? 'desc' : 'asc', sortBy)),
+    [modules, filters, hasUpdate, sortBy, sortDirection]);
+
+    const lastPage = Math.max(1, Math.ceil(filteredModules.length / itemsPerPage));
+    const page = Math.min(currentPage, lastPage);
+    const pageSlice = filteredModules.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+    // A refresh or a filter can leave fewer pages than the page on screen, so the table moves to the last page.
     useEffect(() => {
-        if (data?.admin?.modulesManagement?.availableUpdates) {
-            setUpdates(data.admin.modulesManagement.availableUpdates.map(m => ({
-                name: m.substring(0, m.indexOf('/')).trim(),
-                version: m.substring(m.indexOf('/') + 1, m.indexOf(':')).trim(),
-                available: m.substring(m.indexOf(':') + 1).trim()
-            })));
+        if (currentPage > lastPage) {
+            setCurrentPage(lastPage);
         }
-    }, [data]);
-
-    useEffect(() => {
-        if (initialData?.admin?.modulesManagement?.installedModules) {
-            const installedModules = initialData.admin.modulesManagement.installedModules
-                .filter(m => m && m.includes('/') && m.includes(':'))
-                .map(m => ({
-                    name: m.substring(0, m.indexOf('/')).trim(),
-                    version: m.substring(m.indexOf('/') + 1, m.indexOf(':')).trim(),
-                    state: m.substring(m.indexOf(':') + 1).trim(),
-                    available: updates.find(u => u.name === m.substring(0, m.indexOf('/')).trim())?.available || ''
-                }));
-            installedModules.sort(getComparator(order, orderBy));
-            setModules(installedModules);
-        }
-    }, [initialData, order, orderBy, updates]);
-
-    useEffect(() => {
-        if (initialData?.admin?.modulesManagement?.installedBundleTypes) {
-            const typeMap = {};
-            initialData.admin.modulesManagement.installedBundleTypes.forEach(entry => {
-                const colonIdx = entry.indexOf(':');
-                if (colonIdx > 0) {
-                    typeMap[entry.substring(0, colonIdx)] = entry.substring(colonIdx + 1);
-                }
-            });
-            setBundleTypes(typeMap);
-        }
-    }, [initialData]);
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [debouncedFilter, preferences.updatesOnly]);
-    useEffect(() => {
-        const timerId = setTimeout(() => setDebouncedFilter(filter), 300);
-        return () => clearTimeout(timerId);
-    }, [filter]);
+    }, [currentPage, lastPage]);
 
     // ── Handlers ───────────────────────────────────────────────────────────────
 
-    const sortedModules = useMemo(() => [...modules].sort(getComparator(order, orderBy)), [modules, order, orderBy]);
+    const changeFilter = (key, value) => {
+        setFilters(old => ({...old, [key]: value}));
+        setCurrentPage(1);
+    };
 
-    const handleSort = useCallback(property => {
-        const isAsc = orderBy === property && order === 'asc';
-        setOrder(isAsc ? 'desc' : 'asc');
-        setOrderBy(property);
-    }, [order, orderBy]);
+    const clearFilters = () => {
+        setFilters(DEFAULT_FILTERS);
+        setCurrentPage(1);
+    };
+
+    const changeSort = (key, direction) => {
+        setSortBy(key);
+        setSortDirection(direction);
+        setCurrentPage(1);
+    };
 
     const handleDependentUpdate = useCallback((moduleName, deps) => {
-        setDependentUpdates(prev => ({...prev, [moduleName]: Array.isArray(deps) ? deps : [deps]}));
+        setDependentUpdates(prev => (prev[moduleName]?.join() === deps.join() ? prev : {...prev, [moduleName]: deps}));
     }, []);
 
-    const handleReportType = useCallback((moduleName, type) => {
-        setBundleTypes(prev => prev[moduleName] === type ? prev : {...prev, [moduleName]: type});
-    }, []);
+    // Every row reads its bundle from the cache, so a refresh asks Apollo to reload the rows on screen too.
+    const refreshRows = useCallback(() => client.refetchQueries({include: [BUNDLE_ROW_QUERY]}), [client]);
 
-    const handleUpdateAll = async filterArg => {
+    const refreshAll = useCallback(async () => {
+        try {
+            await Promise.all([refreshAllModules(), refetchUpdates(), refreshRows()]);
+        } catch (e) {
+            // The error of a refetch reaches the page through useQuery.
+            console.error('Error refreshing modules:', e);
+        }
+    }, [refreshAllModules, refetchUpdates, refreshRows]);
+
+    const handleUpdateAll = useCallback(async filterArg => {
         try {
             let expandedFilter = [];
             if (filterArg && filterArg.length > 0) {
@@ -315,7 +203,7 @@ const ModuleManagementCommunityApp = () => {
 
             const result = await updateAll({
                 variables: {
-                    filter: expandedFilter, jahiaOnly: preferences.jahiaOnly,
+                    filter: expandedFilter,
                     dryRun: preferences.dryRun, autostart: preferences.autostart,
                     uninstall: preferences.uninstallPrevious, onStartup: preferences.onStartup
                 }
@@ -334,26 +222,20 @@ const ModuleManagementCommunityApp = () => {
                         t('label.updateAllSuccess'),
                     ['closeButton', 'closeAfter5s']
                 );
-                await refetch();
+                await refreshAll();
             }
         } catch (e) {
             console.error('Error updating modules:', e);
             notificationContext.notify(t('label.updateAllError'), ['closeButton', 'closeAfter5s']);
         }
-    };
+    }, [dependentUpdates, updates, updateAll, preferences, notificationContext, t, refreshAll]);
 
     const handleClusterOperation = async operation => {
+        const mutations = {synchronize, push, pull};
         try {
-            if (operation === 'synchronize') {
-                await synchronize();
-            } else if (operation === 'push') {
-                await push();
-            } else if (operation === 'pull') {
-                await pull();
-            }
-
+            await mutations[operation]();
             notificationContext.notify(t(`label.${operation}BundlesSuccess`), ['closeButton', 'closeAfter5s']);
-            await refetch();
+            await refreshAll();
         } catch (e) {
             console.error(`Error during ${operation}:`, e);
             notificationContext.notify(t(`label.${operation}BundlesError`), ['closeButton', 'closeAfter5s']);
@@ -361,7 +243,6 @@ const ModuleManagementCommunityApp = () => {
     };
 
     const handleCleanupJcr = async () => {
-        setMenuAnchor(null);
         notificationContext.notify(t('label.cleanup.running'), ['closeButton']);
         try {
             const result = await cleanupJcr();
@@ -373,355 +254,127 @@ const ModuleManagementCommunityApp = () => {
         }
     };
 
-    // ── Loading / error states ─────────────────────────────────────────────────
-
-    if (error || initialError) {
-        notificationContext.notify(t('label.errors.loadingVanityUrl'), ['closeButton', 'closeAfter5s']);
-        return <>{t('label.errors.generic')}</>;
-    }
-
-    if (initialLoading || loading) {
-        return (
-            <Card>
-                <CardHeader title={
-                    <Typography className={styles.title} variant="heading" weight="semiBold" component="h2">
-                        {t('label.table.title')}
-                    </Typography>
-                }/>
-                {/* A11y A-010: announce loading state to screen readers */}
-                <CardContent className={styles.flexCenter}>
-                    <div className={styles.flex} role="status" aria-label={t('label.loading', 'Loading')}>
-                        <Loader size="big"/>
-                    </div>
-                </CardContent>
-            </Card>
-        );
-    }
-
-    // ── Filtered / paginated slice ─────────────────────────────────────────────
-
-    const filteredModules = sortedModules.filter(buildModuleFilter({
-        updatesOnly: preferences.updatesOnly,
+    const columns = useMemo(() => buildModuleColumns({
+        t,
         updates,
-        dependentUpdates,
-        typeFilter,
-        bundleTypes,
-        debouncedFilter
-    }));
-
-    const isClustered = initialData.admin.modulesManagement.clustered;
-    const lastUpdate = dayjs(data.admin.modulesManagement.lastUpdateTime).format('DD/MM/YYYY HH:mm');
-    const pageSlice = filteredModules.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+        isClustered,
+        refreshAllModules,
+        onDependentUpdates: handleDependentUpdate,
+        onUpdate: handleUpdateAll
+    }), [t, updates, isClustered, refreshAllModules, handleDependentUpdate, handleUpdateAll]);
 
     // ── Render ─────────────────────────────────────────────────────────────────
 
-    return (
-        <Card elevation={4}>
-            <CardHeader
-                title={
-                    <Typography className={styles.title} variant="heading" weight="semiBold" component="h2">
-                        {t('label.table.title')}
-                    </Typography>
-                }
-                action={
-                    <div className={styles.actionGroup}>
+    const error = installedError || updatesError;
+    const isLoading = installedLoading || updatesLoading;
+    const isFiltered = !isDefaultFilters(filters);
 
-                        <UpdateOptionsPopover preferences={preferences} onPreferencesChange={setPreferences}/>
-
-                        <Tooltip title={t('label.lastUpdate', {date: lastUpdate})} placement="bottom">
-                            <span>
-                                <Button variant="outlined"
-                                        size="big"
-                                        color="accent"
-                                        label={t('label.refresh')}
-                                        icon={<Reload/>}
-                                        className={styles.button}
-                                        onClick={() => {
-                                            notificationContext.notify(t('label.fetchUpdates'), ['closeButton', 'closeAfter5s']);
-                                            refetch();
-                                        }}/>
-                            </span>
-                        </Tooltip>
-
-                        {/* A11y B-005: user-controllable auto-refresh toggle */}
-                        <Tooltip
-                            title={preferences.autoRefresh ?
-                                t('label.autoRefresh.disable', 'Disable auto-refresh (currently refreshes every 30 s)') :
-                                t('label.autoRefresh.enable', 'Enable auto-refresh every 30 s')}
-                            placement="bottom"
-                        >
-                            <span>
-                                <Button variant={preferences.autoRefresh ? 'outlined' : 'ghost'}
-                                        size="big"
-                                        color={preferences.autoRefresh ? 'accent' : 'default'}
-                                        label={preferences.autoRefresh ?
-                                            t('label.autoRefresh.on', 'Auto') :
-                                            t('label.autoRefresh.off', 'Auto')}
-                                        aria-pressed={preferences.autoRefresh}
-                                        className={styles.button}
-                                        onClick={() => setPreferences({
-                                            ...preferences,
-                                            autoRefresh: !preferences.autoRefresh
-                                        })}/>
-                            </span>
-                        </Tooltip>
-
-                        <Tooltip
-                            title={preferences.dryRun ? t('label.updateAllDryRunTooltip') : t('label.updateAllLiveTooltip')}
-                            placement="bottom"
-                        >
-                            <span>
-                                <Button variant="outlined"
-                                        size="big"
-                                        color={preferences.dryRun ? 'accent' : 'danger'}
-                                        label={`${t('label.updateAll')} (${preferences.dryRun ? t('label.updateAllBadgeDry') : t('label.updateAllBadgeLive')})`}
-                                        icon={<Upload/>}
-                                        isDisabled={updates.length === 0}
-                                        className={styles.button}
-                                        data-testid="update-all-btn"
-                                        onClick={() => handleUpdateAll([])}/>
-                            </span>
-                        </Tooltip>
-
-                        {/* A11y A-014: aria-label, aria-haspopup, aria-expanded, aria-controls on ⋮ menu */}
-                        <button className={styles.dotMenuBtn}
-                                id="more-actions-trigger"
-                                type="button"
-                                aria-label={t('label.menu.title')}
-                                aria-haspopup="true"
-                                aria-expanded={Boolean(menuAnchor)}
-                                aria-controls={menuAnchor ? 'more-actions-menu' : undefined}
-                                data-testid="more-actions-btn"
-                                onClick={e => setMenuAnchor(e.currentTarget)}
-                        >
-                            <span aria-hidden="true">⋮</span>
-                        </button>
-                        <Menu id="more-actions-menu"
-                              anchorEl={menuAnchor}
-                              open={Boolean(menuAnchor)}
-                              anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
-                              getContentAnchorEl={null}
-                              transformOrigin={{vertical: 'top', horizontal: 'right'}}
-                              MenuListProps={{'aria-label': t('label.menu.title')}}
-                              onClose={() => setMenuAnchor(null)}
-                        >
-                            <MenuItem onClick={() => {
-                                setMenuAnchor(null);
-                                setIsUploadOpen(true);
-                            }}
-                            >
-                                <span className={styles.menuItemContent}><Upload aria-hidden="true"/>{t('label.upload.deploy')}</span>
-                            </MenuItem>
-                            <MenuItem onClick={() => {
-                                setMenuAnchor(null);
-                                setIsExportOpen(true);
-                            }}
-                            >
-                                <span className={styles.menuItemContent}><Download aria-hidden="true"/>{t('label.export.snapshot')}</span>
-                            </MenuItem>
-                            <MenuItem onClick={() => {
-                                setMenuAnchor(null);
-                                setIsGenerateScriptOpen(true);
-                            }}
-                            >
-                                <span className={styles.menuItemContent}><Download aria-hidden="true"/>{t('label.generateScript.menuItem')}</span>
-                            </MenuItem>
-                            <MenuItem onClick={() => {
-                                setMenuAnchor(null);
-                                setIsInstallFromStoreOpen(true);
-                            }}
-                            >
-                                <span className={styles.menuItemContent}><Upload aria-hidden="true"/>{t('label.installFromStore.menuItem')}</span>
-                            </MenuItem>
-                            <Divider/>
-                            <MenuItem onClick={handleCleanupJcr}>
-                                <span className={styles.menuItemContent}><DeletePermanently aria-hidden="true"/>{t('label.cleanup.jcr')}</span>
-                            </MenuItem>
-                            {buildClusterMenuItems({
-                                isClustered,
-                                t,
-                                onOperation: operation => {
-                                    setMenuAnchor(null);
-                                    handleClusterOperation(operation);
-                                }
-                            })}
-                            <Divider/>
-                            <MenuItem disabled>
-                                <span className={styles.menuItemContent}>{t('label.lastUpdate', {date: lastUpdate})}</span>
-                            </MenuItem>
-                        </Menu>
-                    </div>
-                }
-                classes={{action: styles.action, title: styles.titleWrapper}}
-            />
-
-            <CardContent className={styles.marginBorder}>
-                <Separator variant="horizontal" spacing="none"/>
-                {/* A11y A-017 / 1.3.1: explicit ARIA roles restore table semantics that
-                    Moonstone's `display:flex/block` styling strips from the native <table>. */}
-                <Table aria-label={t('label.table.title')} role="table">
-                    <TableHead role="rowgroup">
-                        <TableRow className={styles.tableRow} role="row">
-                            <TableHeadCell
-                                role="columnheader"
-                                scope="col"
-                                aria-sort={ariaSortFor('name', orderBy, order)}
-                            >
-                                <div className={styles.columnHeaderCell}>
-                                    <div className={styles.columnHeaderRow}>
-                                        <SortableHeader property="name"
-                                                        label={t('label.table.cells.name')}
-                                                        order={order}
-                                                        orderBy={orderBy}
-                                                        onSort={handleSort}/>
-                                    </div>
-                                    {/* A11y A-005: visually-hidden label for name filter */}
-                                    <label htmlFor="filter-name" className={styles.srOnly}>
-                                        {t('label.input.filterBySymbolicName')}
-                                    </label>
-                                    <input id="filter-name"
-                                           type="text"
-                                           placeholder={t('label.input.filterBySymbolicName')}
-                                           value={filter}
-                                           className={styles.columnFilterInput}
-                                           aria-label={t('label.input.filterBySymbolicName')}
-                                           onChange={e => setFilter(e.target.value)}/>
-                                </div>
-                            </TableHeadCell>
-
-                            <TableHeadCell role="columnheader" scope="col">
-                                <div className={styles.columnHeaderCell}>
-                                    <div className={styles.columnHeaderRow}>
-                                        <Typography variant="body"
-                                                    weight="semiBold"
-                                        >{t('label.table.cells.type')}
-                                        </Typography>
-                                    </div>
-                                    {/* A11y A-022: aria-label on type filter select */}
-                                    <select value={typeFilter}
-                                            className={styles.columnFilterInput}
-                                            aria-label={t('label.table.cells.type')}
-                                            style={{marginTop: '6px', marginBottom: '8px'}}
-                                            onChange={e => {
-                                                setTypeFilter(e.target.value);
-                                                setCurrentPage(1);
-                                            }}
-                                    >
-                                        <option value="jahia">{t('label.input.filterByType.jahia')}</option>
-                                        <option value="">{t('label.input.filterByType.all')}</option>
-                                        <option value="module">module</option>
-                                        <option value="system">system</option>
-                                        <option value="bundle">bundle</option>
-                                        <option value="templatesSet">templatesSet</option>
-                                    </select>
-                                </div>
-                            </TableHeadCell>
-
-                            <TableHeadCell
-                                role="columnheader"
-                                scope="col"
-                                aria-sort={ariaSortFor('version', orderBy, order)}
-                            >
-                                <SortableHeader property="version"
-                                                label={t('label.table.cells.version')}
-                                                order={order}
-                                                orderBy={orderBy}
-                                                onSort={handleSort}/>
-                            </TableHeadCell>
-
-                            {updates.length > 0 && (
-                                <TableHeadCell
-                                    role="columnheader"
-                                    scope="col"
-                                    aria-sort={ariaSortFor('available', orderBy, order)}
-                                >
-                                    <div className={styles.columnHeaderCell}>
-                                        <div className={styles.columnHeaderRow}>
-                                            <SortableHeader property="available"
-                                                            label={t('label.table.cells.available')}
-                                                            order={order}
-                                                            orderBy={orderBy}
-                                                            onSort={handleSort}/>
-                                        </div>
-                                        {/* A11y A-021: aria-label on updates-only switch */}
-                                        <label className={styles.columnCheckboxLabel}>
-                                            <Switch checked={preferences.updatesOnly}
-                                                    aria-label={t('label.input.updatesOnly')}
-                                                    onChange={(e, value, checked) => setPreferences({
-                                                         ...preferences,
-                                                         updatesOnly: checked
-                                                     })}/>
-                                            <Typography variant="caption" aria-hidden="true">{t('label.input.updatesOnly')}</Typography>
-                                        </label>
-                                    </div>
-                                </TableHeadCell>
-                            )}
-
-                            <TableHeadCell
-                                role="columnheader"
-                                scope="col"
-                                aria-sort={ariaSortFor('state', orderBy, order)}
-                            >
-                                <SortableHeader property="state"
-                                                label={isClustered ? t('label.table.cells.clusterstate') : t('label.table.cells.state')}
-                                                order={order}
-                                                orderBy={orderBy}
-                                                onSort={handleSort}/>
-                            </TableHeadCell>
-
-                            {isClustered && (
-                                <TableHeadCell role="columnheader" scope="col">
-                                    <Typography variant="body" weight="semiBold">
-                                        {t('label.table.cells.cluster.nodes.state')}
-                                    </Typography>
-                                </TableHeadCell>
-                            )}
-
-                            <TableHeadCell role="columnheader" scope="col">
-                                <Typography variant="body"
-                                            weight="semiBold"
-                                >{t('label.table.actions.title')}
-                                </Typography>
-                            </TableHeadCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody role="rowgroup">
-                        {pageSlice.map(module => (
-                            <ModuleRow key={`${module.name}-${module.version}`}
-                                       module={module}
-                                       updates={updates}
-                                       handleUpdate={handleUpdateAll}
-                                       dependentUpdates={handleDependentUpdate}
-                                       reportType={handleReportType}
-                                       isClustered={isClustered}
-                                       refreshAllModules={refreshAllModules}/>
-                        ))}
-                    </TableBody>
-                </Table>
-                <Separator variant="horizontal" spacing="none"/>
-
-                <ModuleTablePagination
-                    currentPage={currentPage}
+    let content;
+    if (error) {
+        content = (
+            <Banner variant="danger" title={t('label.errors.loadingModules')} role="alert">
+                {error.message}
+            </Banner>
+        );
+    } else if (pageSlice.length === 0) {
+        content = !isLoading && (
+            <EmptyData message={isFiltered ? t('label.filters.noMatch') : t('label.noModules')} data-testid="modules-empty"/>
+        );
+    } else {
+        content = (
+            <Paper hasPadding={false} className={styles.tableWrapper} aria-busy={isLoading} data-testid="modules-table">
+                <DataTable
+                    enableSorting
+                    enablePagination
+                    primaryKey="id"
+                    data={pageSlice}
+                    columns={columns}
+                    sortBy={sortBy}
+                    sortDirection={sortDirection}
+                    currentPage={page}
                     itemsPerPage={itemsPerPage}
+                    itemsPerPageOptions={ITEMS_PER_PAGE_OPTIONS}
                     totalItems={filteredModules.length}
+                    rowProps={{className: styles.row}}
+                    paginationProps={{className: styles.stickyPagination}}
+                    aria-label={t('label.table.title')}
+                    i18n={{
+                        itemsPerPage: t('label.pagination.itemsPerPage'),
+                        of: t('label.pagination.of')
+                    }}
+                    onSortChange={changeSort}
                     onPageChange={setCurrentPage}
-                    onItemsPerPageChange={setItemsPerPage}
+                    onItemsPerPageChange={value => {
+                        setItemsPerPage(value);
+                        setCurrentPage(1);
+                    }}
                 />
-            </CardContent>
+            </Paper>
+        );
+    }
+
+    return (
+        <LayoutContent
+            hasPadding
+            className={styles.layout}
+            isLoading={!installedData && !error}
+            header={
+                <Header
+                    title={t('label.title')}
+                    mainActions={
+                        /* A11y B-011: indicate new window opens */
+                        <Button variant="ghost"
+                                size="big"
+                                label={t('label.help')}
+                                icon={<Help/>}
+                                aria-label={`${t('label.help')} (opens in a new window)`}
+                                onClick={() => window.open(t('help.url'), '_blank', 'noopener,noreferrer')}/>
+                    }
+                    toolbarLeft={
+                        <ModulesActionBar
+                            isLoading={isLoading}
+                            isFiltered={isFiltered}
+                            isClustered={isClustered}
+                            hasUpdates={updates.length > 0}
+                            lastUpdate={lastUpdate}
+                            preferences={preferences}
+                            onPreferencesChange={setPreferences}
+                            onRefresh={() => {
+                                notificationContext.notify(t('label.fetchUpdates'), ['closeButton', 'closeAfter5s']);
+                                refreshAll();
+                            }}
+                            onClearFilters={clearFilters}
+                            onUpload={() => setIsUploadOpen(true)}
+                            onInstallFromStore={() => setIsInstallFromStoreOpen(true)}
+                            onUpdateAll={() => handleUpdateAll([])}
+                            onExport={() => setIsExportOpen(true)}
+                            onGenerateScript={() => setIsGenerateScriptOpen(true)}
+                            onCleanupJcr={handleCleanupJcr}
+                            onClusterOperation={handleClusterOperation}
+                        />
+                    }
+                />
+            }
+        >
+            {/* A11y CRITICAL-3: primary content wrapped in a <main> landmark */}
+            <main className={styles.tableArea}>
+                <ModuleFilters filters={filters} states={states} hasUpdates={updates.length > 0} onChange={changeFilter}/>
+                {content}
+            </main>
 
             <UploadModuleDialog isOpen={isUploadOpen}
                                 onClose={() => setIsUploadOpen(false)}
                                 onDeploySuccess={() => {
                                     setIsUploadOpen(false);
                                     notificationContext.notify(t('label.upload.deploySuccess'), ['closeButton', 'closeAfter5s']);
-                                    refreshAllModules();
-                                    refetch(); // Re-check available updates for the newly deployed module
+                                    // Re-check available updates for the newly deployed module
+                                    refreshAll();
                                 }}/>
             <ExportModulesDialog isOpen={isExportOpen} onClose={() => setIsExportOpen(false)}/>
             <GenerateScriptDialog
                 isOpen={isGenerateScriptOpen}
                 modules={modules}
-                bundleTypes={bundleTypes}
+                bundleTypes={parseBundleTypes(modulesManagement?.installedBundleTypes)}
                 onClose={() => setIsGenerateScriptOpen(false)}
             />
             <DryRunResultDialog isOpen={Boolean(dryRunResult)}
@@ -734,13 +387,11 @@ const ModuleManagementCommunityApp = () => {
                 onInstallSuccess={() => {
                     setIsInstallFromStoreOpen(false);
                     notificationContext.notify(t('label.installFromStore.successNotification'), ['closeButton', 'closeAfter5s']);
-                    refreshAllModules();
-                    refetch();
+                    refreshAll();
                 }}
             />
-        </Card>
+        </LayoutContent>
     );
 };
 
-export {getComparator};
 export default ModuleManagementCommunityApp;

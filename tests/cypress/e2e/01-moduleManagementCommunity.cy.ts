@@ -24,18 +24,52 @@ describe('Module Management Community', () => {
         cy.get(root, {timeout: 10000}).should('be.visible');
     };
 
+    const filterChip = (id: string) => `[data-testid="filter-chip"][data-filter="${id}"]`;
+    const nameFilter = () => cy.get(`[data-testid="module-filters"] input[placeholder="${nameFilterPlaceholder}"]`);
+
+    /** Open the editor of a filter chip */
+    const openFilter = (id: string) => {
+        cy.get(`${filterChip(id)} [data-testid="filter-chip-edit"]`).click();
+        cy.get(`[data-testid="filter-editor"][data-filter="${id}"]`).should('be.visible');
+    };
+
+    const closeFilterEditor = () => {
+        cy.get('[data-testid="filter-editor-close"]').click();
+    };
+
+    /** Type a name in the name filter, which is always open in the filter row */
     const filterByName = (name: string) => {
-        cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).clear();
-        cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).type(name);
+        nameFilter().clear();
+        nameFilter().type(name);
     };
 
+    const toggleType = (type: string) => {
+        cy.get(`[data-testid="filter-type"][data-type="${type}"]`).click();
+    };
+
+    const totalItems = () => cy.get('[data-testid="pagination-total-items"]');
+
+    /** The ⋮ button of a row shows once the row has loaded its bundle */
     const waitForRowLoaded = () => {
-        cy.get('[aria-label="Show details"]', {timeout: 20000}).first().should('be.visible');
+        cy.get('[data-testid="row-actions-menu-btn"]', {timeout: 20000}).first().should('be.visible');
     };
 
-    /** Open the ⋮ more-actions menu */
+    const openFirstRowDetails = () => {
+        cy.get('[data-testid="row-actions-menu-btn"]').first().click();
+        cy.get('[data-testid="row-menu-details"]').click();
+    };
+
+    /** Open the ⋮ more-actions menu of the action bar */
     const openMoreActionsMenu = () => {
         cy.get('[data-testid="more-actions-btn"]').click();
+        cy.get('[data-testid="more-actions-menu"]').should('be.visible');
+    };
+
+    /** The update options open from the ⋮ menu */
+    const openUpdateOptions = () => {
+        openMoreActionsMenu();
+        cy.get('[data-testid="update-options-btn"]').click();
+        cy.get('#update-options-popover').should('be.visible');
     };
 
     // ===========================================================================
@@ -46,55 +80,56 @@ describe('Module Management Community', () => {
         beforeEach(visitPage);
 
         it('renders the application title "Modules management"', () => {
-            cy.get(root).should('contain.text', 'Modules management');
+            cy.get(root).find('h1').should('contain.text', 'Modules management');
         });
 
-        it('renders the application subtitle about installing and managing modules', () => {
-            cy.get(root).should('contain.text', 'Allows to install');
-        });
-
-        it('renders the "Installed modules" card header', () => {
-            cy.contains('Installed modules').should('be.visible');
+        it('renders the modules table', () => {
+            cy.get('[data-testid="modules-table"]', {timeout: 20000}).should('be.visible');
         });
 
         it('renders all expected table column headers', () => {
-            cy.contains('Module name').should('be.visible');
-            cy.contains('Type').should('be.visible');
-            cy.contains('Installed version').should('be.visible');
-            cy.contains('State').should('be.visible');
-            cy.contains('Actions').should('be.visible');
+            cy.contains('th', 'Module name').should('be.visible');
+            cy.contains('th', 'Type').should('be.visible');
+            cy.contains('th', 'Installed version').should('be.visible');
+            cy.contains('th', 'State').should('be.visible');
+            cy.contains('th', 'Actions').should('be.visible');
         });
 
-        it('renders the module name filter input with correct placeholder', () => {
-            cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).should('be.visible');
+        it('renders the name filter open and the Type and State filter chips, with no Add filter button', () => {
+            nameFilter().should('be.visible').and('have.value', '');
+            cy.get(filterChip('name')).should('not.exist');
+            cy.get(filterChip('type')).should('be.visible');
+            cy.get(filterChip('state')).should('be.visible');
+            cy.get('[data-testid="filter-add"]').should('not.exist');
         });
 
-        it('renders the type filter select defaulting to "Jahia modules"', () => {
-            cy.contains('select', 'Jahia modules').should('be.visible').and('have.value', 'jahia');
+        it('defaults the Type filter to the Jahia module types', () => {
+            cy.get(filterChip('type')).should('contain.text', 'module, system, templatesSet');
         });
 
-        it('renders the pagination info line', () => {
-            cy.contains(/Showing \d+ to \d+ of \d+ modules/).should('be.visible');
+        it('renders the pagination with 100 rows per page by default', () => {
+            totalItems().invoke('text').should('match', /^\d+-\d+ of \d+$/);
+            cy.get('[data-testid="pagination-dropdown-items-per-page"]').should('contain.text', '100');
         });
 
         it('renders the Help button in the header', () => {
             cy.contains('button', 'Help').should('be.visible');
         });
 
-        it('renders the Refresh button', () => {
-            cy.contains('button', 'Refresh').should('be.visible');
-        });
-
-        it('renders the Update All button with DRY/LIVE mode indicator', () => {
-            cy.contains('button', /Update all.*\(DRY\)|\(LIVE\)/).should('be.visible');
-        });
-
-        it('renders the update options (⚙) button', () => {
-            cy.get('[data-testid="update-options-btn"]').should('be.visible');
+        it('renders Refresh, Upload module and Install from store in the action bar', () => {
+            cy.get('[role="toolbar"]').within(() => {
+                cy.contains('button', 'Refresh').should('be.visible');
+                cy.contains('button', 'Upload module').should('be.visible');
+                cy.contains('button', 'Install from store').should('be.visible');
+            });
         });
 
         it('renders the more-actions (⋮) menu button', () => {
             cy.get('[data-testid="more-actions-btn"]').should('be.visible');
+        });
+
+        it('shows no server status in the header of the screen', () => {
+            cy.get(root).find('header').should('not.contain.text', 'Server status');
         });
     });
 
@@ -107,20 +142,36 @@ describe('Module Management Community', () => {
 
         it('filtering by bundle name shows only matching rows', () => {
             filterByName(testBundle);
-            cy.contains(testBundle).should('be.visible');
-            cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
+            cy.contains('tr', testBundle).should('be.visible');
+            totalItems().should('have.text', '1-1 of 1');
         });
 
-        it('entering a non-existent name shows zero results', () => {
-            filterByName('zzz-absolutely-does-not-exist-xyz');
-            cy.contains('Showing 0 to 0 of 0 modules').should('be.visible');
+        it('filters the rows as the user types, with no click to open the filter', () => {
+            nameFilter().type('module-management-comm');
+            cy.contains('tr', testBundle).should('be.visible');
+            totalItems().should('have.text', '1-1 of 1');
+            nameFilter().should('have.value', 'module-management-comm');
         });
 
-        it('clearing the filter restores the full list', () => {
+        it('entering a non-existent name shows the no-match message', () => {
             filterByName('zzz-absolutely-does-not-exist-xyz');
-            cy.contains('Showing 0 to 0 of 0 modules').should('be.visible');
-            cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).clear();
-            cy.contains(/Showing 1 to \d+ of \d+ modules/).should('be.visible');
+            cy.get('[data-testid="modules-empty"]').should('contain.text', 'No module matches the filters.');
+        });
+
+        it('emptying the name filter restores the full list', () => {
+            filterByName('zzz-absolutely-does-not-exist-xyz');
+            cy.get('[data-testid="modules-empty"]').should('be.visible');
+            nameFilter().clear();
+            totalItems().invoke('text').should('match', /^1-\d+ of \d+$/);
+        });
+
+        it('Clear filters in the action bar restores the default filters', () => {
+            cy.get('[data-testid="filter-clear"]').should('be.disabled');
+            filterByName('zzz-absolutely-does-not-exist-xyz');
+            cy.get('[data-testid="filter-clear"]').should('not.be.disabled').click();
+            totalItems().invoke('text').should('match', /^1-\d+ of \d+$/);
+            nameFilter().should('have.value', '');
+            cy.get(filterChip('type')).should('contain.text', 'module, system, templatesSet');
         });
     });
 
@@ -135,37 +186,37 @@ describe('Module Management Community', () => {
             waitForRowLoaded();
         });
 
-        it('shows "module" type badge on the known bundle row', () => {
+        it('shows the "module" type on the known bundle row', () => {
             cy.contains('tr', testBundle).within(() => {
                 cy.contains('module').should('be.visible');
             });
         });
 
-        it('filtering by type "module" keeps the known module row visible', () => {
-            cy.get('select').first().select('module');
-            cy.contains(testBundle).should('be.visible');
-        });
-
-        it('filtering by type "bundle" hides the known module (whose type is "module")', () => {
-            cy.get('select').first().select('bundle');
-            cy.get('tbody').should('not.contain', testBundle);
-        });
-
-        it('resetting the type filter to "All types" reveals the module again', () => {
-            cy.get('select').first().select('bundle');
-            cy.get('tbody').should('not.contain', testBundle);
-            cy.get('select').first().select('jahia');
-            cy.contains(testBundle).should('be.visible');
-        });
-
-        it('type filter has all expected options: jahia, module, system, bundle, templatesSet', () => {
-            cy.get('select').first().within(() => {
-                cy.get('option[value="jahia"]').should('exist');
-                cy.get('option[value="module"]').should('exist');
-                cy.get('option[value="system"]').should('exist');
-                cy.get('option[value="bundle"]').should('exist');
-                cy.get('option[value="templatesSet"]').should('exist');
+        it('lists the four bundle types in the Type editor', () => {
+            openFilter('type');
+            ['module', 'system', 'templatesSet', 'bundle'].forEach(type => {
+                cy.get(`[data-testid="filter-type"][data-type="${type}"]`).should('exist');
             });
+        });
+
+        it('unchecking "module" hides the known module (whose type is "module")', () => {
+            openFilter('type');
+            toggleType('module');
+            closeFilterEditor();
+            cy.get('[data-testid="modules-empty"]').should('be.visible');
+        });
+
+        it('checking "module" again reveals the module', () => {
+            openFilter('type');
+            toggleType('module');
+            toggleType('module');
+            closeFilterEditor();
+            cy.contains('tr', testBundle).should('be.visible');
+        });
+
+        it('the clear button of the Type chip shows every type, the module included', () => {
+            cy.get(`${filterChip('type')} [data-testid="filter-chip-clear"]`).click();
+            cy.contains('tr', testBundle).should('be.visible');
         });
     });
 
@@ -176,27 +227,14 @@ describe('Module Management Community', () => {
     describe('Pagination', () => {
         beforeEach(visitPage);
 
-        it('"Previous" button is disabled on page 1', () => {
-            cy.contains('button', 'Previous').should('be.disabled');
+        it('the previous-page button is disabled on page 1', () => {
+            cy.get('[data-testid="pagination-button-previous-page"]').should('be.disabled');
         });
 
-        it('"Next" button is disabled when only 1 module matches the filter', () => {
+        it('the next-page button is disabled when only 1 module matches the filter', () => {
             filterByName(testBundle);
-            cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
-            cy.contains('button', 'Next').should('be.disabled');
-        });
-
-        it('items-per-page selector contains options 20, 40 and 60', () => {
-            cy.get('select').eq(1).within(() => {
-                cy.get('option[value="20"]').should('exist');
-                cy.get('option[value="40"]').should('exist');
-                cy.get('option[value="60"]').should('exist');
-            });
-        });
-
-        it('changing items-per-page to 40 keeps the pagination info visible', () => {
-            cy.get('select').eq(1).select('40');
-            cy.contains(/Showing \d+ to \d+ of \d+ modules/).should('be.visible');
+            totalItems().should('have.text', '1-1 of 1');
+            cy.get('[data-testid="pagination-button-next-page"]').should('be.disabled');
         });
     });
 
@@ -211,26 +249,38 @@ describe('Module Management Community', () => {
             waitForRowLoaded();
         });
 
-        it('shows a "module" type Badge in the row', () => {
+        it('shows the "module" type as a plain label in the row', () => {
             cy.contains('tr', testBundle).within(() => {
                 cy.contains('module').should('be.visible');
             });
         });
 
-        it('shows a version Badge containing a semver-like string', () => {
+        it('shows the installed version as a plain label', () => {
             cy.contains('tr', testBundle).within(() => {
                 cy.contains(/\d+\.\d+/).should('be.visible');
             });
         });
 
-        it('shows an "ACTIVE" state Chip for the running module', () => {
+        it('shows the "Active" state of the running module in sentence case', () => {
             cy.contains('tr', testBundle).within(() => {
-                cy.contains('ACTIVE').should('be.visible');
+                cy.contains('Active').should('be.visible');
+                cy.contains('ACTIVE').should('not.exist');
             });
         });
 
-        it('renders the "Show details" action button', () => {
-            cy.get('[aria-label="Show details"]').should('have.length.at.least', 1);
+        it('renders the row actions that show on hover, with their labels', () => {
+            cy.contains('tr', testBundle).within(() => {
+                cy.get('[data-testid="row-hover-actions"] [aria-label="Show details"]').should('exist');
+                cy.get('[data-testid="row-hover-actions"] [aria-label="Refresh bundle"]').should('exist');
+            });
+        });
+
+        it('the ⋮ menu of the row repeats the actions with text labels', () => {
+            cy.get('[data-testid="row-actions-menu-btn"]').first().click();
+            cy.get('[data-testid="row-actions-menu"]').within(() => {
+                cy.contains('Show details').should('be.visible');
+                cy.contains('Refresh bundle').should('be.visible');
+            });
         });
     });
 
@@ -242,9 +292,9 @@ describe('Module Management Community', () => {
         beforeEach(() => {
             visitPage();
             filterByName(testBundle);
-            cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
+            totalItems().should('have.text', '1-1 of 1');
             waitForRowLoaded();
-            cy.get('[aria-label="Show details"]').first().click();
+            openFirstRowDetails();
             cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 
@@ -252,27 +302,25 @@ describe('Module Management Community', () => {
             cy.get('[data-testid="bundle-details-dialog"]').should('contain.text', testBundle);
         });
 
-        it('shows a version badge beginning with "v" in the header', () => {
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
-                cy.contains(/^v\d+/).should('be.visible');
-            });
+        it('shows the version in the header', () => {
+            cy.get('[data-testid="bundle-details-version"]').invoke('text').should('match', /^\d+\.\d+/);
         });
 
-        it('shows the "module" type badge in the header', () => {
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
-                cy.contains('module').should('be.visible');
-            });
+        it('shows the "Module" type in the header', () => {
+            cy.get('[data-testid="bundle-details-type"]').should('have.text', 'Module');
         });
 
-        it('shows an "ACTIVE" state Chip in the header', () => {
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
-                cy.contains('ACTIVE').should('be.visible');
-            });
+        it('shows the "Active" state in the header', () => {
+            cy.get('[data-testid="bundle-details-state"]').should('have.text', 'Active');
         });
 
-        it('shows Refresh and Close action buttons in the dialog header', () => {
-            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
+        it('shows Refresh and Force reimport content in an action bar above the tabs, and Close beside the title', () => {
+            cy.get('[data-testid="bundle-details-actions"]').within(() => {
                 cy.contains('button', 'Refresh').should('be.visible');
+                cy.contains('button', 'Force reimport content').should('be.visible');
+                cy.contains('button', 'Close').should('not.exist');
+            });
+            cy.get('[data-testid="bundle-details-dialog"]').within(() => {
                 cy.contains('button', 'Close').should('be.visible');
             });
         });
@@ -293,9 +341,9 @@ describe('Module Management Community', () => {
         beforeEach(() => {
             visitPage();
             filterByName(testBundle);
-            cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
+            totalItems().should('have.text', '1-1 of 1');
             waitForRowLoaded();
-            cy.get('[aria-label="Show details"]').first().click();
+            openFirstRowDetails();
             cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 
@@ -354,9 +402,9 @@ describe('Module Management Community', () => {
         beforeEach(() => {
             visitPage();
             filterByName(testBundle);
-            cy.contains('Showing 1 to 1 of 1 modules').should('be.visible');
+            totalItems().should('have.text', '1-1 of 1');
             waitForRowLoaded();
-            cy.get('[aria-label="Show details"]').first().click();
+            openFirstRowDetails();
             cy.contains('[data-testid="bundle-details-dialog"]', testBundle, {timeout: 15000}).should('be.visible');
         });
 
@@ -385,27 +433,7 @@ describe('Module Management Community', () => {
     });
 
     // ===========================================================================
-    // 9. SERVER STATUS (SAM panel)
-    // ===========================================================================
-
-    describe('Server status panel', () => {
-        beforeEach(visitPage);
-
-        it('renders the header area containing the status section', () => {
-            cy.get(root).find('header').should('be.visible');
-        });
-
-        it('eventually resolves past "Loading server status"', () => {
-            cy.contains('Loading server status', {timeout: 15000}).should('not.exist');
-        });
-
-        it('shows "Server status" label after the SAM query resolves', () => {
-            cy.contains('Server status', {timeout: 15000}).should('be.visible');
-        });
-    });
-
-    // ===========================================================================
-    // 10. GRAPHQL API — direct verification via cy.apollo
+    // 9. GRAPHQL API — direct verification via cy.apollo
     // ===========================================================================
 
     describe('GraphQL API', () => {
@@ -458,30 +486,31 @@ describe('Module Management Community', () => {
     });
 
     // ===========================================================================
-    // 11. UPDATE OPTIONS POPOVER
+    // 10. UPDATE OPTIONS POPOVER
     // ===========================================================================
 
     describe('Update options popover', () => {
         beforeEach(visitPage);
 
-        it('renders the update options (Tune/⚙) button', () => {
+        it('the ⋮ menu holds the update options item', () => {
+            openMoreActionsMenu();
             cy.get('[data-testid="update-options-btn"]').should('be.visible');
         });
 
-        it('opens the update options popover when the button is clicked', () => {
-            cy.get('[data-testid="update-options-btn"]').click();
-            cy.contains('Update options').should('be.visible');
+        it('opens the update options popover from the ⋮ menu', () => {
+            openUpdateOptions();
+            cy.get('#update-options-popover').should('contain.text', 'Update options');
         });
 
         it('popover shows Quick presets: "Safe (dry run)" and "Apply now"', () => {
-            cy.get('[data-testid="update-options-btn"]').click();
+            openUpdateOptions();
             cy.contains('Quick presets:').should('be.visible');
             cy.contains('Safe (dry run)').should('be.visible');
             cy.contains('Apply now').should('be.visible');
         });
 
         it('popover shows all four update option labels with descriptions', () => {
-            cy.get('[data-testid="update-options-btn"]').click();
+            openUpdateOptions();
             cy.contains('Dry run').should('be.visible');
             cy.contains('Autostart modules').should('be.visible');
             cy.contains('Uninstall previous version').should('be.visible');
@@ -489,31 +518,36 @@ describe('Module Management Community', () => {
         });
 
         it('popover shows "Settings are saved automatically" notice', () => {
-            cy.get('[data-testid="update-options-btn"]').click();
+            openUpdateOptions();
             cy.contains('Settings are saved automatically').should('be.visible');
         });
 
-        it('Update All button shows "(DRY)" suffix by default', () => {
-            cy.contains('button', /Update all.*\(DRY\)/i).should('be.visible');
+        it('the Update all item shows "(DRY)" by default', () => {
+            openMoreActionsMenu();
+            cy.get('[data-testid="update-all-btn"]').should('contain.text', '(DRY)');
         });
 
-        it('clicking "Apply now" preset switches Update All button to "(LIVE)" mode', () => {
-            cy.get('[data-testid="update-options-btn"]').click();
+        it('clicking "Apply now" preset switches Update all to "(LIVE)" mode', () => {
+            openUpdateOptions();
             cy.contains('Apply now').click();
-            cy.contains('button', /Update all.*\(LIVE\)/i).should('be.visible');
+            cy.get('body').type('{esc}');
+            openMoreActionsMenu();
+            cy.get('[data-testid="update-all-btn"]').should('contain.text', '(LIVE)');
         });
 
         it('clicking "Safe (dry run)" preset restores "(DRY)" mode', () => {
             // Open popover, click Apply now (LIVE), then click Safe (dry run) — popover stays open
-            cy.get('[data-testid="update-options-btn"]').click();
+            openUpdateOptions();
             cy.contains('Apply now').click();
             cy.contains('Safe (dry run)').click();
-            cy.contains('button', /Update all.*\(DRY\)/i).should('be.visible');
+            cy.get('body').type('{esc}');
+            openMoreActionsMenu();
+            cy.get('[data-testid="update-all-btn"]').should('contain.text', '(DRY)');
         });
     });
 
     // ===========================================================================
-    // 12. MORE ACTIONS MENU
+    // 11. MORE ACTIONS MENU
     // ===========================================================================
 
     describe('More actions (⋮) menu', () => {
@@ -523,9 +557,11 @@ describe('Module Management Community', () => {
             cy.get('[data-testid="more-actions-btn"]').should('be.visible');
         });
 
-        it('menu contains "Deploy module" item', () => {
+        it('menu contains the Update all, update options and auto refresh items', () => {
             openMoreActionsMenu();
-            cy.contains('Deploy module').should('be.visible');
+            cy.get('[data-testid="update-all-btn"]').should('be.visible');
+            cy.get('[data-testid="update-options-btn"]').should('be.visible');
+            cy.get('[data-testid="auto-refresh-toggle"]').should('be.visible');
         });
 
         it('menu contains "Export snapshot" item', () => {
@@ -543,18 +579,19 @@ describe('Module Management Community', () => {
             cy.contains('Clean up JCR versions').should('be.visible');
         });
 
-        it('menu shows "Latest updates checked at" timestamp entry', () => {
+        it('the auto refresh item is a checkbox that toggles', () => {
             openMoreActionsMenu();
-            cy.contains('Latest updates checked at').should('exist');
+            cy.get('[data-testid="auto-refresh-toggle"]').invoke('attr', 'aria-checked').then(initial => {
+                cy.get('[data-testid="auto-refresh-toggle"]').click();
+                cy.get('[data-testid="auto-refresh-toggle"]').should('not.have.attr', 'aria-checked', initial);
+            });
         });
 
-        it('menu closes when pressing Escape', () => {
+        it('choosing an item closes the menu and opens its dialog', () => {
             openMoreActionsMenu();
-            cy.get('[role="menu"]').should('be.visible');
-            cy.contains('Deploy module').should('be.visible');
-            cy.get('body').type('{esc}');
-            cy.get('[role="menu"]').should('not.exist');
-            cy.contains('Deploy module').should('not.exist');
+            cy.contains('Export snapshot').click();
+            cy.get('[data-testid="more-actions-menu"]').should('not.exist');
+            cy.get('[data-testid="export-modules-dialog"]').should('be.visible');
         });
     });
 });

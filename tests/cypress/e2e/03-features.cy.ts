@@ -3,9 +3,8 @@
  * specs 01 (page/table/details) and 02 (upload/export/generate-script):
  *
  *  - Accessibility structure (WCAG 2.2 AAA work): main landmark, h1, sortable
- *    column-header buttons with aria-sort, dialog accessible names.
+ *    column headers with aria-sort, dialog accessible names.
  *  - Install-from-store dialog (store catalogue browse).
- *  - Server status (SAM) probe modal — open and close.
  *  - Bundle details: dependency-graph and version-history tabs.
  *  - GraphQL mutations exercised end-to-end (side-effect-free): updateModules
  *    dry-run, generateProvisioningScript, storeModules, cleanupJcrVersions.
@@ -23,13 +22,16 @@ describe('Module Management Community — features & accessibility', () => {
         cy.get(root, { timeout: 10000 }).should('be.visible')
     }
 
+    /** Type a name in the name filter, which is always open in the filter row */
     const filterByName = (name: string) => {
         cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).clear()
         cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).type(name)
     }
 
-    const openMoreActionsMenu = () => {
-        cy.get('[data-testid="more-actions-btn"]').click()
+    /** The details dialog opens from the ⋮ menu of the first row, which always shows */
+    const openFirstRowDetails = () => {
+        cy.get('[data-testid="row-actions-menu-btn"]', { timeout: 20000 }).first().click()
+        cy.get('[data-testid="row-menu-details"]').click()
     }
 
     // ===========================================================================
@@ -47,27 +49,20 @@ describe('Module Management Community — features & accessibility', () => {
             cy.get('h1').should('contain.text', 'Modules management')
         })
 
-        it('marks sortable column headers with aria-sort', () => {
+        it('marks the sorted column header with aria-sort', () => {
             cy.get('th[aria-sort]').should('have.length.at.least', 1)
         })
 
-        it('renders the column sort control as a real <button> (keyboard operable)', () => {
-            cy.contains('button', 'Module name').should('exist')
-        })
-
-        it('clicking the Module name sort button toggles its aria-sort state', () => {
-            cy.contains('th', 'Module name')
-                .invoke('attr', 'aria-sort')
-                .then((initial) => {
-                    cy.contains('button', 'Module name').click()
-                    cy.contains('th', 'Module name').invoke('attr', 'aria-sort').should('not.equal', initial)
-                })
+        it('clicking the Module name header toggles its aria-sort state', () => {
+            cy.contains('th', 'Module name').should('have.attr', 'aria-sort', 'ascending')
+            cy.contains('th', 'Module name').click()
+            cy.contains('th', 'Module name').should('have.attr', 'aria-sort', 'descending')
         })
 
         it('gives the bundle details dialog an accessible name (resolved aria-labelledby)', () => {
             filterByName(testBundle)
-            cy.contains('Showing 1 to 1 of 1 modules').should('be.visible')
-            cy.get('[aria-label="Show details"]', { timeout: 20000 }).first().click()
+            cy.get('[data-testid="pagination-total-items"]').should('have.text', '1-1 of 1')
+            openFirstRowDetails()
             cy.get('[data-testid="bundle-details-dialog"]', { timeout: 15000 }).should('be.visible')
             // Aria-labelledby must point at an element that exists and is non-empty
             cy.get('[data-testid="bundle-details-dialog"]')
@@ -87,14 +82,12 @@ describe('Module Management Community — features & accessibility', () => {
         beforeEach(visitPage)
 
         const openInstallFromStore = () => {
-            openMoreActionsMenu()
-            cy.contains('Install from store').click()
+            cy.get('[data-testid="install-from-store-btn"]').click()
             cy.get('[data-testid="install-from-store-dialog"]', { timeout: 20000 }).should('be.visible')
         }
 
-        it('shows the "Install from store" item in the more-actions menu', () => {
-            openMoreActionsMenu()
-            cy.contains('Install from store').should('be.visible')
+        it('shows the "Install from store" button in the action bar', () => {
+            cy.get('[role="toolbar"]').contains('button', 'Install from store').should('be.visible')
         })
 
         it('opens the install-from-store dialog with title and subtitle', () => {
@@ -131,38 +124,7 @@ describe('Module Management Community — features & accessibility', () => {
     })
 
     // ===========================================================================
-    // 3. SERVER STATUS (SAM) PROBE MODAL
-    // ===========================================================================
-
-    describe('Server status probe modal', () => {
-        beforeEach(visitPage)
-
-        const openProbeModal = () => {
-            cy.contains('Loading server status', { timeout: 15000 }).should('not.exist')
-            cy.get('button[aria-label^="Server status"]', { timeout: 15000 }).first().click()
-            cy.get('[aria-labelledby="probe-dialog-title"]', { timeout: 10000 }).should('be.visible')
-        }
-
-        it('opens the probe modal when the server-status button is clicked', () => {
-            openProbeModal()
-        })
-
-        it('probe modal lists the "Probes" section', () => {
-            openProbeModal()
-            cy.get('[aria-labelledby="probe-dialog-title"]').within(() => {
-                cy.contains('Probes').should('be.visible')
-            })
-        })
-
-        it('closes the probe modal via its Close button', () => {
-            openProbeModal()
-            cy.get('[aria-labelledby="probe-dialog-title"]').find('button[aria-label="Close"]').click()
-            cy.get('[aria-labelledby="probe-dialog-title"]').should('not.exist')
-        })
-    })
-
-    // ===========================================================================
-    // 4. BUNDLE DETAILS — dependency graph & version history tabs
+    // 3. BUNDLE DETAILS — dependency graph & version history tabs
     // ===========================================================================
 
     describe('Bundle details — dependency & version tabs', () => {
@@ -199,7 +161,7 @@ describe('Module Management Community — features & accessibility', () => {
             cy.contains('[data-testid="bundle-details-dialog"] button', 'Bundle dependencies', {timeout: 20000})
 
         // Mirrors the sequence spec 01 uses at "opens the bundle details dialog", which passes
-        // reliably. The name filter is debounced and refetches, so the table must be OBSERVED to
+        // reliably. The name filter re-renders the table, so the table must be OBSERVED to
         // reduce to the single matching row before anything is clicked. Clicking straight after
         // typing lands on a row the table is about to replace and the click is silently
         // swallowed — the failure screenshots show the filter correctly reduced to one row with
@@ -207,9 +169,8 @@ describe('Module Management Community — features & accessibility', () => {
         const openDetailsFor = (name: string) => {
             visitPage()
             filterByName(name)
-            cy.contains('Showing 1 to 1 of 1 modules', {timeout: 20000}).should('be.visible')
-            cy.get('[aria-label="Show details"]', {timeout: 20000}).first().should('be.visible')
-            cy.get('[aria-label="Show details"]').first().click()
+            cy.get('[data-testid="pagination-total-items"]', {timeout: 20000}).should('have.text', '1-1 of 1')
+            openFirstRowDetails()
             // Assert the dialog's CONTENT, not merely its presence: it proves the right bundle's
             // dialog opened, which a bare presence check cannot.
             cy.contains('[data-testid="bundle-details-dialog"]', name, {timeout: 15000}).should('be.visible')
@@ -246,7 +207,7 @@ describe('Module Management Community — features & accessibility', () => {
     })
 
     // ===========================================================================
-    // 5. GRAPHQL MUTATIONS — exercised end-to-end (side-effect-free)
+    // 4. GRAPHQL MUTATIONS — exercised end-to-end (side-effect-free)
     // ===========================================================================
 
     describe('GraphQL mutations (side-effect-free)', () => {

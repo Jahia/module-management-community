@@ -1,102 +1,53 @@
-.content {
-    padding: 16px 24px !important;
-}
-
-.subtitle {
-    margin-top: 4px;
-
-    color: var(--color-gray_dark, #374151); /* A11y MED: lifted from #666 for ≥7:1 */
+/* Full size, capped at the width the code block needs */
+.modal {
+    max-width: 960px;
 }
 
 .moduleList {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--moon-spacing-small);
     max-height: 10rem;
-    margin-bottom: 16px;
+    margin-bottom: var(--moon-spacing-medium);
     overflow-y: auto;
-}
-
-.moduleChip {
-    padding: 2px 8px;
-
-    font-size: 12px;
-    font-family: monospace;
-
-    border: 1px solid var(--color-gray-300, #d1d5db);
-    border-radius: 4px;
-    background: var(--color-gray-100, #f3f4f6);
 }
 
 .yamlHeader {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: var(--moon-spacing-small);
 }
 
 .viewToggle {
     display: flex;
-
-    border: 1px solid var(--color-gray_light, #e5e7eb);
-    border-radius: 6px;
-    overflow: hidden;
-}
-
-.toggleBtn {
-    padding: 4px 14px;
-
-    font-weight: 600;
-    font-size: 12px;
-    color: var(--color-gray_dark, #374151); /* A11y MED: lifted from gray60 for ≥7:1 */
-
-    border: none;
-    background: transparent;
-    cursor: pointer;
-
-    transition: background 0.15s, color 0.15s;
-
-    &:hover {
-        background: var(--color-gray_light, #f3f4f6);
-    }
-}
-
-.toggleBtnActive {
-    color: #fff !important;
-
-    background: var(--color-accent, #0070ba) !important;
+    gap: var(--moon-spacing-nano);
 }
 
 .yamlActions {
     display: flex;
-    gap: 4px;
+    gap: var(--moon-spacing-nano);
 }
 
 .curlHint {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: var(--moon-spacing-small);
 
-    font-style: italic;
-    color: var(--color-warning, #d97706);
+    color: var(--moon-color-warning_dark); /* A11y: dark amber, the warning yellow is unreadable on white */
 }
 
 .yaml {
     max-height: 380px;
     margin: 0;
-    padding: 16px;
+    padding: var(--moon-spacing-medium);
 
     font-size: 13px;
     font-family: 'Courier New', 'Courier', monospace;
-    color: #d4d4d4;
+    color: var(--moon-color-gray_light);
     line-height: 1.5;
     white-space: pre;
 
-    border-radius: 6px;
-    background: #1e1e1e;
+    border-radius: var(--moon-radius);
+    background: var(--moon-color-dark);
     overflow: auto;
-}
-
-.actions {
-    justify-content: flex-end !important;
-    padding: 12px 24px !important;
 }
