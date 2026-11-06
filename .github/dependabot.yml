@@ -16,8 +16,8 @@ updates:
       # Platform-provided (scope provided): must match what Jahia 8.2 ships
       - dependency-name: "javax.servlet:javax.servlet-api"
         update-types: ["version-update:semver-major"]
+      # pax-url-aether is provided by Karaf: any bump raises the org.ops4j.pax.url.mvn import floor
       - dependency-name: "org.ops4j.pax.url:*"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "com.graphql-java*:*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "io.github.graphql-java:*"
@@ -27,6 +27,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "org.apache.maven:*"
         update-types: ["version-update:semver-major"]
+      # Maven 3.10 is built on Resolver 2.x (pulls org.eclipse.aether 2 APIs)
+      - dependency-name: "org.apache.maven:*"
+        versions: [">= 3.10.0"]
       - dependency-name: "com.github.eirslett:frontend-maven-plugin"
         update-types: ["version-update:semver-major"]
   - package-ecosystem: "npm"
@@ -66,6 +69,13 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # Runtime UI majors: @jahia/react-material needs MUI 3; mermaid 12 needs e2e validation
+      - dependency-name: "@material-ui/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mermaid"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@mermaid-js/*"
+        update-types: ["version-update:semver-major"]
       # @jahia/stylelint-config only supports stylelint 13
       - dependency-name: "stylelint"
         update-types: ["version-update:semver-major"]
@@ -95,4 +105,11 @@ updates:
       - dependency-name: "@babel/*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # ESLint plugin majors require ESLint 9 flat config (eslint-plugin-cypress 3+ breaks `yarn lint`)
+      - dependency-name: "eslint-plugin-*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-config-*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@typescript-eslint/*"
         update-types: ["version-update:semver-major"]
