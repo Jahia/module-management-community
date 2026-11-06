@@ -91,6 +91,10 @@ module.exports = (env, argv) => {
                                 modules: {
                                     mode: 'local',
                                     localIdentName: "[path][name]__[local]--[hash:base64:5]",
+                                    // css-loader 7 defaults to named exports; keep the default
+                                    // export used by `import styles from './x.scss'`
+                                    namedExport: false,
+                                    exportLocalsConvention: 'as-is'
                                 }
                             }
                         },
