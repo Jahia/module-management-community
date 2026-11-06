@@ -57,6 +57,8 @@
         "@babel/plugin-transform-modules-systemjs": "^7.29.7",
         "@babel/runtime": "^7.26.10",
         "@tootallnate/once": "^2.0.1",
+        "**/@typescript-eslint/typescript-estree/minimatch": "^11.0.5",
+        "**/cacache/glob": "^14.0.3",
         "baseline-browser-mapping": "^2.11.22",
         "browserslist": "^4.28.9",
         "dompurify": "^3.4.17",
