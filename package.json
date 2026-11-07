@@ -37,10 +37,10 @@
         "@jahia/ui-extender": "^1.3.0",
         "@lightenna/react-mermaid-diagram": "^1.0.22",
         "@material-ui/core": "^3.9.4",
-        "@mermaid-js/layout-elk": "^0.2.1",
+        "@mermaid-js/layout-elk": "^0.2.2",
         "clsx": "^2.1.1",
         "dayjs": "^1.11.23",
-        "graphql": "^16.14.2",
+        "graphql": "^16.15.0",
         "graphql-tag": "^2.12.7",
         "i18next": "^19.0.3",
         "lodash": "^4.18.1",
@@ -53,7 +53,7 @@
         "react-redux": "^7.2.0"
     },
     "resolutions": {
-        "@babel/core": "^7.29.6",
+        "@babel/core": "^7.29.13",
         "@babel/plugin-transform-modules-systemjs": "^7.29.7",
         "@babel/runtime": "^7.26.10",
         "@tootallnate/once": "^2.0.1",
@@ -87,7 +87,7 @@
         "**/@jest/reporters/glob": "^14.0.3"
     },
     "devDependencies": {
-        "@babel/core": "^7.29.6",
+        "@babel/core": "^7.29.13",
         "@babel/plugin-external-helpers": "^7.29.7",
         "@babel/plugin-proposal-class-properties": "^7.18.6",
         "@babel/plugin-proposal-export-default-from": "^7.29.7",
