@@ -1,12 +1,25 @@
 import React, {useCallback, useRef, useState} from 'react';
-import {Button, Loader, Typography} from '@jahia/moonstone';
-import {Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Radio, RadioGroup} from '@material-ui/core';
+import {
+    Button,
+    Loader,
+    Modal,
+    ModalBody,
+    ModalFooter,
+    ModalHeader,
+    RadioGroup,
+    RadioItem,
+    Separator,
+    Typography
+} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
 import styles from './UploadModuleDialog.scss';
 import PropTypes from 'prop-types';
 
 const UPLOAD_URL = `${window.contextJsParameters?.contextPath || ''}/modules/module-management-community/upload`;
 const IMPORT_URL = `${window.contextJsParameters?.contextPath || ''}/modules/module-management-community/import`;
+
+// The modal is named by its header
+const TITLE_ID = 'upload-module-dialog-title';
 
 // Per-mode configuration. Keeps the component free of long ternary chains
 // (lower cognitive complexity) and centralises the accepted file types so the
@@ -199,150 +212,145 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
         defaultValue: `Select or drop a ${config.extensions} file`
     });
 
+    // Escape and a click outside the modal close it, except while the upload runs
+    const handleOpenChange = open => {
+        if (!open && !isUploading) {
+            handleClose();
+        }
+    };
+
     return (
-        <Dialog
-            fullWidth
-            open={isOpen}
-            maxWidth="sm"
+        <Modal
+            isOpen={isOpen}
+            size="large"
             data-testid="upload-module-dialog"
-            PaperProps={{'aria-modal': 'true'}}
-            onClose={isUploading ? undefined : handleClose}
+            aria-labelledby={TITLE_ID}
+            onOpenChange={handleOpenChange}
         >
-            <DialogTitle disableTypography>
-                <Typography variant="heading" weight="semiBold">
-                    {t('label.upload.dialog.title')}
-                </Typography>
-            </DialogTitle>
+            <>
+                <ModalHeader id={TITLE_ID} title={t('label.upload.dialog.title')}/>
 
-            <DialogContent className={styles.dialogContent}>
-                {/* Mode selector */}
-                <RadioGroup
-                    value={mode}
-                    className={styles.modeGroup}
-                    onChange={e => handleModeChange(e.target.value)}
-                >
-                    <FormControlLabel
-                        className={styles.typeControl}
-                        value="jar"
-                        control={<Radio color="primary" disabled={isUploading}/>}
-                        label={<Typography variant="body">{t('label.upload.mode.jar')}</Typography>}
-                    />
-                    <FormControlLabel
-                        className={styles.typeControl}
-                        value="zip"
-                        control={<Radio color="primary" disabled={isUploading}/>}
-                        label={<Typography variant="body">{t('label.upload.mode.zip')}</Typography>}
-                    />
-                    <FormControlLabel
-                        className={styles.typeControl}
-                        value="yaml"
-                        control={<Radio color="primary" disabled={isUploading}/>}
-                        label={<Typography variant="body">{t('label.upload.mode.yaml')}</Typography>}
-                    />
-                </RadioGroup>
-
-                {/* A11y A-004: drop zone is keyboard accessible */}
-                {!isSuccess && (
-                    <div
-                        role="button"
-                        tabIndex={0}
-                        aria-label={dropzoneAriaLabel}
-                        aria-describedby="upload-dropzone-hint"
-                        className={`${styles.dropZone} ${isDragging ? styles.dropZoneDragging : ''} ${selectedFile ? styles.dropZoneSelected : ''}`}
-                        onClick={() => fileInputRef.current?.click()}
-                        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && fileInputRef.current?.click()}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
+                <ModalBody className={styles.dialogContent}>
+                    {/* Mode selector */}
+                    <RadioGroup
+                        name="upload-mode"
+                        role="radiogroup"
+                        aria-labelledby={TITLE_ID}
+                        value={mode}
+                        isDisabled={isUploading}
+                        onChange={(e, value) => handleModeChange(value)}
                     >
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept={acceptAttr}
-                            className={styles.hiddenInput}
-                            onChange={handleFileInputChange}
-                        />
-                        {selectedFile ? (
-                            <>
-                                <Typography variant="body" weight="semiBold" className={styles.fileName}>
-                                    {/* A11y A-013: emoji with role="img" */}
-                                    <span role="img" aria-label={config.emojiLabel}>
-                                        {fileIcon}
-                                    </span>
-                                    {' '}{selectedFile.name}
+                        <RadioItem id="upload-mode-jar" value="jar" label={t('label.upload.mode.jar')}/>
+                        <RadioItem id="upload-mode-zip" value="zip" label={t('label.upload.mode.zip')}/>
+                        <RadioItem id="upload-mode-yaml" value="yaml" label={t('label.upload.mode.yaml')}/>
+                    </RadioGroup>
+
+                    <Separator spacing="none" size="full"/>
+
+                    {/* A11y A-004: drop zone is keyboard accessible */}
+                    {!isSuccess && (
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            aria-label={dropzoneAriaLabel}
+                            aria-describedby="upload-dropzone-hint"
+                            className={`${styles.dropZone} ${isDragging ? styles.dropZoneDragging : ''} ${selectedFile ? styles.dropZoneSelected : ''}`}
+                            onClick={() => fileInputRef.current?.click()}
+                            onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && fileInputRef.current?.click()}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                        >
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept={acceptAttr}
+                                className={styles.hiddenInput}
+                                onChange={handleFileInputChange}
+                            />
+                            {selectedFile ? (
+                                <>
+                                    <Typography variant="body" weight="semiBold" className={styles.fileName}>
+                                        {/* A11y A-013: emoji with role="img" */}
+                                        <span role="img" aria-label={config.emojiLabel}>
+                                            {fileIcon}
+                                        </span>
+                                        {' '}{selectedFile.name}
+                                    </Typography>
+                                    <Typography variant="caption" className={styles.fileSize}>
+                                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                                    </Typography>
+                                </>
+                            ) : (
+                                <Typography variant="body" className={styles.dropZoneHint}>
+                                    {dropzoneLabel}
                                 </Typography>
-                                <Typography variant="caption" className={styles.fileSize}>
-                                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                                </Typography>
-                            </>
-                        ) : (
-                            <Typography variant="body" className={styles.dropZoneHint}>
-                                {dropzoneLabel}
+                            )}
+                        </div>
+                    )}
+
+                    {/* A11y A-009: status feedback as live regions; A-013: emoji with aria role */}
+                    {isUploading && (
+                        <div className={styles.statusRow} role="status" aria-live="polite">
+                            <Loader size="small"/>
+                            <Typography variant="body">{uploadingLabel}</Typography>
+                        </div>
+                    )}
+
+                    {status === 'success' && (
+                        <div className={`${styles.statusRow} ${styles.statusSuccess}`} role="status" aria-live="polite">
+                            <Typography variant="body">
+                                <span role="img" aria-label="Success">✅</span> {statusMessage}
                             </Typography>
-                        )}
-                    </div>
-                )}
+                        </div>
+                    )}
 
-                {/* A11y A-009: status feedback as live regions; A-013: emoji with aria role */}
-                {isUploading && (
-                    <div className={styles.statusRow} role="status" aria-live="polite">
-                        <Loader size="small"/>
-                        <Typography variant="body">{uploadingLabel}</Typography>
-                    </div>
-                )}
+                    {status === 'error' && (
+                        <div className={`${styles.statusRow} ${styles.statusError}`} role="alert" aria-live="assertive">
+                            <Typography variant="body">
+                                <span role="img" aria-label="Warning">⚠️</span> {statusMessage}
+                            </Typography>
+                        </div>
+                    )}
 
-                {status === 'success' && (
-                    <div className={`${styles.statusRow} ${styles.statusSuccess}`} role="status" aria-live="polite">
-                        <Typography variant="body">
-                            <span role="img" aria-label="Success">✅</span> {statusMessage}
+                    {/* Helper text — referenced by the drop zone via aria-describedby (A11y HIGH-9) */}
+                    {!isSuccess && (
+                        <Typography id="upload-dropzone-hint" variant="caption" className={styles.helperText}>
+                            {hintLabel}
                         </Typography>
-                    </div>
-                )}
+                    )}
+                </ModalBody>
 
-                {status === 'error' && (
-                    <div className={`${styles.statusRow} ${styles.statusError}`} role="alert" aria-live="assertive">
-                        <Typography variant="body">
-                            <span role="img" aria-label="Warning">⚠️</span> {statusMessage}
-                        </Typography>
-                    </div>
-                )}
-
-                {/* Helper text — referenced by the drop zone via aria-describedby (A11y HIGH-9) */}
-                {!isSuccess && (
-                    <Typography id="upload-dropzone-hint" variant="caption" className={styles.helperText}>
-                        {hintLabel}
-                    </Typography>
-                )}
-            </DialogContent>
-
-            <DialogActions className={styles.dialogActions}>
-                {isSuccess ? (
-                    <Button
-                        variant="default"
-                        size="big"
-                        label={t('label.close')}
-                        onClick={handleSuccessClose}
-                    />
-                ) : (
-                    <>
-                        <Button
-                            variant="ghost"
-                            size="big"
-                            label={t('label.cancel')}
-                            isDisabled={isUploading}
-                            onClick={handleClose}
-                        />
+                {/* The footer lays its children out right to left: the primary action comes first */}
+                <ModalFooter>
+                    {isSuccess ? (
                         <Button
                             variant="default"
                             size="big"
-                            label={deployLabel}
-                            isDisabled={!selectedFile || isUploading}
-                            onClick={handleUpload}
+                            label={t('label.close')}
+                            onClick={handleSuccessClose}
                         />
-                    </>
-                )}
-            </DialogActions>
-        </Dialog>
+                    ) : (
+                        <>
+                            <Button
+                                variant="ghost"
+                                size="big"
+                                label={t('label.cancel')}
+                                isDisabled={isUploading}
+                                onClick={handleClose}
+                            />
+                            <Button
+                                variant="default"
+                                size="big"
+                                label={deployLabel}
+                                isDisabled={!selectedFile || isUploading}
+                                onClick={handleUpload}
+                            />
+                        </>
+                    )}
+                </ModalFooter>
+            </>
+        </Modal>
     );
 };
 

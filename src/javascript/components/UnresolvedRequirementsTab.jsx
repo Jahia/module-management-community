@@ -213,8 +213,7 @@ const UnresolvedRequirementsTab = ({bundle}) => {
                             return (
                                 <tr key={rowKey} className={styles.unresolvedRow}>
                                     <td className={styles.unresolvedCellNs}>
-                                        <Chip variant="outlined"
-                                              label={nsLabel(req.namespace)}
+                                        <Chip label={nsLabel(req.namespace)}
                                               color="default"
                                               title={req.namespace}/>
                                     </td>
@@ -226,8 +225,7 @@ const UnresolvedRequirementsTab = ({bundle}) => {
                                         <code className={styles.unresolvedFilter} title={req.filter}>{req.filter}</code>
                                     </td>
                                     <td className={styles.unresolvedCellStatus}>
-                                        <Chip variant="outlined"
-                                              label={req.hasProviders ?
+                                        <Chip label={req.hasProviders ?
                                                   t('label.bundle.unresolvedReqs.status.conflict') :
                                                   t('label.bundle.unresolvedReqs.status.missing')}
                                               color={req.hasProviders ? 'warning' : 'danger'}

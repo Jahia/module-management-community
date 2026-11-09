@@ -1,0 +1,17 @@
+/* The right margin keeps the icon off the label of the entry. */
+.root {
+    display: inline-flex;
+    margin-right: var(--moon-spacing-nano);
+}
+
+.GREEN {
+    color: var(--moon-color-success);
+}
+
+.YELLOW {
+    color: var(--moon-color-warning);
+}
+
+.RED {
+    color: var(--moon-color-danger);
+}

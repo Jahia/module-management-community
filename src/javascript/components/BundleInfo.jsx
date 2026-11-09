@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {useTranslation} from 'react-i18next';
-import {Button, Chip, Separator, Typography, Warning} from '@jahia/moonstone';
+import {Button, ChevronDown, ChevronRight, Chip, Separator, Typography, Warning} from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
 import styles from './BundleDetails.scss';
 
@@ -27,11 +27,11 @@ const toArray = val => {
     return String(val).split(/[,\n]/).map(s => s.trim()).filter(Boolean);
 };
 
-// A11y B-006: use real heading element instead of styled Typography
+// A11y B-006: a real heading element
 const SectionTitle = ({children}) => (
-    <h3 className={styles.sectionTitle}>
+    <Typography variant="subheading" weight="semiBold" component="h3" className={styles.sectionTitle}>
         {children}
-    </h3>
+    </Typography>
 );
 
 SectionTitle.propTypes = {children: PropTypes.node};
@@ -40,7 +40,6 @@ const ChipGroup = ({items, color = 'default', getTitle, isColumn = false}) => (
     <div className={isColumn ? styles.chipGroupColumn : styles.chipGroup}>
         {items.map(item => (
             <Chip key={item}
-                  variant="outlined"
                   label={item}
                   color={color}
                   title={getTitle ? getTitle(item) : undefined}/>
@@ -205,8 +204,9 @@ const BundleInfo = ({bundle}) => {
                     <section className={styles.infoSection}>
                         {/* A11y B-023: aria-expanded + aria-controls on manifest toggle */}
                         <Button variant="ghost"
-                                size="small"
-                                color="default"
+                                color="accent"
+                                icon={showManifest ? <ChevronDown/> : <ChevronRight/>}
+                                className={styles.manifestToggle}
                                 aria-expanded={showManifest}
                                 aria-controls="manifest-table"
                                 label={showManifest ?

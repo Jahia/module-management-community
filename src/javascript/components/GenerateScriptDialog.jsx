@@ -1,7 +1,17 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useLayoutEffect, useMemo, useState} from 'react';
 import * as PropTypes from 'prop-types';
-import {Button, Switch, Typography} from '@jahia/moonstone';
-import {Dialog, DialogActions, DialogContent, DialogTitle} from '@material-ui/core';
+import {
+    Button,
+    Checkbox,
+    Chip,
+    Modal,
+    ModalBody,
+    ModalFooter,
+    ModalHeader,
+    SearchInput,
+    Switch,
+    Typography
+} from '@jahia/moonstone';
 import {useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -17,6 +27,13 @@ const TYPE_OPTIONS = [
     {key: 'system', labelKey: 'label.generateScript.type.system'},
     {key: 'templatesSet', labelKey: 'label.generateScript.type.templatesSet'}
 ];
+
+const TYPE_CHIP_COLOR = {
+    module: 'success',
+    system: 'reassuring',
+    templatesSet: 'warning',
+    bundle: 'default'
+};
 
 export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) => {
     const {t} = useTranslation('module-management-community');
@@ -64,13 +81,16 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
         return modules.filter(m => m.version && m.version.toUpperCase().includes('SNAPSHOT')).length;
     }, [modules]);
 
-    // Initialise selection when dialog opens
-    const handleOpen = useCallback(() => {
-        setSelected(new Set(candidates.map(m => m.name)));
-        setSearch('');
-        setTypeFilter(new Set(['module', 'system', 'templatesSet']));
-        setScriptResult(null);
-    }, [candidates]);
+    // Initialise selection each time the dialog opens, before it paints.
+    // Candidates change with every render of the parent, so the effect reads them on opening only.
+    useLayoutEffect(() => {
+        if (isOpen) {
+            setSelected(new Set(candidates.map(m => m.name)));
+            setSearch('');
+            setTypeFilter(new Set(['module', 'system', 'templatesSet']));
+            setScriptResult(null);
+        }
+    }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const toggleType = useCallback(type => {
         setTypeFilter(prev => {
@@ -128,124 +148,108 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
 
     return (
         <>
-            <Dialog
-                fullWidth
-                open={isOpen}
-                maxWidth="md"
-                data-testid="generate-script-dialog"
-                PaperProps={{'aria-modal': 'true'}}
-                onClose={onClose}
-                onEnter={handleOpen}
+            <Modal isOpen={isOpen}
+                   size="large"
+                   aria-labelledby="generate-script-title"
+                   data-testid="generate-script-dialog"
+                   onOpenChange={open => !open && onClose()}
             >
-                <DialogTitle disableTypography>
-                    <Typography variant="title" component="h2">{t('label.generateScript.title')}</Typography>
-                    <Typography variant="body" className={styles.subtitle}>
+                <>
+                    <ModalHeader id="generate-script-title" title={t('label.generateScript.title')}>
                         {t('label.generateScript.subtitle')}
-                    </Typography>
-                </DialogTitle>
+                    </ModalHeader>
 
-                <DialogContent className={styles.content}>
-                    {/* A11y C-009: generating status live region */}
-                    <div role="status" aria-live="polite" aria-atomic="true">
-                        {isGenerating && t('label.generateScript.generating')}
-                    </div>
-                    {/* Type filter row */}
-                    <div className={styles.typeRow}>
-                        <Typography variant="caption" className={styles.typeLabel}>
-                            {t('label.generateScript.includeTypes')}
-                        </Typography>
-                        {/* A11y A-008: aria-label associates each Switch with its label */}
-                        {TYPE_OPTIONS.map(({key, labelKey}) => (
-                            <label key={key} className={styles.typeChip}>
-                                <Switch
-                                    checked={typeFilter.has(key)}
-                                    aria-label={t(labelKey)}
-                                    onChange={() => toggleType(key)}
-                                />
-                                <Typography variant="body" aria-hidden="true">{t(labelKey)}</Typography>
-                            </label>
-                        ))}
-                    </div>
-
-                    {/* Search + select all/none */}
-                    <div className={styles.searchRow}>
-                        {/* A11y A-016: programmatic label for search input */}
-                        <label htmlFor="script-search" className={styles.srOnly}>
-                            {t('label.generateScript.searchPlaceholder')}
-                        </label>
-                        <input
-                            id="script-search"
-                            type="text"
-                            className={styles.searchInput}
-                            placeholder={t('label.generateScript.searchPlaceholder')}
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                        />
-                        <Button variant="ghost"
-                                size="small"
-                                label={t('label.generateScript.selectAll')}
-                                onClick={selectAll}/>
-                        <Button variant="ghost"
-                                size="small"
-                                label={t('label.generateScript.clearAll')}
-                                onClick={clearAll}/>
-                    </div>
-
-                    {/* Module list */}
-                    <div className={styles.moduleList}>
-                        {filteredCandidates.length === 0 ? (
-                            <Typography variant="body" className={styles.empty}>
-                                {t('label.generateScript.empty')}
+                    <ModalBody className={styles.body}>
+                        {/* A11y C-009: generating status live region */}
+                        <div role="status" aria-live="polite" aria-atomic="true">
+                            {isGenerating && t('label.generateScript.generating')}
+                        </div>
+                        {/* Type filter row */}
+                        <div className={styles.typeRow}>
+                            <Typography variant="caption" className={styles.typeLabel}>
+                                {t('label.generateScript.includeTypes')}
                             </Typography>
-                        ) : (
-                            filteredCandidates.map(m => {
-                                const type = bundleTypes?.[m.name] || 'bundle';
-                                const isChecked = selected.has(m.name);
-                                return (
-                                    <label key={m.name}
-                                           className={`${styles.moduleRow} ${isChecked ? styles.moduleRowChecked : ''}`}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            className={styles.checkbox}
-                                            checked={isChecked}
-                                            onChange={() => toggleModule(m.name)}
-                                        />
-                                        <Typography variant="body" className={styles.moduleName}>{m.name}</Typography>
-                                        <span className={`${styles.badge} ${styles[`badge_${type}`]}`}>
-                                            {m.version}
-                                        </span>
-                                        <span className={`${styles.typeBadge} ${styles[`type_${type}`]}`}>
-                                            {type}
-                                        </span>
-                                    </label>
-                                );
-                            })
-                        )}
-                    </div>
+                            {/* A11y A-008: aria-label associates each Switch with its label */}
+                            {TYPE_OPTIONS.map(({key, labelKey}) => (
+                                <label key={key} className={styles.typeChip}>
+                                    <Switch
+                                        checked={typeFilter.has(key)}
+                                        aria-label={t(labelKey)}
+                                        onChange={() => toggleType(key)}
+                                    />
+                                    <Typography variant="body" aria-hidden="true">{t(labelKey)}</Typography>
+                                </label>
+                            ))}
+                        </div>
 
-                    {/* Summary */}
-                    <Typography variant="caption" className={styles.summary}>
-                        {t('label.generateScript.summary', {
-                            selected: visibleSelected,
-                            total: filteredCandidates.length,
-                            snapshots: snapshotCount
-                        })}
-                    </Typography>
-                </DialogContent>
+                        {/* Search + select all/none */}
+                        <div className={styles.searchRow}>
+                            {/* A11y A-016: programmatic label for search input */}
+                            <SearchInput
+                                id="script-search"
+                                className={styles.search}
+                                aria-label={t('label.generateScript.searchPlaceholder')}
+                                placeholder={t('label.generateScript.searchPlaceholder')}
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                            />
+                            <Button variant="ghost"
+                                    size="small"
+                                    label={t('label.generateScript.selectAll')}
+                                    onClick={selectAll}/>
+                            <Button variant="ghost"
+                                    size="small"
+                                    label={t('label.generateScript.clearAll')}
+                                    onClick={clearAll}/>
+                        </div>
 
-                <DialogActions className={styles.actions}>
-                    <Button variant="ghost" size="big" label={t('label.cancel')} onClick={onClose}/>
-                    <Button
-                        variant="outlined"
-                        size="big"
-                        color="accent"
-                        label={isGenerating ? t('label.generateScript.generating') : t('label.generateScript.generate')}
-                        isDisabled={visibleSelected === 0 || isGenerating}
-                        onClick={handleGenerate}
-                    />
-                </DialogActions>
-            </Dialog>
+                        {/* Module list */}
+                        <div className={styles.moduleList}>
+                            {filteredCandidates.length === 0 ? (
+                                <Typography variant="body" className={styles.empty}>
+                                    {t('label.generateScript.empty')}
+                                </Typography>
+                            ) : (
+                                filteredCandidates.map(m => {
+                                    const type = bundleTypes?.[m.name] || 'bundle';
+                                    const isChecked = selected.has(m.name);
+                                    return (
+                                        <label key={m.name}
+                                               className={`${styles.moduleRow} ${isChecked ? styles.moduleRowChecked : ''}`}
+                                        >
+                                            <Checkbox checked={isChecked} onChange={() => toggleModule(m.name)}/>
+                                            <Typography variant="body" className={styles.moduleName}>{m.name}</Typography>
+                                            <Chip label={m.version} color="accent"/>
+                                            <Chip label={type} color={TYPE_CHIP_COLOR[type] || 'default'}/>
+                                        </label>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Summary */}
+                        <Typography variant="caption" className={styles.summary}>
+                            {t('label.generateScript.summary', {
+                                selected: visibleSelected,
+                                total: filteredCandidates.length,
+                                snapshots: snapshotCount
+                            })}
+                        </Typography>
+                    </ModalBody>
+
+                    <ModalFooter>
+                        <Button variant="ghost" size="big" label={t('label.cancel')} onClick={onClose}/>
+                        <Button
+                            variant="outlined"
+                            size="big"
+                            color="accent"
+                            label={isGenerating ? t('label.generateScript.generating') : t('label.generateScript.generate')}
+                            isDisabled={visibleSelected === 0 || isGenerating}
+                            onClick={handleGenerate}
+                        />
+                    </ModalFooter>
+                </>
+            </Modal>
 
             {/* Reuse DryRunResultDialog to show the YAML */}
             <DryRunResultDialog

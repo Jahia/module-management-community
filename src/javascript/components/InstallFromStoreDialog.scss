@@ -1,0 +1,158 @@
+/* The modal keeps the 960px of the former dialog, wide enough for the catalogue rows */
+.modal {
+    max-width: 960px;
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--moon-spacing-medium);
+}
+
+/* Search + actions row */
+.searchRow {
+    display: flex;
+    gap: var(--moon-spacing-small);
+    align-items: center;
+}
+
+.searchInput {
+    flex: 1;
+}
+
+/* Module list */
+.moduleList {
+    max-height: 340px;
+
+    border: 1px solid var(--moon-color-gray_light);
+    border-radius: var(--moon-radius);
+    overflow-y: auto;
+}
+
+.loading {
+    display: flex;
+    gap: var(--moon-spacing-small);
+    align-items: center;
+    padding: var(--moon-spacing-medium);
+}
+
+.moduleRow {
+    display: flex;
+    gap: var(--moon-spacing-small);
+    align-items: center;
+    padding: var(--moon-spacing-nano) var(--moon-spacing-medium);
+
+    border-bottom: 1px solid var(--moon-color-gray_light);
+    cursor: pointer;
+
+    transition: background-color 0.1s;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:hover {
+        background-color: var(--moon-color-gray_light_plain20);
+    }
+}
+
+.moduleRowChecked {
+    background-color: var(--moon-color-accent_light_plain20);
+}
+
+.moduleIcon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+
+    border-radius: var(--moon-radius);
+    background-color: var(--moon-color-gray_light_plain20);
+    object-fit: contain;
+}
+
+.moduleIconPlaceholder {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    align-items: center;
+    width: 32px;
+    height: 32px;
+
+    font-size: 18px;
+}
+
+/* Title + symbolic name stacked block */
+.moduleTitleBlock {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--moon-spacing-pico);
+    overflow: hidden;
+}
+
+.moduleTitle {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.moduleSymbolicName {
+    font-family: monospace;
+    color: var(--moon-color-gray_dark); /* A11y D-002: lifted from gray60 for ≥7:1 */
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+/* Store link (open-in-new icon) */
+.storeLink {
+    /* A11y MED target-size: minimum 44x44 hit area (WCAG 2.5.8) */
+    display: inline-flex;
+    flex-shrink: 0;
+    justify-content: center;
+    align-items: center;
+    min-width: 44px;
+    min-height: 44px;
+
+    color: var(--moon-color-accent_dark);
+
+    &:hover {
+        color: var(--moon-color-accent_dark_contrast);
+    }
+
+    &:focus-visible {
+        outline: 3px solid var(--moon-color-accent);
+        outline-offset: 2px;
+    }
+}
+
+.empty {
+    padding: var(--moon-spacing-large);
+
+    color: var(--moon-color-gray_dark); /* A11y D-002: lifted from gray60 for ≥7:1 */
+    text-align: center;
+}
+
+/* Status feedback rows */
+.statusSuccess {
+    padding: var(--moon-spacing-small) var(--moon-spacing-medium);
+
+    border-left: 4px solid var(--moon-color-success);
+    border-radius: var(--moon-radius);
+    background-color: var(--moon-color-success_plain20);
+}
+
+.statusError {
+    padding: var(--moon-spacing-small) var(--moon-spacing-medium);
+
+    color: var(--moon-color-danger_dark);
+
+    border-left: 4px solid var(--moon-color-danger);
+    border-radius: var(--moon-radius);
+    background-color: var(--moon-color-danger_plain20);
+}
+
+/* Summary line */
+.summary {
+    color: var(--moon-color-gray_dark); /* A11y D-002: lifted from gray60 for ≥7:1 */
+}
