@@ -1,4 +1,4 @@
-import React, {useCallback} from 'react';
+import React, {useCallback, useRef} from 'react';
 import * as PropTypes from 'prop-types';
 import {Banner, Button, Modal, ModalBody, ModalFooter, ModalHeader, Separator, Switch, Typography} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
@@ -25,9 +25,17 @@ const OPTION_META = [
     {key: 'onStartup', labelKey: 'label.input.onStartup', descKey: 'label.input.onStartupDesc'}
 ];
 
+let popoverCounter = 0;
+
 /** The update options, opened from the ⋮ menu of the action bar. */
 export const UpdateOptionsPopover = ({preferences, onPreferencesChange, isOpen, onClose}) => {
     const {t} = useTranslation('module-management-community');
+    const idRef = useRef(null);
+    if (idRef.current === null) {
+        idRef.current = `update-options-${++popoverCounter}`;
+    }
+
+    const uid = idRef.current;
 
     const handleSwitch = useCallback((key, checked) => {
         onPreferencesChange({...preferences, [key]: checked});
@@ -49,20 +57,33 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange, isOpen, 
                 <ModalHeader id="update-options-title" title={t('label.input.group.updateOptions')}/>
                 <ModalBody className={styles.body}>
                     <div className={styles.presets}>
-                        <Typography variant="caption" className={styles.secondary}>
+                        <Typography variant="caption" id={`${uid}-presets`} className={styles.secondary}>
                             {t('label.input.presets.label')}
                         </Typography>
-                        <div className={styles.presetBtns}>
-                            <Button variant="outlined"
-                                    color="accent"
-                                    label={t('label.input.presets.safe')}
-                                    title={t('label.input.presets.safeDesc')}
-                                    onClick={() => applyPreset('safe')}/>
-                            <Button variant="outlined"
-                                    color="danger"
-                                    label={t('label.input.presets.apply')}
-                                    title={t('label.input.presets.applyDesc')}
-                                    onClick={() => applyPreset('apply')}/>
+                        {/* A11y 1.3.1: each preset description is visible text, linked to its button */}
+                        <div role="group" aria-labelledby={`${uid}-presets`} className={styles.presetBtns}>
+                            <div className={styles.preset}>
+                                <Button variant="outlined"
+                                        color="accent"
+                                        label={t('label.input.presets.safe')}
+                                        aria-describedby={`${uid}-safe-desc`}
+                                        onClick={() => applyPreset('safe')}/>
+                                <Typography variant="caption" id={`${uid}-safe-desc`} className={styles.secondary}>
+                                    {t('label.input.presets.safeDesc')}
+                                </Typography>
+                            </div>
+                            <div className={styles.preset}>
+                                {/* A11y 1.4.3: the dark danger colour reaches 10:1 on white, the plain one 3.6:1 */}
+                                <Button variant="outlined"
+                                        color="danger"
+                                        className={styles.presetApply}
+                                        label={t('label.input.presets.apply')}
+                                        aria-describedby={`${uid}-apply-desc`}
+                                        onClick={() => applyPreset('apply')}/>
+                                <Typography variant="caption" id={`${uid}-apply-desc`} className={styles.secondary}>
+                                    {t('label.input.presets.applyDesc')}
+                                </Typography>
+                            </div>
                         </div>
                     </div>
 
@@ -76,14 +97,14 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange, isOpen, 
 
                     {OPTION_META.map(({key, labelKey, descKey}) => (
                         <div key={key} className={styles.option}>
-                            <div className={styles.switchLabelRow}>
-                                {/* A11y A-008: aria-label associates the switch with its label text */}
+                            {/* A11y 1.3.1, 3.3.2: the label names the switch, and the text under it describes it */}
+                            <label className={styles.switchLabelRow}>
                                 <Switch checked={preferences[key]}
-                                        aria-label={t(labelKey)}
+                                        aria-describedby={`${uid}-${key}-desc`}
                                         onChange={(e, value, checked) => handleSwitch(key, checked)}/>
-                                <Typography variant="body" aria-hidden="true">{t(labelKey)}</Typography>
-                            </div>
-                            <Typography variant="caption" className={styles.secondary}>{t(descKey)}</Typography>
+                                <Typography variant="body" component="span">{t(labelKey)}</Typography>
+                            </label>
+                            <Typography variant="caption" id={`${uid}-${key}-desc`} className={styles.secondary}>{t(descKey)}</Typography>
                         </div>
                     ))}
 
