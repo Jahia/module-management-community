@@ -4,7 +4,7 @@ import {Input} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
 import {FilterCheckbox, FilterChip} from './FilterChip';
 import {BUNDLE_TYPES} from '../../utils/moduleFilters';
-import {stateLabel} from '../../utils/moduleStates';
+import {stateLabel, typeLabel} from '../../utils/moduleStates';
 import styles from './Filters.scss';
 
 const toggleValue = (values, value) => (values.includes(value) ? values.filter(v => v !== value) : [...values, value]);
@@ -26,14 +26,32 @@ const NameFilter = ({filters, onChange}) => {
     );
 };
 
+/**
+ * Every type checked means no type filter: the chip is empty, and its clear button checks every type.
+ * No type checked keeps no module, and the chip says so.
+ */
+const typeFilterValue = (t, types) => {
+    if (types.length === 0) {
+        return t('label.filters.typesNone');
+    }
+
+    return BUNDLE_TYPES.every(type => types.includes(type)) ?
+        '' :
+        BUNDLE_TYPES.filter(type => types.includes(type)).map(type => typeLabel(t, type)).join(', ');
+};
+
 const TypeFilter = ({filters, onChange, ...chip}) => {
     const {t} = useTranslation('module-management-community');
-    const value = BUNDLE_TYPES.filter(type => filters.types.includes(type)).join(', ');
     return (
-        <FilterChip {...chip} id="type" name={t('label.filters.type')} value={value} onClear={() => onChange('types', [])}>
+        <FilterChip {...chip}
+                    id="type"
+                    name={t('label.filters.type')}
+                    value={typeFilterValue(t, filters.types)}
+                    onClear={() => onChange('types', BUNDLE_TYPES)}
+        >
             {BUNDLE_TYPES.map(type => (
                 <FilterCheckbox key={type}
-                                label={type}
+                                label={typeLabel(t, type)}
                                 isChecked={filters.types.includes(type)}
                                 data-testid="filter-type"
                                 data-type={type}
@@ -45,10 +63,12 @@ const TypeFilter = ({filters, onChange, ...chip}) => {
 
 const StateFilter = ({filters, states, onChange, ...chip}) => {
     const {t} = useTranslation('module-management-community');
-    const value = states.filter(state => filters.states.includes(state)).map(state => stateLabel(t, state)).join(', ');
+    // A selected state that no module has any more stays listed, so the user sees it and can uncheck it.
+    const choices = [...states, ...filters.states.filter(state => !states.includes(state))];
+    const value = choices.filter(state => filters.states.includes(state)).map(state => stateLabel(t, state)).join(', ');
     return (
         <FilterChip {...chip} id="state" name={t('label.filters.state')} value={value} onClear={() => onChange('states', [])}>
-            {states.map(state => (
+            {choices.map(state => (
                 <FilterCheckbox key={state}
                                 label={stateLabel(t, state)}
                                 isChecked={filters.states.includes(state)}
@@ -77,7 +97,10 @@ const UpdatesFilter = ({filters, onChange, ...chip}) => {
     );
 };
 
-/** Every filter is always in the row. The Updates filter shows only when an update is available. */
+/**
+ * Every filter is always in the row. The Updates filter shows when an update is available,
+ * and stays while it is active, so a filter that hides every row always has its chip.
+ */
 export const ModuleFilters = ({filters, states, hasUpdates, onChange}) => {
     const [openFilter, setOpenFilter] = useState(null);
 
@@ -92,7 +115,7 @@ export const ModuleFilters = ({filters, states, hasUpdates, onChange}) => {
             <NameFilter filters={filters} onChange={onChange}/>
             <TypeFilter {...chip('type')} filters={filters} onChange={onChange}/>
             <StateFilter {...chip('state')} filters={filters} states={states} onChange={onChange}/>
-            {hasUpdates && <UpdatesFilter {...chip('updates')} filters={filters} onChange={onChange}/>}
+            {(hasUpdates || filters.updatesOnly) && <UpdatesFilter {...chip('updates')} filters={filters} onChange={onChange}/>}
         </div>
     );
 };

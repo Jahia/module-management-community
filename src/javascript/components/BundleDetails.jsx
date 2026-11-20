@@ -23,7 +23,7 @@ import {
     Warning
 } from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
-import {stateLabel, stateTone} from '../utils/moduleStates';
+import {stateLabel, stateTone, typeLabel} from '../utils/moduleStates';
 import styles from './BundleDetails.scss';
 import Mermaid from './Mermaid';
 import BundleInfo from './BundleInfo';
@@ -239,7 +239,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                             {bundleDisplayName}
                         </Typography>
                         <Chip label={bundle.version} color="default" data-testid="bundle-details-version"/>
-                        <Chip label={t(`label.bundle.type.${bundle.type || 'bundle'}`, {defaultValue: bundle.type})}
+                        <Chip label={typeLabel(t, bundle.type)}
                               color="default"
                               data-testid="bundle-details-type"/>
                         <Chip label={stateLabel(t, bundle.state)} color={stateTone(bundle.state)} data-testid="bundle-details-state"/>

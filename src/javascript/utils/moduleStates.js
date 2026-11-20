@@ -11,3 +11,6 @@ export const stateTone = state => {
 export const stateLabel = (t, state) => (state ?
     t(`label.state.${state.toLowerCase()}`, {defaultValue: state}) :
     t('label.state.unknown'));
+
+/** The label of a bundle type, such as "Templates set" for templatesSet. */
+export const typeLabel = (t, type) => t(`label.bundle.type.${type || 'bundle'}`, {defaultValue: type});

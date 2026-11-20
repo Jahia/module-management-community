@@ -218,7 +218,18 @@ const ModuleManagementCommunityApp = () => {
     }, []);
 
     const handleDependentUpdate = useCallback((moduleName, deps) => {
-        setDependentUpdates(prev => (prev[moduleName]?.join() === deps.join() ? prev : {...prev, [moduleName]: deps}));
+        setDependentUpdates(prev => {
+            if ((prev[moduleName] || []).join() === deps.join()) {
+                return prev;
+            }
+
+            if (deps.length === 0) {
+                const {[moduleName]: _removed, ...rest} = prev;
+                return rest;
+            }
+
+            return {...prev, [moduleName]: deps};
+        });
     }, []);
 
     // Every row reads its bundle from the cache, so a refresh asks Apollo to reload the rows on screen too.

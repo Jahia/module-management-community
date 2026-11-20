@@ -489,6 +489,7 @@
     "filters": {
       "name": "Name",
       "type": "Type",
+      "typesNone": "none",
       "state": "State",
       "updates": "Updates",
       "updatesValue": "available only",

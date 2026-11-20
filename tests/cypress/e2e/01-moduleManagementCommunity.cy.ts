@@ -104,7 +104,7 @@ describe('Module Management Community', () => {
         });
 
         it('defaults the Type filter to the Jahia module types', () => {
-            cy.get(filterChip('type')).should('contain.text', 'module, system, templatesSet');
+            cy.get(filterChip('type')).should('contain.text', 'Module, System, Templates set');
         });
 
         it('renders the pagination with 100 rows per page by default', () => {
@@ -171,7 +171,7 @@ describe('Module Management Community', () => {
             cy.get('[data-testid="filter-clear"]').should('not.be.disabled').click();
             totalItems().invoke('text').should('match', /^1-\d+ of \d+$/);
             nameFilter().should('have.value', '');
-            cy.get(filterChip('type')).should('contain.text', 'module, system, templatesSet');
+            cy.get(filterChip('type')).should('contain.text', 'Module, System, Templates set');
         });
     });
 
@@ -186,9 +186,9 @@ describe('Module Management Community', () => {
             waitForRowLoaded();
         });
 
-        it('shows the "module" type on the known bundle row', () => {
+        it('shows the "Module" type on the known bundle row', () => {
             cy.contains('tr', testBundle).within(() => {
-                cy.contains('module').should('be.visible');
+                cy.contains('td', /^Module$/).should('be.visible');
             });
         });
 
@@ -214,9 +214,29 @@ describe('Module Management Community', () => {
             cy.contains('tr', testBundle).should('be.visible');
         });
 
-        it('the clear button of the Type chip shows every type, the module included', () => {
+        it('lists the four bundle types with their labels in the Type editor', () => {
+            openFilter('type');
+            [['module', 'Module'], ['system', 'System'], ['templatesSet', 'Templates set'], ['bundle', 'Bundle']].forEach(([type, label]) => {
+                cy.get(`[data-testid="filter-type"][data-type="${type}"]`).should('have.text', label);
+            });
+        });
+
+        it('unchecking every type keeps no module, and the chip says so', () => {
+            openFilter('type');
+            ['module', 'system', 'templatesSet'].forEach(toggleType);
+            closeFilterEditor();
+            cy.get(filterChip('type')).should('contain.text', 'none');
+            cy.get('[data-testid="modules-empty"]').should('contain.text', 'No module matches the filters.');
+        });
+
+        it('the clear button of the Type chip checks every type, the module included, and empties the chip', () => {
             cy.get(`${filterChip('type')} [data-testid="filter-chip-clear"]`).click();
             cy.contains('tr', testBundle).should('be.visible');
+            cy.get(`${filterChip('type')} [data-testid="filter-chip-clear"]`).should('not.exist');
+            openFilter('type');
+            ['module', 'system', 'templatesSet', 'bundle'].forEach(type => {
+                cy.get(`[data-testid="filter-type"][data-type="${type}"] input`).should('be.checked');
+            });
         });
     });
 
@@ -249,9 +269,9 @@ describe('Module Management Community', () => {
             waitForRowLoaded();
         });
 
-        it('shows the "module" type as a plain label in the row', () => {
+        it('shows the "Module" type as a plain label in the row', () => {
             cy.contains('tr', testBundle).within(() => {
-                cy.contains('module').should('be.visible');
+                cy.contains('td', /^Module$/).should('be.visible');
             });
         });
 

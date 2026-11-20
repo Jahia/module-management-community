@@ -44,8 +44,10 @@ const UNINSTALL_MUTATION = gql`mutation ($bundleId: Long!) {
 /**
  * The actions of one bundle: icon buttons that show while the pointer is on the row,
  * and a ⋮ menu that lists the same actions with their labels.
+ * The actions follow the state that the row shows, which the installed modules poll keeps fresh;
+ * the bundle gives only its id, type and name.
  */
-const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onUpdate}) => {
+const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailable, onUpdate}) => {
     const {t} = useTranslation('module-management-community');
     const notificationContext = useNotifications();
     const announce = useAnnounce();
@@ -101,8 +103,8 @@ const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onU
     };
 
     const isNotBundleType = bundle.type !== 'bundle';
-    const isInactive = bundle.state === 'INSTALLED' || bundle.state === 'RESOLVED';
-    const isActive = bundle.state === 'ACTIVE';
+    const isInactive = state === 'INSTALLED' || state === 'RESOLVED';
+    const isActive = state === 'ACTIVE';
 
     const actions = [
         {key: 'details', Icon: Information, label: t('label.showDetails'), onClick: () => openDialog(setIsDetailsOpen)},
@@ -225,6 +227,7 @@ const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onU
 
 RowActions.propTypes = {
     bundle: PropTypes.object.isRequired,
+    state: PropTypes.string,
     refetch: PropTypes.func.isRequired,
     refreshAllModules: PropTypes.func.isRequired,
     hasUpdateAvailable: PropTypes.bool.isRequired,

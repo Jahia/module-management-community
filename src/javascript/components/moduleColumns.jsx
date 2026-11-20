@@ -3,7 +3,7 @@ import {useTranslation} from 'react-i18next';
 import {Chip, Loader, Typography} from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
 import {dependentUpdatesOf, useBundleRow} from '../hooks/useBundleRow';
-import {stateLabel, stateTone} from '../utils/moduleStates';
+import {stateLabel, stateTone, typeLabel} from '../utils/moduleStates';
 import ClusterDeploymentStatus from './ClusterDeploymentStatus';
 import RowActions from './RowActions';
 import StatusDot from './StatusDot';
@@ -99,10 +99,10 @@ const ActionsCell = ({module, updates, onDependentUpdates, onUpdate, refreshAllM
     const {bundle, error, loading, refetch} = useBundleRow(module);
 
     // The parent needs the dependent updates of a row for the updates filter and for Update all.
+    // An empty list is reported too, so a row leaves the map once its dependency is updated.
     useEffect(() => {
-        const dependents = dependentUpdatesOf(bundle, updates);
-        if (bundle && dependents.length > 0) {
-            onDependentUpdates(bundle.symbolicName, dependents);
+        if (bundle) {
+            onDependentUpdates(bundle.symbolicName, dependentUpdatesOf(bundle, updates));
         }
     }, [bundle, updates, onDependentUpdates]);
 
@@ -116,6 +116,7 @@ const ActionsCell = ({module, updates, onDependentUpdates, onUpdate, refreshAllM
 
     return (
         <RowActions bundle={bundle}
+                    state={module.state}
                     refetch={refetch}
                     refreshAllModules={refreshAllModules}
                     hasUpdateAvailable={Boolean(module.available)}
@@ -181,7 +182,7 @@ export const buildModuleColumns = ({t, updates, isClustered, sort, onDependentUp
         label: t('label.table.cells.type'),
         isSortable: true,
         width: '140px',
-        render: ({value}) => <Typography variant="body">{value}</Typography>
+        render: ({value}) => <Typography variant="body">{typeLabel(t, value)}</Typography>
     },
     {
         key: 'version',
