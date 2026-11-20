@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useId, useRef} from 'react';
 import * as PropTypes from 'prop-types';
 import {Button, ButtonGroup, ChevronDown, Checkbox, Close, Menu} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
@@ -13,6 +13,7 @@ export const FilterChip = ({id, name, value, isOpen, onOpen, onClose, onClear, c
     const {t} = useTranslation('module-management-community');
     const anchorRef = useRef(null);
     const editorRef = useRef(null);
+    const groupLabelId = `filter-group-${useId()}`;
     const clearLabel = t('label.filters.clearOne', {name, interpolation: {escapeValue: false}});
 
     useEffect(() => {
@@ -77,10 +78,11 @@ export const FilterChip = ({id, name, value, isOpen, onOpen, onClose, onClear, c
                       onClose={close}
                 >
                     <div ref={editorRef} data-testid="filter-editor" data-filter={id}>
-                        <fieldset className={styles.fieldset}>
-                            <legend className={styles.legend}>{name}</legend>
+                        {/* A div group, not a fieldset: the admin shell styles every fieldset with !important padding. */}
+                        <div role="group" aria-labelledby={groupLabelId} className={styles.group}>
+                            <span id={groupLabelId} className={styles.srOnly}>{name}</span>
                             {children}
-                        </fieldset>
+                        </div>
                         <div className={styles.menuFooter}>
                             <Button variant="ghost"
                                     label={t('label.close')}
