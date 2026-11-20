@@ -52,7 +52,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
             focusFooterAction(footerRef, pendingAction.current);
             pendingAction.current = null;
         } else if (status === 'idle' && previewYaml) {
-            focusLater(() => previewRef.current);
+            focusLater(() => previewRef.current, () => previewRef.current?.parentElement);
             pendingAction.current = null;
         }
     }, [status, previewYaml]);

@@ -402,13 +402,14 @@ describe('Module Management Community — keyboard and screen reader', () => {
         // ServerHealth requests over a real minute and more instead: it lasts about two and a half minutes.
         it('with auto refresh off, the health of the navigation icon polls no more; on again, it polls within a minute', () => {
             const pollInterval = 60000;
-            let isOff = false;
+            // The phase decides which requests count: those of the page load count for nothing.
+            let phase = 'load';
             let requestsWhileOff = 0;
             cy.intercept('POST', '**/modules/graphql', req => {
                 if (findOperation(req.body, 'ServerHealth')) {
-                    if (isOff) {
+                    if (phase === 'off') {
                         requestsWhileOff += 1;
-                    } else {
+                    } else if (phase === 'on') {
                         req.alias = 'healthPoll';
                     }
                 }
@@ -420,7 +421,7 @@ describe('Module Management Community — keyboard and screen reader', () => {
 
             cy.contains('label', autoRefreshLabel).click();
             serverStatusSwitch().should('not.be.checked').then(() => {
-                isOff = true;
+                phase = 'off';
             });
             // Longer than the poll interval, so a poll that still ran would show
             cy.wait(pollInterval + 5000);
@@ -430,7 +431,7 @@ describe('Module Management Community — keyboard and screen reader', () => {
 
             cy.contains('label', autoRefreshLabel).click();
             serverStatusSwitch().should('be.checked').then(() => {
-                isOff = false;
+                phase = 'on';
             });
             cy.wait('@healthPoll', {timeout: pollInterval + 15000});
         });
@@ -820,6 +821,26 @@ describe('Module Management Community — keyboard and screen reader', () => {
             cy.get('[data-testid="filter-updates"] input').should('be.checked');
         });
 
+        it('a module whose dependency had an update leaves "updates only" once that update goes', () => {
+            // The module of the test depends on graphql-dxm-provider, so an update of that provider lists it too
+            let hasUpdate = true;
+            rewriteResult('AvailableUpdates', data => {
+                data.admin.modulesManagement.availableUpdates = hasUpdate ? ['graphql-dxm-provider/0.0.1:99.0.0'] : [];
+            });
+            visitPage();
+            openChip('updates');
+            cy.get('[data-testid="filter-updates"]').click();
+            closeEditor();
+            cy.get('[data-testid="modules-table"] tbody tr', {timeout: 15000}).should('contain.text', testBundle);
+
+            cy.then(() => {
+                hasUpdate = false;
+            });
+            cy.get('[data-testid="refresh-btn"]').click();
+            cy.wait('@AvailableUpdatesResult');
+            cy.get('[data-testid="modules-empty"]').should('contain.text', 'No module matches the filters.');
+        });
+
         it('a selected State that no module has any more stays checked in its editor', () => {
             let isStarting = true;
             let realStates: string[] = [];
@@ -850,12 +871,6 @@ describe('Module Management Community — keyboard and screen reader', () => {
             openChip('state');
             cy.get('[data-testid="filter-state"][data-state="STARTING"] input').should('be.checked');
         });
-
-        // The map of the modules whose dependencies have an update is state of the screen that it shrinks when an update
-        // goes; no element shows the map itself, so no end-to-end test reads it.
-        it.skip('the map of dependent updates shrinks when an update goes: internal state, not observable', () => {
-            // Not observable from the page
-        });
     });
 
     // ===========================================================================
@@ -880,12 +895,6 @@ describe('Module Management Community — keyboard and screen reader', () => {
             cy.contains('[data-testid="bundle-details-dialog"] [role="status"]', 'Stubbed reimport').should('be.visible');
             cy.get('[data-testid="bundle-details-dialog"] button[aria-label="Dismiss message"]').click();
             cy.contains('[data-testid="bundle-details-dialog"] [role="status"]', 'Stubbed reimport').should('not.exist');
-        });
-
-        // Installing another version changes the server, and needs a second version in the store or in the JCR; its
-        // result uses the same message component as the reimport above.
-        it.skip('the install result of a version of Bundle details stays until it is dismissed: needs a second version and changes the server', () => {
-            // Not run on the lab
         });
 
         it('the copy button of the Dry run result names what it copies, and the status reads the result of a copy', () => {

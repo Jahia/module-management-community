@@ -4,11 +4,19 @@
 // The frame delay lets React commit the new state and the Moonstone focus trap
 // settle before the focus moves; an immediate focus() can hit a node that is
 // still disabled or about to unmount.
-export const focusLater = getElement => {
+// With getReveal, the element it returns, such as a label and its content, is scrolled into view first, and the
+// focus itself does not scroll: a focus alone scrolls the target to the edge and can hide the label above it.
+export const focusLater = (getElement, getReveal) => {
     window.requestAnimationFrame(() => {
         const element = getElement();
         if (element && typeof element.focus === 'function') {
-            element.focus();
+            const reveal = getReveal && getReveal();
+            if (reveal) {
+                reveal.scrollIntoView({block: 'nearest'});
+                element.focus({preventScroll: true});
+            } else {
+                element.focus();
+            }
         }
     });
 };
