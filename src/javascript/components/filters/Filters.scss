@@ -84,3 +84,34 @@
 
     border-top: 1px solid var(--moon-color-gray_light);
 }
+
+/* The choices of a filter editor form one group, named by its legend. */
+.fieldset {
+    display: flex;
+    flex-direction: column;
+    gap: var(--moon-spacing-nano);
+    min-width: 200px;
+    margin: 0;
+    padding: var(--moon-spacing-small);
+
+    border: 0;
+}
+
+.legend {
+    padding: var(--moon-spacing-nano) 0;
+
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--moon-color-gray_dark);
+}
+
+.checkbox {
+    display: flex;
+    gap: var(--moon-spacing-small);
+    align-items: center;
+    padding: var(--moon-spacing-nano) 0;
+
+    color: var(--moon-color-gray_dark);
+
+    cursor: pointer;
+}

@@ -2,9 +2,9 @@ import React, {useState} from 'react';
 import * as PropTypes from 'prop-types';
 import {Input} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
-import {FilterChip} from './FilterChip';
-import {CheckMenuItem} from '../menu/MenuItems';
+import {FilterCheckbox, FilterChip} from './FilterChip';
 import {BUNDLE_TYPES} from '../../utils/moduleFilters';
+import {stateLabel} from '../../utils/moduleStates';
 import styles from './Filters.scss';
 
 const toggleValue = (values, value) => (values.includes(value) ? values.filter(v => v !== value) : [...values, value]);
@@ -18,7 +18,7 @@ const NameFilter = ({filters, onChange}) => {
                    size="big"
                    value={filters.name}
                    placeholder={t('label.input.filterBySymbolicName')}
-                   aria-label={t('label.filters.name')}
+                   aria-label={t('label.input.filterBySymbolicName')}
                    data-testid="filter-name"
                    onChange={event => onChange('name', event.target.value)}
                    onClear={() => onChange('name', '')}/>
@@ -32,12 +32,12 @@ const TypeFilter = ({filters, onChange, ...chip}) => {
     return (
         <FilterChip {...chip} id="type" name={t('label.filters.type')} value={value} onClear={() => onChange('types', [])}>
             {BUNDLE_TYPES.map(type => (
-                <CheckMenuItem key={type}
-                               label={type}
-                               isChecked={filters.types.includes(type)}
-                               data-testid="filter-type"
-                               data-type={type}
-                               onToggle={() => onChange('types', toggleValue(filters.types, type))}/>
+                <FilterCheckbox key={type}
+                                label={type}
+                                isChecked={filters.types.includes(type)}
+                                data-testid="filter-type"
+                                data-type={type}
+                                onToggle={() => onChange('types', toggleValue(filters.types, type))}/>
             ))}
         </FilterChip>
     );
@@ -45,16 +45,16 @@ const TypeFilter = ({filters, onChange, ...chip}) => {
 
 const StateFilter = ({filters, states, onChange, ...chip}) => {
     const {t} = useTranslation('module-management-community');
-    const value = states.filter(state => filters.states.includes(state)).join(', ');
+    const value = states.filter(state => filters.states.includes(state)).map(state => stateLabel(t, state)).join(', ');
     return (
         <FilterChip {...chip} id="state" name={t('label.filters.state')} value={value} onClear={() => onChange('states', [])}>
             {states.map(state => (
-                <CheckMenuItem key={state}
-                               label={state}
-                               isChecked={filters.states.includes(state)}
-                               data-testid="filter-state"
-                               data-state={state}
-                               onToggle={() => onChange('states', toggleValue(filters.states, state))}/>
+                <FilterCheckbox key={state}
+                                label={stateLabel(t, state)}
+                                isChecked={filters.states.includes(state)}
+                                data-testid="filter-state"
+                                data-state={state}
+                                onToggle={() => onChange('states', toggleValue(filters.states, state))}/>
             ))}
         </FilterChip>
     );
@@ -69,10 +69,10 @@ const UpdatesFilter = ({filters, onChange, ...chip}) => {
                     value={filters.updatesOnly ? t('label.filters.updatesValue') : ''}
                     onClear={() => onChange('updatesOnly', false)}
         >
-            <CheckMenuItem label={t('label.input.updatesOnly')}
-                           isChecked={filters.updatesOnly}
-                           data-testid="filter-updates"
-                           onToggle={() => onChange('updatesOnly', !filters.updatesOnly)}/>
+            <FilterCheckbox label={t('label.input.updatesOnly')}
+                            isChecked={filters.updatesOnly}
+                            data-testid="filter-updates"
+                            onToggle={() => onChange('updatesOnly', !filters.updatesOnly)}/>
         </FilterChip>
     );
 };

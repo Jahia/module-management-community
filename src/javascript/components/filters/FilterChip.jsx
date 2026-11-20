@@ -1,6 +1,6 @@
 import React, {useEffect, useRef} from 'react';
 import * as PropTypes from 'prop-types';
-import {Button, ButtonGroup, ChevronDown, Close, Menu, MenuItem} from '@jahia/moonstone';
+import {Button, ButtonGroup, ChevronDown, Checkbox, Close, Menu} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
 import {useEscapeKey} from '../../hooks/useEscapeKey';
 import styles from './Filters.scss';
@@ -68,16 +68,21 @@ export const FilterChip = ({id, name, value, isOpen, onOpen, onClose, onClear, c
                 ) : editButton}
             </span>
             {isOpen && (
+                // The Menu gives the position and the outside click; its list role is replaced, as the editor is a form.
                 <Menu isDisplayed
                       hasSearch={false}
                       anchorEl={anchorRef}
+                      role="dialog"
+                      aria-label={name}
                       data-testid="filter-editor"
                       data-filter={id}
                       onClose={close}
                 >
-                    <div ref={editorRef} role="dialog" aria-label={name}>
-                        <MenuItem variant="title" label={name}/>
-                        {children}
+                    <div ref={editorRef}>
+                        <fieldset className={styles.fieldset}>
+                            <legend className={styles.legend}>{name}</legend>
+                            {children}
+                        </fieldset>
                         <div className={styles.menuFooter}>
                             <Button variant="ghost"
                                     label={t('label.close')}
@@ -101,4 +106,18 @@ FilterChip.propTypes = {
     onClose: PropTypes.func.isRequired,
     onClear: PropTypes.func.isRequired,
     children: PropTypes.node
+};
+
+/** One choice of a filter editor: a native checkbox and its text in one label. */
+export const FilterCheckbox = ({label, isChecked, onToggle, ...props}) => (
+    <label className={styles.checkbox} {...props}>
+        <Checkbox checked={isChecked} onChange={onToggle}/>
+        <span>{label}</span>
+    </label>
+);
+
+FilterCheckbox.propTypes = {
+    label: PropTypes.string.isRequired,
+    isChecked: PropTypes.bool.isRequired,
+    onToggle: PropTypes.func.isRequired
 };
