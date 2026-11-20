@@ -43,7 +43,6 @@
     padding: var(--moon-spacing-nano) var(--moon-spacing-medium);
 
     border-bottom: 1px solid var(--moon-color-gray_light);
-    cursor: pointer;
 
     transition: background-color 0.1s;
 
@@ -58,6 +57,17 @@
 
 .moduleRowChecked {
     background-color: var(--moon-color-accent_light_plain20);
+}
+
+/* The label holds the checkbox and the module text; the store link sits beside it */
+.moduleLabel {
+    display: flex;
+    flex: 1;
+    gap: var(--moon-spacing-small);
+    align-items: center;
+    min-width: 0;
+
+    cursor: pointer;
 }
 
 .moduleIcon {
@@ -150,6 +160,40 @@
     border-left: 4px solid var(--moon-color-danger);
     border-radius: var(--moon-radius);
     background-color: var(--moon-color-danger_plain20);
+}
+
+/* Installation in progress; focus moves here while it runs */
+.statusProgress {
+    display: flex;
+    gap: var(--moon-spacing-small);
+    align-items: center;
+    padding: var(--moon-spacing-small) var(--moon-spacing-medium);
+
+    border-radius: var(--moon-radius);
+    background-color: var(--moon-color-gray_light_plain20);
+}
+
+.statusProgress,
+.statusSuccess {
+    &:focus {
+        outline: 2px solid var(--moon-color-accent_dark);
+        outline-offset: 2px;
+    }
+}
+
+.srOnly {
+    position: absolute;
+
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+
+    white-space: nowrap;
+
+    border: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
 }
 
 /* Summary line */

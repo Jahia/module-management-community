@@ -51,3 +51,16 @@
     background: var(--moon-color-dark);
     overflow: auto;
 }
+
+/* Copy result; empty until the first copy */
+.copyStatus {
+    margin-bottom: var(--moon-spacing-small);
+
+    font-size: 12px;
+    color: var(--moon-color-gray_dark);
+
+    /* Not display: none, which would take the live region out of the accessibility tree */
+    &:empty {
+        margin: 0;
+    }
+}

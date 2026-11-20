@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
     Button,
     CheckboxItem,
@@ -14,6 +14,7 @@ import {useNotifications} from '@jahia/react-material';
 import {useTranslation} from 'react-i18next';
 import styles from './ExportModulesDialog.scss';
 import PropTypes from 'prop-types';
+import {focusFooterAction, focusLater} from './dialogFocus';
 
 const EXPORT_BASE_URL = `${window.contextJsParameters?.contextPath || ''}/modules/module-management-community/export`;
 
@@ -32,6 +33,29 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
     const [status, setStatus] = useState('idle');
     const [errorMessage, setErrorMessage] = useState('');
     const [previewYaml, setPreviewYaml] = useState('');
+    const footerRef = useRef(null);
+    const statusRef = useRef(null);
+    const previewRef = useRef(null);
+    // The footer action the user pressed last ('preview' | 'export'), so focus follows its result
+    const pendingAction = useRef(null);
+
+    // The pressed action is disabled while it runs: focus waits on the progress message,
+    // then goes to the preview, or back to the action after a failure
+    useEffect(() => {
+        if (!pendingAction.current) {
+            return;
+        }
+
+        if (status === 'previewing' || status === 'exporting') {
+            focusLater(() => statusRef.current);
+        } else if (status === 'error') {
+            focusFooterAction(footerRef, pendingAction.current);
+            pendingAction.current = null;
+        } else if (status === 'idle' && previewYaml) {
+            focusLater(() => previewRef.current);
+            pendingAction.current = null;
+        }
+    }, [status, previewYaml]);
 
     const handleTypeToggle = type => {
         setSelectedTypes(prev => {
@@ -57,6 +81,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
         setStatus('idle');
         setErrorMessage('');
         setPreviewYaml('');
+        pendingAction.current = null;
         onClose();
     };
 
@@ -68,6 +93,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
     };
 
     const handlePreview = async () => {
+        pendingAction.current = 'preview';
         setStatus('previewing');
         setErrorMessage('');
         setPreviewYaml('');
@@ -91,7 +117,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                 setPreviewYaml(yaml);
                 setStatus('idle');
             } else {
-                throw new Error(json?.errors?.[0]?.message || 'No preview data returned');
+                throw new Error(json?.errors?.[0]?.message || t('label.export.dialog.error.noPreview'));
             }
         } catch (err) {
             setStatus('error');
@@ -100,6 +126,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
     };
 
     const handleExport = async () => {
+        pendingAction.current = 'export';
         setStatus('exporting');
         setErrorMessage('');
         const url = buildUrl();
@@ -127,10 +154,11 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
 
             // A11y B-027: notify screen readers the download has started
             notificationContext.notify(
-                t('label.export.dialog.downloadStarted', {fileName, defaultValue: `Download started: ${fileName}`}),
+                t('label.export.dialog.downloadStarted', {fileName}),
                 ['closeButton', 'closeAfter5s']
             );
 
+            pendingAction.current = null;
             setStatus('idle');
             handleClose();
         } catch (err) {
@@ -142,6 +170,15 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
     const isExporting = status === 'exporting';
     const isPreviewing = status === 'previewing';
     const isBusy = isExporting || isPreviewing;
+
+    let politeMessage = '';
+    if (isExporting) {
+        politeMessage = t('label.export.dialog.exporting');
+    } else if (isPreviewing) {
+        politeMessage = t('label.export.dialog.previewing');
+    } else if (previewYaml) {
+        politeMessage = t('label.export.dialog.preview.ready');
+    }
 
     return (
         <Modal
@@ -204,32 +241,23 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                         {t('label.export.dialog.hint')}
                     </Typography>
 
-                    {/* A11y C-004: loading spinners with role="status" */}
-                    {isExporting && (
-                        <div className={styles.statusRow} role="status" aria-live="polite">
-                            <Loader size="small"/>
-                            <Typography variant="body">{t('label.export.dialog.exporting')}</Typography>
-                        </div>
-                    )}
+                    {/* Both regions stay mounted, so a screen reader hears every change of their text */}
+                    <div ref={statusRef}
+                         role="status"
+                         tabIndex={-1}
+                         className={isBusy ? styles.statusRow : styles.srOnly}
+                    >
+                        {isBusy && <Loader size="small"/>}
+                        {politeMessage && <Typography variant="body" component="span">{politeMessage}</Typography>}
+                    </div>
 
-                    {isPreviewing && (
-                        <div className={styles.statusRow} role="status" aria-live="polite">
-                            <Loader size="small"/>
-                            <Typography variant="body">{t('label.export.dialog.previewing')}</Typography>
-                        </div>
-                    )}
-
-                    {/* A11y B-022: error as live alert region with emoji aria role */}
-                    {status === 'error' && (
-                        <div className={`${styles.statusRow} ${styles.statusError}`}
-                             role="alert"
-                             aria-live="assertive"
-                        >
-                            <Typography variant="body">
-                                <span role="img" aria-label="Warning">⚠️</span> {errorMessage}
+                    <div role="alert" className={status === 'error' ? `${styles.statusRow} ${styles.statusError}` : styles.srOnly}>
+                        {status === 'error' && (
+                            <Typography variant="body" component="span">
+                                <span role="img" aria-label={t('label.dialogs.status.error')}>⚠️</span> {errorMessage}
                             </Typography>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
                     {/* YAML preview — A11y C-014: keyboard-scrollable pre block */}
                     {previewYaml && (
@@ -237,9 +265,11 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                             <Typography variant="caption" weight="semiBold" className={styles.previewLabel}>
                                 {t('label.export.dialog.preview.label')}
                             </Typography>
-                            <pre className={styles.yamlPreview}
+                            <pre ref={previewRef}
+                                 className={styles.yamlPreview}
+                                 role="region"
                                  tabIndex={0}
-                                 aria-label={t('label.export.dialog.preview.ariaLabel', 'YAML provisioning preview')}
+                                 aria-label={t('label.export.dialog.preview.ariaLabel')}
                             >
                                 {previewYaml}
                             </pre>
@@ -248,11 +278,12 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                 </ModalBody>
 
                 {/* The footer lays its children out right to left: the primary action comes first */}
-                <ModalFooter>
+                <ModalFooter ref={footerRef}>
                     <Button
                         variant="ghost"
                         size="big"
                         label={t('label.export.dialog.preview.button')}
+                        data-focus="preview"
                         isDisabled={isBusy || selectedTypes.size === 0}
                         onClick={handlePreview}
                     />
@@ -267,6 +298,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
                         variant="default"
                         size="big"
                         label={t('label.export.dialog.export')}
+                        data-focus="export"
                         isDisabled={isBusy || selectedTypes.size === 0}
                         onClick={handleExport}
                     />

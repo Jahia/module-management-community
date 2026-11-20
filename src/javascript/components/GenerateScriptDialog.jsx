@@ -1,4 +1,4 @@
-import React, {useCallback, useLayoutEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import * as PropTypes from 'prop-types';
 import {
     Button,
@@ -17,10 +17,14 @@ import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
 import {DryRunResultDialog} from './DryRunResultDialog';
 import styles from './GenerateScriptDialog.scss';
+import {focusFooterAction, focusLater} from './dialogFocus';
+import {useCountAnnouncement} from '../hooks/useCountAnnouncement';
 
 const GENERATE_SCRIPT_MUTATION = gql`mutation ($symbolicNames: [String]!) {
     admin { modulesManagement { generateProvisioningScript(symbolicNames: $symbolicNames) } }
 }`;
+
+const SUBTITLE_ID = 'generate-script-dialog-subtitle';
 
 const TYPE_OPTIONS = [
     {key: 'module', labelKey: 'label.generateScript.type.module'},
@@ -42,6 +46,9 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
     const [selected, setSelected] = useState(new Set());
     const [scriptResult, setScriptResult] = useState(null); // {modules, yamlScript}
     const [isGenerating, setIsGenerating] = useState(false);
+    const [generateError, setGenerateError] = useState('');
+    const footerRef = useRef(null);
+    const progressRef = useRef(null);
 
     const [generateScript] = useMutation(GENERATE_SCRIPT_MUTATION);
 
@@ -73,6 +80,12 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
         return q ? candidates.filter(m => m.name.toLowerCase().includes(q)) : candidates;
     }, [candidates, search]);
 
+    const [countMessage, setCountMessage] = useCountAnnouncement(
+        filteredCandidates.length,
+        isOpen,
+        count => t('label.dialogs.shownCount', {count})
+    );
+
     const snapshotCount = useMemo(() => {
         if (!modules) {
             return 0;
@@ -89,8 +102,19 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
             setSearch('');
             setTypeFilter(new Set(['module', 'system', 'templatesSet']));
             setScriptResult(null);
+            setGenerateError('');
         }
     }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // The pressed Generate button is disabled while the script is built: focus waits on the progress message
+    // and returns to Generate after a failure, which the alert announces
+    useEffect(() => {
+        if (isGenerating) {
+            focusLater(() => progressRef.current);
+        } else if (generateError) {
+            focusFooterAction(footerRef, 'generate');
+        }
+    }, [isGenerating, generateError]);
 
     const toggleType = useCallback(type => {
         setTypeFilter(prev => {
@@ -120,11 +144,16 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
 
     const selectAll = useCallback(() => {
         setSelected(new Set(filteredCandidates.map(m => m.name)));
-    }, [filteredCandidates]);
+        setCountMessage(t('label.dialogs.selectedCount', {
+            selected: filteredCandidates.length,
+            total: filteredCandidates.length
+        }));
+    }, [filteredCandidates, setCountMessage, t]);
 
     const clearAll = useCallback(() => {
         setSelected(new Set());
-    }, []);
+        setCountMessage(t('label.dialogs.selectedCount', {selected: 0, total: filteredCandidates.length}));
+    }, [filteredCandidates, setCountMessage, t]);
 
     const handleGenerate = async () => {
         const names = Array.from(selected).filter(n => filteredCandidates.some(m => m.name === n));
@@ -132,15 +161,27 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
             return;
         }
 
+        setGenerateError('');
         setIsGenerating(true);
         try {
             const result = await generateScript({variables: {symbolicNames: names}});
             const yaml = result?.data?.admin?.modulesManagement?.generateProvisioningScript;
+            if (!yaml) {
+                throw new Error(t('label.generateScript.emptyResult'));
+            }
+
             setScriptResult({modules: names, yamlScript: yaml});
         } catch (e) {
-            console.error('Error generating provisioning script:', e);
+            setGenerateError(t('label.generateScript.error', {message: e.message}));
         } finally {
             setIsGenerating(false);
+        }
+    };
+
+    // Escape and a click outside the modal close it, except while the script is built
+    const handleOpenChange = open => {
+        if (!open && !isGenerating) {
+            onClose();
         }
     };
 
@@ -150,19 +191,29 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
         <>
             <Modal isOpen={isOpen}
                    size="large"
-                   aria-labelledby="generate-script-title"
+                   aria-labelledby={undefined}
+                   aria-label={t('label.generateScript.title')}
+                   aria-describedby={SUBTITLE_ID}
                    data-testid="generate-script-dialog"
-                   onOpenChange={open => !open && onClose()}
+                   onOpenChange={handleOpenChange}
             >
                 <>
-                    <ModalHeader id="generate-script-title" title={t('label.generateScript.title')}>
-                        {t('label.generateScript.subtitle')}
+                    {/* The header wraps the title and the subtitle: the dialog takes the title as name, the subtitle as description */}
+                    <ModalHeader title={t('label.generateScript.title')}>
+                        <span id={SUBTITLE_ID}>{t('label.generateScript.subtitle')}</span>
                     </ModalHeader>
 
                     <ModalBody className={styles.body}>
-                        {/* A11y C-009: generating status live region */}
-                        <div role="status" aria-live="polite" aria-atomic="true">
-                            {isGenerating && t('label.generateScript.generating')}
+                        {/* Persistent regions: the progress (focus waits here), then the result count, and the error */}
+                        <div ref={progressRef}
+                             role="status"
+                             tabIndex={-1}
+                             className={isGenerating ? styles.progress : styles.srOnly}
+                        >
+                            {isGenerating ? t('label.generateScript.generating') : countMessage}
+                        </div>
+                        <div role="alert" className={generateError ? styles.error : styles.srOnly}>
+                            {generateError}
                         </div>
                         {/* Type filter row */}
                         <div className={styles.typeRow}>
@@ -237,14 +288,15 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
                         </Typography>
                     </ModalBody>
 
-                    <ModalFooter>
-                        <Button variant="ghost" size="big" label={t('label.cancel')} onClick={onClose}/>
+                    <ModalFooter ref={footerRef}>
+                        <Button variant="ghost" size="big" label={t('label.cancel')} isDisabled={isGenerating} onClick={onClose}/>
                         <Button
                             variant="outlined"
                             size="big"
                             color="accent"
                             label={isGenerating ? t('label.generateScript.generating') : t('label.generateScript.generate')}
                             isDisabled={visibleSelected === 0 || isGenerating}
+                            data-focus="generate"
                             onClick={handleGenerate}
                         />
                     </ModalFooter>
