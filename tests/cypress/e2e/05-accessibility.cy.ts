@@ -8,6 +8,7 @@
  *  - The severity listbox, the announcement region and the Refresh button of the Server status screen.
  *  - The row actions follow the state the row shows, when a bundle is stopped outside the screen.
  *  - The bundle details dialog while its data loads.
+ *  - The load error and the result counts of the dialogs, a probe message that overflows, and the language of the module text.
  *
  * A key is typed on the focused element, which receives its keydown as the app does. The browser, not the app,
  * turns Enter on a <button> into a click, and Cypress sends no key that a button activates on (cy.press('Enter')
@@ -156,7 +157,7 @@ describe('Module Management Community — keyboard and screen reader', () => {
     type ModulesManagementData = {admin: {modulesManagement: {installedModules?: string[], availableUpdates?: string[]}}};
 
     /** Rewrites the result of a named operation that the server answered; the request takes the alias <operation>Result */
-    const rewriteResult = (operationName: string, rewrite: (data: ModulesManagementData) => void) => {
+    const rewriteResult = <T = ModulesManagementData>(operationName: string, rewrite: (data: T) => void) => {
         cy.intercept('POST', '**/modules/graphql', req => {
             const index = operationsOf(req.body).findIndex(operation => operation?.operationName === operationName);
             if (index >= 0) {
@@ -180,6 +181,21 @@ describe('Module Management Community — keyboard and screen reader', () => {
         cy.get('[data-testid="row-actions-menu-btn"]').click();
         cy.get('[data-testid="row-menu-details"]').click();
         cy.get('[data-testid="bundle-details-version"]', {timeout: 15000}).should('be.visible');
+    };
+
+    /**
+     * Answers every request that selects this field with a GraphQL error, so the server never runs it. Another operation
+     * batched with it gets the same error, as it must not reach the server either.
+     */
+    const failField = (field: string, message: string) => {
+        cy.intercept('POST', '**/modules/graphql', req => {
+            const operations = operationsOf(req.body);
+            if (operations.some(operation => selectsField(operation, field))) {
+                req.alias = `${field}Failure`;
+                const results = operations.map(() => ({data: null, errors: [{message}]}));
+                req.reply(Array.isArray(req.body) ? results : results[0]);
+            }
+        });
     };
 
     const openFromMoreActions = (itemTestId: string, dialogTestId: string) => {
@@ -941,6 +957,181 @@ describe('Module Management Community — keyboard and screen reader', () => {
             // Nothing is deployed
             cy.contains('[data-testid="upload-module-dialog"] button', 'Cancel').click();
             cy.get('[data-testid="upload-module-dialog"]').should('not.exist');
+        });
+    });
+
+    // ===========================================================================
+    // 14. LOAD ERROR AND RESULT COUNTS of the dialogs
+    // ===========================================================================
+
+    describe('Load error and result counts of the dialogs', () => {
+        const storeModule = (symbolicName: string, title: string) => ({symbolicName, title, icon: null, latestVersion: '1.0.0', storeUrl: 'https://store.jahia.com'});
+
+        beforeEach(visitPage);
+
+        it('Install from store shows an alert with the error text when the catalogue fails to load', () => {
+            failField('storeModules', 'Store unreachable');
+            cy.get('[data-testid="install-from-store-btn"]').click();
+            cy.wait('@storeModulesFailure');
+            cy.get('[data-testid="install-from-store-dialog"] [role="alert"]')
+                .filter((_, el) => el.textContent.trim() !== '')
+                .should('have.length', 1)
+                .and('have.text', 'Failed to load the store module catalogue. Please try again.')
+                .and('be.visible');
+        });
+
+        it('a search in Install from store fills its status region with the number of modules shown', () => {
+            stubModulesManagementFields({
+                storeModules: [
+                    storeModule('cypress-alpha', 'Cypress alpha'),
+                    storeModule('cypress-beta', 'Cypress beta'),
+                    storeModule('cypress-gamma', 'Cypress gamma')
+                ]
+            });
+            cy.get('[data-testid="install-from-store-btn"]').click();
+            cy.wait('@storeModules');
+            cy.contains('[data-testid="install-from-store-dialog"] label', 'Cypress gamma').should('be.visible');
+
+            cy.get('[data-testid="install-from-store-dialog"] input[placeholder="Search modules by symbolic name…"]').type('alpha');
+            cy.get('[data-testid="install-from-store-dialog"] [role="status"]').should('have.text', '1 module(s) shown');
+            cy.get('[data-testid="install-from-store-dialog"] input[placeholder="Search modules by symbolic name…"]').type('{selectall}{backspace}cypress');
+            cy.get('[data-testid="install-from-store-dialog"] [role="status"]').should('have.text', '3 module(s) shown');
+        });
+
+        it('a search in Generate script fills its status region with the number of modules shown', () => {
+            const search = () => cy.get('[data-testid="generate-script-dialog"] input[placeholder="Filter by bundle name…"]');
+            const countStatus = () => cy.get('[data-testid="generate-script-dialog"] [role="status"]');
+            openFromMoreActions('generate-script-btn', 'generate-script-dialog');
+            cy.contains('[data-testid="generate-script-dialog"] button', 'Generate script', {timeout: 15000}).should('not.be.disabled');
+            countStatus().should('have.text', '');
+
+            search().type('graphql-dxm-provider');
+            countStatus().should('have.text', '1 module(s) shown');
+            search().type('-no-such-bundle');
+            countStatus().should('have.text', '0 module(s) shown');
+        });
+
+        it('a filter of the Unresolved requirements tab of Bundle details changes its "N of M requirements" status', () => {
+            const requirement = (namespace: string, name: string, hasProviders: boolean) => ({
+                namespace,
+                filter: `(${namespace}=${name})`,
+                optional: false,
+                hasProviders
+            });
+            type BundleDetailsData = {admin: {modulesManagement: {bundle: {unresolvedRequirements: unknown[]}}}};
+            // The module of the test resolves, so its requirements are written here: two missing, one in conflict
+            rewriteResult<BundleDetailsData>('BundleDetails', data => {
+                const unresolved = data.admin.modulesManagement.bundle.unresolvedRequirements;
+                const typename = (unresolved[0] as {__typename?: string})?.__typename || 'GqlBundleRequirement';
+                data.admin.modulesManagement.bundle.unresolvedRequirements = [
+                    requirement('osgi.wiring.package', 'org.cypress.alpha', false),
+                    requirement('osgi.wiring.package', 'org.cypress.beta', false),
+                    requirement('osgi.wiring.bundle', 'cypress-gamma', true)
+                ].map(entry => ({...entry, __typename: typename}));
+            });
+            openTestBundleDetails();
+            cy.get('#tab-unresolvedReqs').click();
+
+            const countStatus = () => cy.contains('[data-testid="bundle-details-dialog"] [role="status"]', / of \d+ requirements$/);
+            countStatus().should('have.text', '3 of 3 requirements');
+            cy.get('[data-testid="bundle-details-dialog"] select[id$="-status-filter"]').select('missing');
+            countStatus().should('have.text', '2 of 3 requirements');
+            cy.get('[data-testid="bundle-details-dialog"] select[id$="-status-filter"]').select('conflict');
+            countStatus().should('have.text', '1 of 3 requirements');
+        });
+    });
+
+    // ===========================================================================
+    // 15. SERVER STATUS — a probe message that overflows its box
+    // ===========================================================================
+
+    describe('Server status probe message that overflows', () => {
+        type Probe = {name: string, description: string, severity: string, status: {health: string, message: string}};
+        type ServerStatusData = {admin: {jahia: {healthCheck: {probes: Probe[]}}}};
+        const probeName = 'CypressLongMessage';
+
+        it('is a focusable region named after its probe, which scrolls', () => {
+            // A JSON message is pretty-printed, one line per key: forty keys are taller than the box of the message
+            const message = JSON.stringify(Object.fromEntries(Array.from({length: 40}, (_, index) => [`key${index}`, `value ${index}`])));
+            rewriteResult<ServerStatusData>('GetServerStatus', data => {
+                const probes = data.admin.jahia.healthCheck.probes;
+                expect(probes, 'probes of the server').to.have.length.greaterThan(0);
+                // A copy of a probe of the server keeps the shape and the type names that the Apollo cache expects
+                probes.unshift({
+                    ...probes[0],
+                    name: probeName,
+                    description: 'Probe of the test',
+                    severity: 'CRITICAL',
+                    status: {...probes[0].status, health: 'RED', message}
+                });
+            });
+            cy.login();
+            cy.visit(serverStatusPath);
+            cy.get('[data-testid="server-status-summary"]', {timeout: 20000}).should('be.visible');
+
+            cy.get(`[role="region"][aria-label="Message of the probe ${probeName}"]`)
+                .should('have.length', 1)
+                .and('have.attr', 'tabindex', '0')
+                .and($region => {
+                    const region = $region.get(0);
+                    expect(region.scrollHeight, 'the message is taller than its box').to.be.greaterThan(region.clientHeight);
+                })
+                .focus();
+            cy.focused().should('have.attr', 'aria-label', `Message of the probe ${probeName}`);
+        });
+    });
+
+    // ===========================================================================
+    // 16. LANGUAGE of the module text in an admin language it has no translation for
+    // ===========================================================================
+
+    describe('Language of the module text', () => {
+        const rootUser = '/users/root';
+        let previousLanguage: string | null = null;
+
+        const preferredLanguage = () => cy.apollo({queryFile: 'graphql/query/getUserPreferredLanguage.graphql', variables: {path: rootUser}})
+            .then(response => response?.data?.jcr?.nodeByPath?.property?.value ?? null);
+
+        // The admin shell takes its language from the preferred language of the user when the session starts
+        const setPreferredLanguage = (language: string | null) => {
+            cy.apollo({
+                mutationFile: language ? 'graphql/mutation/setUserPreferredLanguage.graphql' : 'graphql/mutation/removeUserPreferredLanguage.graphql',
+                variables: language ? {path: rootUser, language} : {path: rootUser}
+            });
+        };
+
+        /** The element around the Server status screen that carries the language of the module */
+        const serverStatusLangRoot = () => cy.get('[data-testid="server-status-summary"]', {timeout: 20000})
+            .parents('div[style*="display: contents"]')
+            .first();
+
+        before(() => {
+            preferredLanguage().then(language => {
+                previousLanguage = language;
+            });
+        });
+
+        after(() => {
+            setPreferredLanguage(previousLanguage);
+            preferredLanguage().should('equal', previousLanguage);
+        });
+
+        it('in English, neither the module root nor the Server status wrapper carries a lang attribute', () => {
+            setPreferredLanguage('en');
+            visitPage();
+            cy.get(root).should('not.have.attr', 'lang');
+            cy.visit(serverStatusPath);
+            serverStatusLangRoot().should('exist').and('not.have.attr', 'lang');
+        });
+
+        it('in French, which the module has no translation for, the module root and the Server status wrapper carry lang="en"', () => {
+            setPreferredLanguage('fr');
+            visitPage();
+            // The admin shell runs in French: the language of the page is not the language of the module text
+            cy.window().its('contextJsParameters.uilang').should('equal', 'fr');
+            cy.get(root).should('have.attr', 'lang', 'en');
+            cy.visit(serverStatusPath);
+            serverStatusLangRoot().should('have.attr', 'lang', 'en');
         });
     });
 });

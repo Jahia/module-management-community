@@ -3,19 +3,15 @@ import {useCallback, useRef, useState} from 'react';
 /**
  * The state of a ⋮ button and the menu it opens.
  * anchorRef goes on the element that wraps the button: the moonstone Button does not forward a ref,
- * so the button is found inside it. Every close moves focus back to the button.
+ * so getButton finds the button inside it. Every close moves focus back to the button.
  */
 export const useMenuButton = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [initialFocus, setInitialFocus] = useState('first');
     const anchorRef = useRef(null);
 
-    const focusButton = useCallback(() => {
-        const button = anchorRef.current && anchorRef.current.querySelector('button');
-        if (button) {
-            button.focus();
-        }
-    }, []);
+    // The ⋮ button inside the anchor, or null before it renders.
+    const getButton = useCallback(() => (anchorRef.current && anchorRef.current.querySelector('button')) || null, []);
 
     const open = useCallback((focusOn = 'first') => {
         setInitialFocus(focusOn);
@@ -24,8 +20,11 @@ export const useMenuButton = () => {
 
     const close = useCallback(() => {
         setIsOpen(false);
-        focusButton();
-    }, [focusButton]);
+        const button = getButton();
+        if (button) {
+            button.focus();
+        }
+    }, [getButton]);
 
     const toggle = useCallback(() => {
         if (isOpen) {
@@ -57,7 +56,7 @@ export const useMenuButton = () => {
         }
     }, []);
 
-    return {isOpen, initialFocus, anchorRef, open, close, toggle, focusButton, onButtonKeyDown, onButtonKeyUp};
+    return {isOpen, initialFocus, anchorRef, getButton, close, toggle, onButtonKeyDown, onButtonKeyUp};
 };
 
 /**

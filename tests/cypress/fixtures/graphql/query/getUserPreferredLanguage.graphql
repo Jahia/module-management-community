@@ -1,0 +1,9 @@
+query GetUserPreferredLanguage($path: String!) {
+    jcr {
+        nodeByPath(path: $path) {
+            property(name: "preferredLanguage") {
+                value
+            }
+        }
+    }
+}

@@ -53,13 +53,11 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
     const announce = useAnnounce();
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const menu = useMenuButton();
+    const getMenuButton = menu.getButton;
     // A11y B-003: uninstall confirmation state
     const [confirmUninstall, setConfirmUninstall] = useState(false);
     // A dialog gives focus back to the button that opened it: a hover action, or the ⋮ button after a menu item.
-    const dialogFocus = useReturnFocus(useCallback(
-        () => menu.anchorRef.current && menu.anchorRef.current.querySelector('button'),
-        [menu.anchorRef]
-    ));
+    const dialogFocus = useReturnFocus(getMenuButton);
 
     // Start and Stop replace the pressed hover button by the other one, which drops focus to the page.
     // pendingFocus names the action that takes focus once the row shows the new state.
@@ -75,12 +73,11 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
         }
 
         pendingFocus.current = null;
-        const target = rootRef.current.querySelector(`[data-testid="row-action-${key}"]`) ||
-            (menu.anchorRef.current && menu.anchorRef.current.querySelector('button'));
+        const target = rootRef.current.querySelector(`[data-testid="row-action-${key}"]`) || getMenuButton();
         if (target) {
             target.focus();
         }
-    }, [menu.anchorRef]);
+    }, [getMenuButton]);
     useEffect(() => {
         restoreFocus();
         pendingFocus.current = null;

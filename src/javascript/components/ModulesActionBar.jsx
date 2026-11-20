@@ -1,4 +1,4 @@
-import React, {useCallback, useId, useState} from 'react';
+import React, {useId, useState} from 'react';
 import * as PropTypes from 'prop-types';
 import {useTranslation} from 'react-i18next';
 import {Button, Close, CloudDownload, MoreVert, Reload, Upload} from '@jahia/moonstone';
@@ -39,7 +39,7 @@ export const ModulesActionBar = ({
     const {t} = useTranslation('module-management-community');
     const menu = useMenuButton();
     const [isOptionsOpen, setIsOptionsOpen] = useState(false);
-    const optionsFocus = useReturnFocus(useCallback(() => menu.anchorRef.current && menu.anchorRef.current.querySelector('button'), [menu.anchorRef]));
+    const optionsFocus = useReturnFocus(menu.getButton);
     const lastUpdateId = useId();
 
     // Each menu action closes the menu, which gives focus back to the ⋮ button, before it runs.
