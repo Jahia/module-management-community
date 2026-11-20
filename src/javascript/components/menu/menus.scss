@@ -1,0 +1,43 @@
+.srOnly {
+    position: absolute;
+
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+
+    white-space: nowrap;
+
+    border: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+}
+
+// The moonstone description is gray_dark at 60% opacity, about 3.9:1 on the menu background.
+// At full opacity it is gray_dark on light, 13:1. The menu may wrap a long description instead of cutting it.
+.withDescription :global(.moonstone-listItem_description) {
+    display: block;
+    max-width: 320px;
+
+    opacity: 1;
+    -webkit-line-clamp: unset;
+}
+
+// White on --moon-color-danger is 3.62:1; --moon-color-danger_dark takes it to 10.3:1.
+// The class is doubled to win over the moonstone selectors, which have the same shape.
+.dangerButton.dangerButton[data-variant='default'][data-color='danger']:not(:disabled) {
+    color: var(--moon-color-white);
+
+    border-color: var(--moon-color-danger_dark);
+    background-color: var(--moon-color-danger_dark);
+}
+
+.dangerButton.dangerButton[data-variant='ghost'][data-color='danger']:not(:disabled) {
+    color: var(--moon-color-danger_dark);
+}
+
+.dangerButton.dangerButton[data-variant='ghost'][data-color='danger']:active:not(:disabled) {
+    color: var(--moon-color-white);
+
+    background-color: var(--moon-color-danger_dark);
+}

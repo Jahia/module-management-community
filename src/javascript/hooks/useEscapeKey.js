@@ -2,7 +2,8 @@ import {useEffect} from 'react';
 
 /**
  * Calls onEscape when the user presses Escape while isActive is true.
- * Moonstone Menu does not close on Escape, and the focus stays on the button that opened it.
+ * The moonstone Menu does not close on Escape. AccessibleMenu handles Escape inside the menu;
+ * this document listener also covers a menu opened with the mouse while focus is elsewhere.
  */
 export const useEscapeKey = (isActive, onEscape) => {
     useEffect(() => {

@@ -1,4 +1,4 @@
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -8,7 +8,6 @@ import {
     Cancel,
     Delete,
     Information,
-    Menu,
     Modal,
     ModalBody,
     ModalFooter,
@@ -21,9 +20,11 @@ import {
 } from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
 import {ActionMenuItem} from './menu/MenuItems';
+import {AccessibleMenu} from './menu/AccessibleMenu';
 import BundleDetailsDialog from './BundleDetailsDialog';
 import styles from './ModuleManagementCommunityApp.scss';
-import {useEscapeKey} from '../hooks/useEscapeKey';
+import menuStyles from './menu/menus.scss';
+import {useMenuButton, useReturnFocus} from '../hooks/useMenuButton';
 
 const STOP_MUTATION = gql`mutation ($bundleId: Long!) {
     admin { modulesManagement { bundle(bundleId: $bundleId) { stop } } }
@@ -46,12 +47,14 @@ const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onU
     const {t} = useTranslation('module-management-community');
     const notificationContext = useNotifications();
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const closeMenu = useCallback(() => setIsMenuOpen(false), []);
-    useEscapeKey(isMenuOpen, closeMenu);
+    const menu = useMenuButton();
     // A11y B-003: uninstall confirmation state
     const [confirmUninstall, setConfirmUninstall] = useState(false);
-    const menuAnchorRef = useRef(null);
+    // A dialog gives focus back to the button that opened it: a hover action, or the ⋮ button after a menu item.
+    const dialogFocus = useReturnFocus(useCallback(
+        () => menu.anchorRef.current && menu.anchorRef.current.querySelector('button'),
+        [menu.anchorRef]
+    ));
 
     const variables = {bundleId: bundle.bundleId};
     const [stopBundle] = useMutation(STOP_MUTATION, {variables});
@@ -74,12 +77,22 @@ const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onU
         }
     };
 
+    const openDialog = setOpen => {
+        dialogFocus.remember();
+        setOpen(true);
+    };
+
+    const closeDialog = setOpen => {
+        setOpen(false);
+        dialogFocus.restore();
+    };
+
     const isNotBundleType = bundle.type !== 'bundle';
     const isInactive = bundle.state === 'INSTALLED' || bundle.state === 'RESOLVED';
     const isActive = bundle.state === 'ACTIVE';
 
     const actions = [
-        {key: 'details', Icon: Information, label: t('label.showDetails'), onClick: () => setIsDetailsOpen(true)},
+        {key: 'details', Icon: Information, label: t('label.showDetails'), onClick: () => openDialog(setIsDetailsOpen)},
         isNotBundleType && isInactive && {
             key: 'start', Icon: Power, label: t('label.startBundle'), color: 'accent',
             onClick: () => run(startBundle, 'label.startBundleSuccess', 'label.startBundleError')
@@ -98,7 +111,7 @@ const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onU
         },
         isNotBundleType && isInactive && {
             key: 'uninstall', Icon: Delete, label: t('label.uninstallBundle'), color: 'danger',
-            onClick: () => setConfirmUninstall(true)
+            onClick: () => openDialog(setConfirmUninstall)
         }
     ].filter(Boolean);
 
@@ -108,6 +121,7 @@ const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onU
                 {actions.map(({key, Icon, label, color, onClick}) => (
                     <Button key={key}
                             variant="ghost"
+                            className={color === 'danger' ? menuStyles.dangerButton : undefined}
                             color={color || 'default'}
                             icon={<Icon/>}
                             aria-label={label}
@@ -116,43 +130,45 @@ const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onU
                             onClick={onClick}/>
                 ))}
             </div>
-            <span ref={menuAnchorRef} className={styles.menuAnchor}>
+            <span ref={menu.anchorRef} className={styles.menuAnchor}>
                 <Button variant="ghost"
                         icon={<MoreVert/>}
                         aria-label={t('label.table.actions.menu', {name: bundle.symbolicName})}
                         title={t('label.menu.more')}
                         aria-haspopup="menu"
-                        aria-expanded={isMenuOpen}
+                        aria-expanded={menu.isOpen}
                         data-testid="row-actions-menu-btn"
-                        onClick={() => setIsMenuOpen(!isMenuOpen)}/>
+                        onKeyDown={menu.onButtonKeyDown}
+                        onClick={menu.toggle}/>
             </span>
-            {isMenuOpen && (
-                <Menu isDisplayed
-                      hasSearch={false}
-                      anchorEl={menuAnchorRef}
-                      anchorElOrigin={{horizontal: 'right', vertical: 'bottom'}}
-                      transformElOrigin={{horizontal: 'right', vertical: 'top'}}
-                      data-testid="row-actions-menu"
-                      onClose={closeMenu}
-                >
-                    {actions.map(({key, Icon, label, onClick}) => (
-                        <ActionMenuItem key={key}
-                                        label={label}
-                                        iconStart={<Icon/>}
-                                        data-testid={`row-menu-${key}`}
-                                        onClick={() => {
-                                            setIsMenuOpen(false);
-                                            onClick();
-                                        }}/>
-                    ))}
-                </Menu>
-            )}
+            <AccessibleMenu isOpen={menu.isOpen}
+                            initialFocus={menu.initialFocus}
+                            anchorRef={menu.anchorRef}
+                            label={t('label.table.actions.menu', {name: bundle.symbolicName})}
+                            anchorElOrigin={{horizontal: 'right', vertical: 'bottom'}}
+                            transformElOrigin={{horizontal: 'right', vertical: 'top'}}
+                            data-testid="row-actions-menu"
+                            onClose={menu.close}
+            >
+                {actions.map(({key, Icon, label, onClick}) => (
+                    <ActionMenuItem key={key}
+                                    label={label}
+                                    iconStart={<Icon/>}
+                                    tabIndex={-1}
+                                    data-testid={`row-menu-${key}`}
+                                    onClick={() => {
+                                        // Focus goes back to the ⋮ button first, so a dialog opened next remembers it.
+                                        menu.close();
+                                        onClick();
+                                    }}/>
+                ))}
+            </AccessibleMenu>
 
             {isDetailsOpen && (
                 <BundleDetailsDialog isOpen
                                      name={bundle.symbolicName}
                                      version={bundle.version}
-                                     onClose={() => setIsDetailsOpen(false)}
+                                     onClose={() => closeDialog(setIsDetailsOpen)}
                                      onChange={refetch}/>
             )}
 
@@ -163,32 +179,28 @@ const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onU
                    aria-labelledby={`uninstall-confirm-title-${bundle.bundleId}`}
                    aria-describedby={`uninstall-confirm-desc-${bundle.bundleId}`}
                    data-testid="uninstall-confirm-dialog"
-                   onOpenChange={open => setConfirmUninstall(open)}
+                   onOpenChange={open => !open && closeDialog(setConfirmUninstall)}
             >
                 <>
                     <ModalHeader id={`uninstall-confirm-title-${bundle.bundleId}`}
-                                 title={t('label.uninstall.confirm.title', {
-                                     name: bundle.symbolicName,
-                                     defaultValue: `Uninstall ${bundle.symbolicName}?`
-                                 })}/>
+                                 title={t('label.uninstall.confirm.title', {name: bundle.symbolicName})}/>
                     <ModalBody id={`uninstall-confirm-desc-${bundle.bundleId}`}>
                         <Typography variant="body">
-                            {t('label.uninstall.confirm.message', {
-                                defaultValue: 'This will permanently uninstall the bundle. Are you sure?'
-                            })}
+                            {t('label.uninstall.confirm.message')}
                         </Typography>
                     </ModalBody>
                     <ModalFooter>
                         <Button variant="ghost"
                                 size="big"
                                 label={t('label.cancel')}
-                                onClick={() => setConfirmUninstall(false)}/>
+                                onClick={() => closeDialog(setConfirmUninstall)}/>
                         <Button variant="default"
                                 size="big"
                                 color="danger"
+                                className={menuStyles.dangerButton}
                                 label={t('label.uninstallBundle')}
                                 onClick={() => {
-                                    setConfirmUninstall(false);
+                                    closeDialog(setConfirmUninstall);
                                     run(uninstallBundle, 'label.uninstallBundleSuccess', 'label.uninstallBundleError', false);
                                 }}/>
                     </ModalFooter>
