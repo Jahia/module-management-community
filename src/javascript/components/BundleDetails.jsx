@@ -42,15 +42,47 @@ const TABS = [
         labelKey: 'label.bundle.tab.unresolvedReqs',
         condition: b => b.unresolvedRequirements?.some(r => !r.optional),
         // Danger when any mandatory requirement is completely missing; warning when providers exist but won't wire
-        getColor: (b, isActive) => {
-            if (isActive) {
-                return 'accent';
-            }
-
-            return b.unresolvedRequirements?.some(r => !r.optional && !r.hasProviders) ? 'danger' : 'warning';
-        }
+        getSeverity: b => (b.unresolvedRequirements?.some(r => !r.optional && !r.hasProviders) ? 'danger' : 'warning')
     }
 ];
+
+// Module level, so the effect of Mermaid that depends on it does not run again on each render
+const logGraphError = error => console.error('Error rendering the dependency graph:', error);
+
+export const BUNDLE_DETAILS_TITLE_ID = 'bundle-details-title';
+export const BUNDLE_DETAILS_CLOSE_ID = 'bundle-details-close';
+
+/**
+ * The result of a reimport or of a version install. It stays until the user dismisses it or starts another action.
+ * Both live regions stay in the page, so a message added to them is announced.
+ */
+const ResultMessage = ({result, onDismiss}) => {
+    const {t} = useTranslation('module-management-community');
+    const toneClass = result?.success ? styles.resultSuccess : styles.resultError;
+    return (
+        <div className={result ? `${styles.resultMessage} ${toneClass}` : undefined}>
+            <div role="status" aria-atomic="true" className={styles.resultText}>
+                {result?.success ? result.message : null}
+            </div>
+            <div role="alert" aria-atomic="true" className={styles.resultText}>
+                {result && !result.success ? result.message : null}
+            </div>
+            {result && (
+                <Button variant="ghost"
+                        size="small"
+                        color="default"
+                        icon={<Close/>}
+                        aria-label={t('label.bundle.result.dismiss')}
+                        onClick={onDismiss}/>
+            )}
+        </div>
+    );
+};
+
+ResultMessage.propTypes = {
+    result: PropTypes.shape({success: PropTypes.bool, message: PropTypes.string}),
+    onDismiss: PropTypes.func.isRequired
+};
 
 /**
  * Compare two OSGi-style version strings (major.minor.patch[.qualifier]).
@@ -120,6 +152,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
     };
 
     const handleForceImport = async () => {
+        setImportResult(null);
         try {
             const result = await importModuleMutation({variables: {bundleId: bundle.bundleId}});
             const msg = result?.data?.admin?.modulesManagement?.importModule;
@@ -128,8 +161,6 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
             setImportResult({success: false, message: t('label.importModule.error')});
             console.error('Error force-importing module:', error);
         }
-
-        setTimeout(() => setImportResult(null), 5000);
     };
 
     /**
@@ -157,8 +188,6 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
             setInstallVersionResult({success: false, message: t('label.bundle.versions.installError')});
             console.error('Error installing bundle version:', error);
         }
-
-        setTimeout(() => setInstallVersionResult(null), 6000);
     };
 
     /**
@@ -206,7 +235,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
             <header className={styles.bundleDetailsHeader}>
                 <div className={styles.bundleDetailsTitleRow}>
                     <div className={styles.bundleDetailsTitle}>
-                        <Typography id="bundle-details-title" variant="heading" component="h2" className={styles.bundleDetailsName}>
+                        <Typography id={BUNDLE_DETAILS_TITLE_ID} variant="heading" component="h2" className={styles.bundleDetailsName}>
                             {bundleDisplayName}
                         </Typography>
                         <Chip label={bundle.version} color="default" data-testid="bundle-details-version"/>
@@ -218,14 +247,15 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                             {t('label.bundle.details.bundleIdShort', {id: bundle.bundleId})}
                         </Typography>
                     </div>
-                    <Button variant="ghost"
+                    <Button id={BUNDLE_DETAILS_CLOSE_ID}
+                            variant="ghost"
                             size="default"
                             color="default"
                             icon={<Close/>}
                             label={t('label.close')}
                             onClick={() => close(false)}/>
                 </div>
-                <div role="toolbar"
+                <div role="group"
                      aria-label={t('label.bundle.details.actions')}
                      className={styles.bundleDetailsActions}
                      data-testid="bundle-details-actions"
@@ -248,25 +278,13 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                 </div>
             </header>
 
-            {/* A11y A-009: import result as live alert region */}
-            {importResult && (
-                <Typography
-                    variant="body"
-                    component="div"
-                    role={importResult.success ? 'status' : 'alert'}
-                    aria-live={importResult.success ? 'polite' : 'assertive'}
-                    aria-atomic="true"
-                    className={`${styles.resultMessage} ${importResult.success ? styles.resultSuccess : styles.resultError}`}
-                >
-                    {importResult.message}
-                </Typography>
-            )}
+            <ResultMessage result={importResult} onDismiss={() => setImportResult(null)}/>
 
             <Separator variant="horizontal" spacing="none"/>
 
             {/* A11y A-007 / C-007 / C-012: moonstone tablist (role="tab", aria-selected)
                  with Arrow-key / Home / End keyboard navigation (roving tabindex) */}
-            <Tab aria-label={t('label.bundle.tabs.label', 'Bundle detail sections')}
+            <Tab aria-label={t('label.bundle.tabs.label')}
                  className={styles.bundleDetailsTabs}
                  onKeyDown={e => {
                      const idx = visibleTabs.findIndex(tab => tab.id === activeTab);
@@ -291,21 +309,30 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
             >
                 {visibleTabs.map(tab => {
                     const isActive = activeTab === tab.id;
-                    const color = tab.getColor ?
-                        tab.getColor(bundle, isActive) :
-                        (isActive ? 'accent' : 'default');
-                    // The selected tab takes the accent colour of moonstone
-                    const colorClass = color === 'danger' ? styles.tabDanger :
-                        color === 'warning' ? styles.tabWarning :
-                        color === 'default' ? styles.tabDefault : '';
+                    const severity = tab.getSeverity?.(bundle);
+                    // The selected tab takes the dark accent colour of moonstone
+                    let colorClass = styles.tabSelected;
+                    if (!isActive) {
+                        colorClass = severity === 'danger' ? styles.tabDanger :
+                            severity === 'warning' ? styles.tabWarning : styles.tabDefault;
+                    }
+
+                    // The colour is not the only cue: an icon and a hidden suffix name the severity
+                    const label = severity ? (
+                        <>
+                            {t(tab.labelKey)}
+                            <span className={styles.srOnly}>{` ${t(`label.bundle.tab.severity.${severity}`)}`}</span>
+                        </>
+                    ) : t(tab.labelKey);
                     return (
                         <TabItem
                             key={tab.id}
                             id={`tab-${tab.id}`}
-                            label={t(tab.labelKey)}
+                            label={label}
+                            icon={severity ? <Warning aria-hidden="true"/> : null}
                             isSelected={isActive}
                             tabIndex={isActive ? 0 : -1}
-                            aria-controls={`tabpanel-${tab.id}`}
+                            aria-controls={isActive ? `tabpanel-${tab.id}` : undefined}
                             className={`${styles.tabItem} ${colorClass}`}
                             onClick={() => setActiveTab(tab.id)}
                         />
@@ -317,6 +344,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
 
             {/* A11y A-007: tabpanel role with labelledby */}
             <ModalBody id={`tabpanel-${activeTab}`}
+                       className={styles.bundleDetailsPanel}
                        role="tabpanel"
                        aria-labelledby={`tab-${activeTab}`}
             >
@@ -326,7 +354,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
 
                 {activeTab === 'sites' && (
                     <div>
-                        <div role="toolbar"
+                        <div role="group"
                              aria-label={t('label.bundle.sites.actions.title')}
                              className={styles.siteActions}
                              data-testid="bundle-sites-actions"
@@ -367,10 +395,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                               color={site.deployed ? 'success' : 'default'}/>
                                         <Switch checked={site.deployed}
                                                 value={site.siteKey}
-                                                aria-label={t('label.bundle.sites.toggleAriaLabel', {
-                                                    site: site.siteKey,
-                                                    defaultValue: `Toggle deployment on site ${site.siteKey}`
-                                                })}
+                                                aria-label={t('label.bundle.sites.toggleAriaLabel', {site: site.siteKey})}
                                                 onChange={handleSiteDeployment}/>
                                     </div>
                                 </li>
@@ -392,19 +417,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
 
                     return (
                         <div className={styles.versionsTab}>
-                            {/* A11y A-009: install result as live alert region */}
-                            {installVersionResult && (
-                                <Typography
-                                    variant="body"
-                                    component="div"
-                                    role={installVersionResult.success ? 'status' : 'alert'}
-                                    aria-live={installVersionResult.success ? 'polite' : 'assertive'}
-                                    aria-atomic="true"
-                                    className={`${styles.resultMessage} ${installVersionResult.success ? styles.resultSuccess : styles.resultError}`}
-                                >
-                                    {installVersionResult.message}
-                                </Typography>
-                            )}
+                            <ResultMessage result={installVersionResult} onDismiss={() => setInstallVersionResult(null)}/>
 
                             {/* ── Store catalogue versions ── */}
                             {bundle.storeVersions?.length > 0 && (
@@ -530,11 +543,11 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                 })()}
 
                 {activeTab === 'bundleDeps' && (
-                    <Mermaid ariaLabel={t('label.bundle.tab.bundleDeps.ariaLabel', 'Bundle dependency graph')}>{bundle.dependenciesGraph}</Mermaid>
+                    <Mermaid ariaLabel={t('label.bundle.graph.bundleDeps')} onError={logGraphError}>{bundle.dependenciesGraph}</Mermaid>
                 )}
 
                 {activeTab === 'moduleDeps' && (
-                    <Mermaid ariaLabel={t('label.bundle.tab.moduleDeps.ariaLabel', 'Module dependency graph')}>{bundle.moduleDependenciesGraph}</Mermaid>
+                    <Mermaid ariaLabel={t('label.bundle.graph.moduleDeps')} onError={logGraphError}>{bundle.moduleDependenciesGraph}</Mermaid>
                 )}
 
                 {activeTab === 'unresolvedReqs' && (

@@ -16,10 +16,36 @@
     clip: rect(0, 0, 0, 0);
 }
 
-/* Full size, capped at 1280px; a fixed height keeps the modal still when the tab changes */
-.bundleDetailsModal {
+/* Full size, capped at 1280px. The doubled class outranks the max-height of the moonstone modal. */
+.bundleDetailsModal.bundleDetailsModal {
     max-width: 1280px;
-    height: 80vh;
+    height: auto;
+    max-height: 80vh;
+}
+
+/* On a tall viewport, a fixed height keeps the modal still when the tab changes, and only the tab panel scrolls. */
+@media (min-height: 600px) {
+    .bundleDetailsModal.bundleDetailsModal {
+        height: 80vh;
+    }
+}
+
+/* On a short viewport (a zoomed or landscape phone screen), the header and the tabs would fill the modal:
+   the whole modal scrolls instead of the tab panel alone. */
+@media (max-height: 599.98px) {
+    .bundleDetailsModal.bundleDetailsModal {
+        max-height: calc(100vh - 2 * var(--moon-spacing-small));
+        overflow-y: auto;
+
+        > * {
+            flex-shrink: 0;
+        }
+    }
+
+    .bundleDetailsPanel.bundleDetailsPanel {
+        flex: 0 0 auto;
+        overflow: visible;
+    }
 }
 
 /* The header holds the title row, then the action bar, as the header of a Jahia screen does. */
@@ -61,12 +87,27 @@
     color: var(--moon-color-gray_dark);  /* A11y C-003: lifted from gray60 for ≥7:1 */
 }
 
-/* Result of a content reimport or of a version install */
+/* Result of a content reimport or of a version install, with its dismiss button */
 .resultMessage {
+    display: flex;
+    align-items: center;
     margin: var(--moon-spacing-nano) 0;
     padding: var(--moon-spacing-small) var(--moon-spacing-medium);
 
     border-radius: var(--moon-radius);
+}
+
+.resultText {
+    flex: 1 1 auto;
+
+    font-size: 14px;
+    line-height: 19px;
+
+    &:empty { flex: 0 0 0; }
+}
+
+.resultMessage > button {
+    margin-left: var(--moon-spacing-small);
 }
 
 .resultSuccess {
@@ -92,7 +133,16 @@
 
 /* Two classes outrank the gray of a moonstone tab; the selected tab keeps its accent colour */
 .bundleDetailsTabs .tabDefault { color: var(--moon-color-gray_dark); } /* A11y: moonstone gray is below 4.5:1 */
-.bundleDetailsTabs .tabDanger { color: var(--moon-color-danger); }
+.bundleDetailsTabs .tabSelected { color: var(--moon-color-accent_dark); } /* A11y: moonstone accent is 2.94:1 on white */
+.bundleDetailsTabs .tabDanger { color: var(--moon-color-danger_dark); } /* A11y: moonstone danger is 3.62:1 on white */
+
+/* On a narrow screen the tabs wrap instead of overflowing the modal */
+@media (max-width: 640px) {
+    .bundleDetailsTabs.bundleDetailsTabs {
+        flex-wrap: wrap;
+        width: auto;
+    }
+}
 .bundleDetailsTabs .tabWarning { color: var(--moon-color-warning_dark); } /* A11y MED: dark amber text for ≥7:1 */
 
 /* Downgrade confirmation */
@@ -187,6 +237,49 @@
     margin-bottom: 12px;
 }
 
+.moduleDepsList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin: 0;
+    padding: 0;
+
+    list-style: none;
+}
+
+.moduleDepsItem {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.moduleDepsRange {
+    color: var(--moon-color-gray_dark);
+}
+
+/* On a narrow screen the two-column grids stack and the long manifest keys wrap */
+@media (max-width: 640px) {
+    .identityGrid,
+    .servicesGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .identityGrid {
+        gap: 2px 0;
+    }
+
+    .infoValue {
+        margin: 0 0 var(--moon-spacing-small);
+    }
+
+    .manifestKey {
+        width: auto;
+
+        white-space: normal;
+        word-break: break-all;
+    }
+}
+
 .emptyState {
     /* font-style: italic retained for brand — note reduced readability for dyslexic users */
     font-style: italic;
@@ -262,7 +355,7 @@
 
 .siteItem {
     display: flex;
-    flex-direction: row;
+    flex-flow: row wrap;
     gap: 0;
     align-items: center;
     padding: 10px 16px;
@@ -322,7 +415,7 @@
 
 .versionItem {
     display: flex;
-    flex-direction: row;
+    flex-flow: row wrap;
     gap: 16px;
     justify-content: space-between;
     align-items: center;
@@ -344,7 +437,7 @@
 
 .versionItemHeader {
     display: flex;
-    flex-direction: row;
+    flex-flow: row wrap;
     gap: 8px;
     align-items: center;
 }
@@ -443,7 +536,8 @@
     vertical-align: middle;
 }
 
-.unresolvedCellReq {
+/* The flex lives on an inner div: on the td it would drop the cell semantics */
+.unresolvedReqContent {
     display: flex;
     flex-direction: column;
     gap: 3px;
