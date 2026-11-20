@@ -65,6 +65,8 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
     // pendingFocus names the action that takes focus once the row shows the new state.
     const rootRef = useRef(null);
     const pendingFocus = useRef(null);
+    // The last run that set pendingFocus, so that the timer of an earlier run leaves the target of a later one.
+    const focusRun = useRef(0);
     const restoreFocus = useCallback(() => {
         const key = pendingFocus.current;
         const active = document.activeElement;
@@ -92,6 +94,8 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
 
     const run = async (mutation, successKey, errorKey, {refetchRow = true, focusNext = null} = {}) => {
         pendingFocus.current = focusNext;
+        focusRun.current += 1;
+        const thisRun = focusRun.current;
         try {
             await mutation();
             notificationContext.notify(t(successKey), ['closeButton', 'closeAfter5s']);
@@ -118,7 +122,9 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
             // A state that did not change, or a failure, leaves the pressed button in place.
             requestAnimationFrame(restoreFocus);
             setTimeout(() => {
-                pendingFocus.current = null;
+                if (focusRun.current === thisRun) {
+                    pendingFocus.current = null;
+                }
             }, 2000);
         }
     };

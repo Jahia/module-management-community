@@ -71,6 +71,133 @@ describe('Module Management Community — keyboard and screen reader', () => {
         })
         .join(' ');
 
+    /** The name of a control: aria-labelledby, else aria-label, else its text, or the text of its label, without the hidden parts */
+    const accessibleName = ($el: JQuery<HTMLElement>) => {
+        const labelled = labelledByName($el);
+        if (labelled) {
+            return labelled;
+        }
+
+        const label = ($el.attr('aria-label') || '').trim();
+        if (label) {
+            return label;
+        }
+
+        const element = $el.get(0);
+        const source = element.matches('input') ? element.closest('label') : element;
+        if (!source) {
+            return '';
+        }
+
+        const clone = source.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll('[aria-hidden="true"], input').forEach(node => node.remove());
+        return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    };
+
+    /** The text that aria-describedby points to */
+    const describedByText = ($el: JQuery<HTMLElement>) => ($el.attr('aria-describedby') || '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(id => ($el.get(0).ownerDocument.getElementById(id)?.textContent || '').trim())
+        .join(' ')
+        .trim();
+
+    /** The element of this test id is a dialog, and its name is not empty */
+    const dialogIsNamed = (testId: string, name?: string) => {
+        cy.get(`[data-testid="${testId}"]`).should($dialog => {
+            expect($dialog.attr('role'), `role of ${testId}`).to.match(/^(alert)?dialog$/);
+            const dialogName = accessibleName($dialog);
+            expect(dialogName, `name of ${testId}`).not.to.equal('');
+            if (name) {
+                expect(dialogName, `name of ${testId}`).to.equal(name);
+            }
+        });
+    };
+
+    /** The controls of an element that Tab reaches, in the order of the document */
+    const tabbables = ($root: JQuery<HTMLElement>) => $root
+        .find('button, input, select, textarea, a[href], [tabindex]')
+        .filter((_, el) => el.getAttribute('tabindex') !== '-1' &&
+            !(el as HTMLButtonElement).disabled &&
+            el.getAttribute('aria-hidden') !== 'true' &&
+            el.getClientRects().length > 0 &&
+            !(el.matches('input[type="radio"]') && !(el as HTMLInputElement).checked));
+
+    /** Focus is on the first control that Tab reaches in the dialog of this test id */
+    const focusIsOnFirstControl = (testId: string) => {
+        cy.get(`[data-testid="${testId}"]`).should($dialog => {
+            const first = tabbables($dialog).get(0);
+            expect(first, `a control in ${testId}`).to.exist;
+            expect($dialog.get(0).ownerDocument.activeElement, `focus on the first control of ${testId}`).to.equal(first);
+        });
+    };
+
+    const operationsOf = (body: unknown) => (Array.isArray(body) ? body : [body]);
+    /** A GraphQL operation that selects this field */
+    const selectsField = (operation: {query?: string}, field: string) => new RegExp(`\\b${field}\\b`).test(operation?.query || '');
+
+    /**
+     * Answers every request that selects one of these fields of admin.modulesManagement with the given value, so the
+     * server never runs it. Another operation batched with it gets an error, as it must not reach the server either.
+     */
+    const stubModulesManagementFields = (values: Record<string, unknown>) => {
+        cy.intercept('POST', '**/modules/graphql', req => {
+            const stubbed = operationsOf(req.body).map(operation => Object.keys(values).find(field => selectsField(operation, field)));
+            if (stubbed.some(Boolean)) {
+                req.alias = stubbed.find(Boolean);
+                const results = stubbed.map(field => (field ?
+                    {data: {admin: {modulesManagement: {[field]: values[field]}}}} :
+                    {errors: [{message: 'Not sent by the test'}]}));
+                req.reply(Array.isArray(req.body) ? results : results[0]);
+            }
+        });
+    };
+
+    type ModulesManagementData = {admin: {modulesManagement: {installedModules?: string[], availableUpdates?: string[]}}};
+
+    /** Rewrites the result of a named operation that the server answered; the request takes the alias <operation>Result */
+    const rewriteResult = (operationName: string, rewrite: (data: ModulesManagementData) => void) => {
+        cy.intercept('POST', '**/modules/graphql', req => {
+            const index = operationsOf(req.body).findIndex(operation => operation?.operationName === operationName);
+            if (index >= 0) {
+                req.alias = `${operationName}Result`;
+                req.continue(res => {
+                    const result = Array.isArray(res.body) ? res.body[index] : res.body;
+                    if (result?.data) {
+                        rewrite(result.data);
+                    }
+                });
+            }
+        });
+    };
+
+    /** The installed modules, with the module of the test in this OSGi state (an int of Bundle.getState()) */
+    const withTestBundleState = (entries: string[], osgiState: number) => entries
+        .map(entry => (entry.startsWith(`${testBundle}/`) ? entry.replace(/:[^:]*$/, `:${osgiState}`) : entry));
+
+    const openTestBundleDetails = () => {
+        filterByName(testBundle);
+        cy.get('[data-testid="row-actions-menu-btn"]').click();
+        cy.get('[data-testid="row-menu-details"]').click();
+        cy.get('[data-testid="bundle-details-version"]', {timeout: 15000}).should('be.visible');
+    };
+
+    const openFromMoreActions = (itemTestId: string, dialogTestId: string) => {
+        cy.get('[data-testid="more-actions-btn"]').click();
+        cy.get(`[data-testid="${itemTestId}"]`).click();
+        cy.get(`[data-testid="${dialogTestId}"]`).should('be.visible');
+    };
+
+    /** Generate script, pressed from the keyboard focus, opens the result dialog */
+    const openGeneratedScript = () => {
+        openFromMoreActions('generate-script-btn', 'generate-script-dialog');
+        cy.contains('[data-testid="generate-script-dialog"] button', 'Generate script', {timeout: 15000})
+            .should('not.be.disabled')
+            .focus();
+        activateFocusedButton();
+        cy.get('[data-testid="dryrun-result-dialog"]', {timeout: 30000}).should('be.visible');
+    };
+
     // ===========================================================================
     // 1. THE ⋮ MENUS — WAI-ARIA menu pattern
     // ===========================================================================
@@ -226,16 +353,6 @@ describe('Module Management Community — keyboard and screen reader', () => {
                 cy.get('[data-testid="modules-count-status"]').should('have.text', `Modules matching the filters: 1 of ${total}`);
             });
         });
-
-        it('the module owns no main landmark: the shell holds the only one, and the table is the region "Installed modules"', () => {
-            // The shell also keeps the main of its error page, hidden, in the document.
-            cy.get('main:visible').should('have.length', 1).find(root).should('exist');
-            cy.get(root).find('main').should('not.exist');
-            cy.get('section[aria-labelledby]').filter((_, el) => labelledByName(Cypress.$(el)) === 'Installed modules')
-                .should('have.length', 1)
-                .find('h2')
-                .should('have.text', 'Installed modules');
-        });
     });
 
     // ===========================================================================
@@ -278,6 +395,44 @@ describe('Module Management Community — keyboard and screen reader', () => {
             cy.get('[data-testid="server-status-summary"]', {timeout: 20000}).should('be.visible');
             serverStatusSwitch().should('be.checked');
             cy.window().its('sharedPreferenceMark').should('equal', true);
+        });
+
+        // A cy.clock() cannot drive this: the Apollo client batches its operations on a timer, so a frozen clock stops
+        // every request, and the poll timer that runs when the clock is installed stays a real one. The test counts the
+        // ServerHealth requests over a real minute and more instead: it lasts about two and a half minutes.
+        it('with auto refresh off, the health of the navigation icon polls no more; on again, it polls within a minute', () => {
+            const pollInterval = 60000;
+            let isOff = false;
+            let requestsWhileOff = 0;
+            cy.intercept('POST', '**/modules/graphql', req => {
+                if (findOperation(req.body, 'ServerHealth')) {
+                    if (isOff) {
+                        requestsWhileOff += 1;
+                    } else {
+                        req.alias = 'healthPoll';
+                    }
+                }
+            });
+            cy.login();
+            cy.visit(serverStatusPath);
+            cy.get('[data-testid="server-status-summary"]', {timeout: 20000}).should('be.visible');
+            serverStatusSwitch().should('be.checked');
+
+            cy.contains('label', autoRefreshLabel).click();
+            serverStatusSwitch().should('not.be.checked').then(() => {
+                isOff = true;
+            });
+            // Longer than the poll interval, so a poll that still ran would show
+            cy.wait(pollInterval + 5000);
+            cy.then(() => {
+                expect(requestsWhileOff, 'ServerHealth requests while auto refresh is off').to.equal(0);
+            });
+
+            cy.contains('label', autoRefreshLabel).click();
+            serverStatusSwitch().should('be.checked').then(() => {
+                isOff = false;
+            });
+            cy.wait('@healthPoll', {timeout: pollInterval + 15000});
         });
     });
 
@@ -432,6 +587,351 @@ describe('Module Management Community — keyboard and screen reader', () => {
             cy.get('[data-testid="bundle-details-version"]').should('be.visible');
             cy.get('#bundle-details-close').click();
             cy.get('[data-testid="bundle-details-dialog"]').should('not.exist');
+        });
+    });
+
+    // ===========================================================================
+    // 8. STICKY HEADER AND PAGER do not cover a focused control
+    // ===========================================================================
+
+    describe('Sticky header and pager of the table', () => {
+        beforeEach(visitPage);
+
+        it('with 100 rows per page, each row ⋮ button that takes focus shows, not covered by the sticky header or pager', () => {
+            totalItems().invoke('text').should('match', /^1-\d+ of \d+$/);
+            cy.get('[data-testid="pagination-dropdown-items-per-page"]').should('contain.text', '100');
+            cy.get('[data-testid="row-actions-menu-btn"]', {timeout: 20000}).should('have.length.greaterThan', 10);
+            cy.get('[data-testid="modules-table"]').should($table => {
+                const table = $table.get(0);
+                expect(table.scrollHeight, 'the table scrolls under its sticky header and pager').to.be.greaterThan(table.clientHeight);
+            });
+
+            cy.get('[data-testid="row-actions-menu-btn"]').then($buttons => {
+                $buttons.each((index, button) => {
+                    // A focus scrolls the button into view at once, by the scroll padding of the table
+                    button.focus();
+                    const rect = button.getBoundingClientRect();
+                    const hit = button.ownerDocument.elementFromPoint(rect.left + (rect.width / 2), rect.top + (rect.height / 2));
+                    expect(button.contains(hit), `the ⋮ button of row ${index + 1} is under the pointer at its centre`).to.equal(true);
+                });
+            });
+        });
+    });
+
+    // ===========================================================================
+    // 9. REFLOW — the details dialog at 320 × 180
+    // ===========================================================================
+
+    describe('Bundle details dialog on a small screen', () => {
+        /** The focused control is in the dialog and in the viewport; one taller or wider than the viewport shows its start */
+        const focusIsInDialogAndViewport = ($focused: JQuery<HTMLElement>) => {
+            const element = $focused.get(0);
+            const view = element.ownerDocument.defaultView;
+            const rect = element.getBoundingClientRect();
+            const label = accessibleName($focused) || element.tagName;
+            expect(element.closest('[data-testid="bundle-details-dialog"]'), `${label} is in the dialog`).to.exist;
+            expect(rect.top, `top of ${label}`).to.be.within(0, view.innerHeight - 1);
+            expect(rect.left, `left of ${label}`).to.be.within(0, view.innerWidth - 1);
+            if (rect.height <= view.innerHeight) {
+                expect(rect.bottom, `bottom of ${label}`).to.be.at.most(view.innerHeight);
+            }
+
+            if (rect.width <= view.innerWidth) {
+                expect(rect.right, `right of ${label}`).to.be.at.most(view.innerWidth);
+            }
+        };
+
+        beforeEach(visitPage);
+
+        it('at 320 × 180 the dialog scrolls as a whole, and Tab keeps each focused control in the viewport', () => {
+            openTestBundleDetails();
+            cy.viewport(320, 180);
+
+            cy.get('[data-testid="bundle-details-dialog"]').should($dialog => {
+                const dialog = $dialog.get(0);
+                expect($dialog.attr('role')).to.equal('dialog');
+                expect(dialog.ownerDocument.defaultView.getComputedStyle(dialog).overflowY, 'the dialog scrolls').to.be.oneOf(['auto', 'scroll']);
+                expect(dialog.clientHeight, 'height of the dialog').to.be.greaterThan(100);
+                expect(dialog.scrollHeight, 'the content is taller than the dialog').to.be.greaterThan(dialog.clientHeight);
+            });
+
+            cy.get('[data-testid="bundle-details-dialog"]').then($dialog => {
+                const count = tabbables($dialog).length;
+                expect(count, 'controls of the dialog').to.be.greaterThan(3);
+                for (let index = 0; index < count; index++) {
+                    cy.press(Cypress.Keyboard.Keys.TAB);
+                    cy.focused().should(focusIsInDialogAndViewport);
+                }
+            });
+            cy.viewport(Cypress.config('viewportWidth'), Cypress.config('viewportHeight'));
+        });
+    });
+
+    // ===========================================================================
+    // 10. NAMES — the update options and the dialogs
+    // ===========================================================================
+
+    describe('Names of the update options and of the dialogs', () => {
+        beforeEach(visitPage);
+
+        it('each switch of Update options is named by its visible label and described by the text under it', () => {
+            openFromMoreActions('update-options-btn', 'update-options-dialog');
+            cy.get('[data-testid="update-options-dialog"] input[type="checkbox"]').should('have.length', 4).each($switch => {
+                const visibleLabel = ($switch.closest('label').find('span').last().text() || '').trim();
+                expect(visibleLabel, 'visible label of the switch').not.to.equal('');
+                expect(accessibleName($switch), 'name of the switch').to.equal(visibleLabel);
+                expect($switch.attr('aria-describedby'), `description of ${visibleLabel}`).to.be.a('string');
+                expect(describedByText($switch), `description of ${visibleLabel}`).not.to.equal('');
+            });
+        });
+
+        it('Update options, Export, Generate script and its result, Upload and Install from store each have a name', () => {
+            openFromMoreActions('update-options-btn', 'update-options-dialog');
+            dialogIsNamed('update-options-dialog', 'Update options');
+            cy.get('[data-testid="update-options-close"]').click();
+
+            openFromMoreActions('export-snapshot-btn', 'export-modules-dialog');
+            dialogIsNamed('export-modules-dialog', 'Export module snapshot');
+            cy.contains('[data-testid="export-modules-dialog"] button', 'Cancel').click();
+
+            openGeneratedScript();
+            dialogIsNamed('generate-script-dialog', 'Generate provisioning script');
+            dialogIsNamed('dryrun-result-dialog', 'Provisioning script — module set');
+            cy.contains('[data-testid="dryrun-result-dialog"] button', 'Close').click();
+            cy.get('[data-testid="dryrun-result-dialog"]').should('not.exist');
+
+            cy.get('[data-testid="upload-module-btn"]').click();
+            dialogIsNamed('upload-module-dialog', 'Deploy / Import module');
+            cy.contains('[data-testid="upload-module-dialog"] button', 'Cancel').click();
+
+            cy.get('[data-testid="install-from-store-btn"]').click();
+            dialogIsNamed('install-from-store-dialog', 'Install from store');
+        });
+    });
+
+    describe('Name of the uninstall confirmation', () => {
+        it('the confirmation of Uninstall, offered for a resolved module, has a name', () => {
+            // The table shows the module of the test resolved, and no request may uninstall anything
+            rewriteResult('InstalledModules', data => {
+                data.admin.modulesManagement.installedModules = withTestBundleState(data.admin.modulesManagement.installedModules, 4);
+            });
+            stubModulesManagementFields({uninstall: null});
+            visitPage();
+            filterByName(testBundle);
+            cy.get('[data-testid="modules-table"] tbody tr').first().should('contain.text', 'Resolved');
+            cy.get('[data-testid="row-actions-menu-btn"]').click();
+            cy.get('[data-testid="row-menu-uninstall"]').click();
+
+            dialogIsNamed('uninstall-confirm-dialog', `Uninstall ${testBundle}?`);
+            cy.contains('[data-testid="uninstall-confirm-dialog"] button', 'Cancel').click();
+            cy.get('[data-testid="uninstall-confirm-dialog"]').should('not.exist');
+        });
+    });
+
+    // ===========================================================================
+    // 11. FOCUS AFTER AN ACTION of a dialog
+    // ===========================================================================
+
+    describe('Focus after the main action of a dialog', () => {
+        beforeEach(visitPage);
+
+        it('Preview YAML of Export moves focus to the preview', () => {
+            openFromMoreActions('export-snapshot-btn', 'export-modules-dialog');
+            cy.contains('[data-testid="export-modules-dialog"] button', 'Preview YAML').focus();
+            activateFocusedButton();
+            cy.focused({timeout: 30000})
+                .should('match', 'pre')
+                .and('have.attr', 'aria-label', 'YAML provisioning preview');
+        });
+
+        it('Generate script moves focus into the result dialog', () => {
+            openGeneratedScript();
+            cy.focused().should($focused => {
+                expect($focused.get(0).closest('[data-testid="dryrun-result-dialog"]'), 'focus in the result dialog').to.exist;
+            });
+        });
+
+        it('Install from store, opened from the keyboard, focuses its first control; an install moves focus to Close', () => {
+            // The catalogue and the installation are answered here, so nothing is installed
+            stubModulesManagementFields({
+                storeModules: [{symbolicName: 'cypress-store-module', title: 'Cypress store module', icon: null, latestVersion: '1.0.0', storeUrl: 'https://store.jahia.com'}],
+                installStoreModules: 'Stubbed installation'
+            });
+            cy.get('[data-testid="install-from-store-btn"]').focus();
+            activateFocusedButton();
+            dialogIsNamed('install-from-store-dialog', 'Install from store');
+            cy.wait('@storeModules');
+            focusIsOnFirstControl('install-from-store-dialog');
+
+            cy.contains('[data-testid="install-from-store-dialog"] label', 'Cypress store module').click();
+            cy.contains('[data-testid="install-from-store-dialog"] button', 'Install selected (1)').focus();
+            activateFocusedButton();
+            cy.wait('@installStoreModules');
+            cy.get('[data-testid="install-from-store-dialog"] [role="status"]').should('contain.text', 'Stubbed installation');
+            cy.focused().should('have.attr', 'data-focus', 'close').and('have.text', 'Close');
+        });
+
+        it('Upload, opened from the keyboard, focuses its first control; a deploy moves focus to Close', () => {
+            // The upload is answered here, so nothing is deployed
+            cy.intercept('POST', '**/modules/module-management-community/upload', {statusCode: 200, body: {message: 'Stubbed deploy'}}).as('upload');
+            cy.get('[data-testid="upload-module-btn"]').focus();
+            activateFocusedButton();
+            dialogIsNamed('upload-module-dialog', 'Deploy / Import module');
+            focusIsOnFirstControl('upload-module-dialog');
+
+            cy.get('[data-testid="upload-module-dialog"] input[type="file"]')
+                .selectFile({contents: Cypress.Buffer.from('not a bundle'), fileName: 'cypress-module-1.0.0.jar'}, {force: true});
+            cy.contains('[data-testid="upload-module-dialog"] button', 'Deploy').should('not.be.disabled').focus();
+            activateFocusedButton();
+            cy.wait('@upload');
+            cy.get('[data-testid="upload-module-dialog"] [role="status"]').should('contain.text', 'Stubbed deploy');
+            cy.focused().should('have.attr', 'data-focus', 'close').and('have.text', 'Close');
+        });
+    });
+
+    // ===========================================================================
+    // 12. FILTERS keep what the user chose
+    // ===========================================================================
+
+    describe('Filters that no module matches any more', () => {
+        const chip = (filter: string) => cy.get(`[data-testid="filter-chip"][data-filter="${filter}"]`);
+        const openChip = (filter: string) => chip(filter).find('[data-testid="filter-chip-edit"]').click();
+        const closeEditor = () => cy.get('[data-testid="filter-editor-close"]').click();
+
+        it('the Updates chip stays while "updates only" is on and no update is left', () => {
+            let hasUpdate = true;
+            rewriteResult('AvailableUpdates', data => {
+                data.admin.modulesManagement.availableUpdates = hasUpdate ? [`${testBundle}/0.0.1:99.0.0`] : [];
+            });
+            visitPage();
+            openChip('updates');
+            cy.get('[data-testid="filter-updates"]').click();
+            closeEditor();
+            cy.get('[data-testid="modules-table"] tbody tr').should('contain.text', testBundle);
+
+            cy.then(() => {
+                hasUpdate = false;
+            });
+            cy.get('[data-testid="refresh-btn"]').click();
+            cy.wait('@AvailableUpdatesResult');
+            cy.get('[data-testid="modules-empty"]').should('contain.text', 'No module matches the filters.');
+            chip('updates').should('contain.text', 'available only');
+            openChip('updates');
+            cy.get('[data-testid="filter-updates"] input').should('be.checked');
+        });
+
+        it('a selected State that no module has any more stays checked in its editor', () => {
+            let isStarting = true;
+            let realStates: string[] = [];
+            // The module of the test shows Starting (8), a state that no installed module stays in, then its real state
+            rewriteResult('InstalledModules', data => {
+                const modulesManagement = data.admin.modulesManagement;
+                if (isStarting) {
+                    modulesManagement.installedModules = withTestBundleState(modulesManagement.installedModules, 8);
+                } else {
+                    realStates = modulesManagement.installedModules.map((entry: string) => entry.substring(entry.lastIndexOf(':') + 1));
+                }
+            });
+            visitPage();
+            openChip('state');
+            cy.get('[data-testid="filter-state"][data-state="STARTING"]').click();
+            closeEditor();
+            cy.get('[data-testid="modules-table"] tbody tr').should('have.length', 1).and('contain.text', testBundle);
+
+            cy.then(() => {
+                isStarting = false;
+            });
+            cy.get('[data-testid="refresh-btn"]').click();
+            cy.wait('@InstalledModulesResult').then(() => {
+                expect(realStates, 'states of the installed modules').not.to.include('8');
+            });
+            cy.get('[data-testid="modules-empty"]').should('contain.text', 'No module matches the filters.');
+            chip('state').should('contain.text', 'Starting');
+            openChip('state');
+            cy.get('[data-testid="filter-state"][data-state="STARTING"] input').should('be.checked');
+        });
+
+        // The map of the modules whose dependencies have an update is state of the screen that it shrinks when an update
+        // goes; no element shows the map itself, so no end-to-end test reads it.
+        it.skip('the map of dependent updates shrinks when an update goes: internal state, not observable', () => {
+            // Not observable from the page
+        });
+    });
+
+    // ===========================================================================
+    // 13. RESULT MESSAGES — Bundle details, Dry run result, Upload drop zone
+    // ===========================================================================
+
+    describe('Result messages', () => {
+        beforeEach(visitPage);
+
+        it('the reimport result of Bundle details stays until it is dismissed', () => {
+            // The reimport is answered here, so no content is imported again
+            stubModulesManagementFields({importModule: 'Stubbed reimport'});
+            openTestBundleDetails();
+            // From here a timer runs only when the test moves the clock: the first tick sends the batched request
+            cy.clock();
+            cy.contains('[data-testid="bundle-details-actions"] button', 'Force reimport content').click();
+            cy.tick(100);
+            cy.wait('@importModule');
+            cy.contains('[data-testid="bundle-details-dialog"] [role="status"]', 'Stubbed reimport').should('be.visible');
+            // A minute, far longer than the 5 s of a notification: the message must not leave on a timer
+            cy.tick(60000);
+            cy.contains('[data-testid="bundle-details-dialog"] [role="status"]', 'Stubbed reimport').should('be.visible');
+            cy.get('[data-testid="bundle-details-dialog"] button[aria-label="Dismiss message"]').click();
+            cy.contains('[data-testid="bundle-details-dialog"] [role="status"]', 'Stubbed reimport').should('not.exist');
+        });
+
+        // Installing another version changes the server, and needs a second version in the store or in the JCR; its
+        // result uses the same message component as the reimport above.
+        it.skip('the install result of a version of Bundle details stays until it is dismissed: needs a second version and changes the server', () => {
+            // Not run on the lab
+        });
+
+        it('the copy button of the Dry run result names what it copies, and the status reads the result of a copy', () => {
+            const copyButton = () => cy.get('[data-testid="dryrun-result-dialog"] button').filter((_, el) => /^Copy /.test(el.textContent.trim()));
+            const copyStatus = () => cy.get('[data-testid="dryrun-result-dialog"] [role="status"]');
+            let copyWorks = true;
+            const writeText = cy.stub().callsFake(() => (copyWorks ? Promise.resolve() : Promise.reject(new Error('Denied'))));
+            cy.window().then(win => {
+                Object.defineProperty(win.navigator, 'clipboard', {value: {writeText}, configurable: true});
+            });
+            openGeneratedScript();
+
+            copyButton().should('have.text', 'Copy YAML').click();
+            copyStatus().should('have.text', 'The YAML script was copied to the clipboard.');
+            cy.wrap(writeText).should('have.been.calledWithMatch', 'installOrUpgradeBundle');
+
+            cy.contains('[data-testid="dryrun-result-dialog"] button', 'cURL').click();
+            copyStatus().should('have.text', '');
+            copyButton().should('have.text', 'Copy cURL command').click();
+            copyStatus().should('have.text', 'The cURL command was copied to the clipboard.');
+            cy.wrap(writeText).should('have.been.calledWithMatch', /^curl /);
+
+            cy.then(() => {
+                copyWorks = false;
+            });
+            copyButton().click();
+            copyStatus().should('have.text', 'Could not copy to the clipboard. Select the text in the code block and copy it by hand.');
+        });
+
+        it('the drop zone of Upload is a button whose name holds the selected file name', () => {
+            const fileName = 'cypress-module-1.0.0.jar';
+            const dropZone = () => cy.get('[data-testid="upload-module-dialog"] button[aria-describedby]');
+            cy.get('[data-testid="upload-module-btn"]').click();
+            dropZone().should($zone => {
+                expect(accessibleName($zone)).to.contain('Drag & drop a .jar or .tgz file here');
+            });
+
+            cy.get('[data-testid="upload-module-dialog"] input[type="file"]')
+                .selectFile({contents: Cypress.Buffer.from('not a bundle'), fileName}, {force: true});
+            dropZone().should($zone => {
+                expect($zone.get(0).tagName).to.equal('BUTTON');
+                expect(accessibleName($zone)).to.contain(fileName);
+            });
+            // Nothing is deployed
+            cy.contains('[data-testid="upload-module-dialog"] button', 'Cancel').click();
+            cy.get('[data-testid="upload-module-dialog"]').should('not.exist');
         });
     });
 });

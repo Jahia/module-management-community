@@ -61,14 +61,13 @@ export const ServerStatusNavIcon = ({className, size}) => {
             return undefined;
         }
 
-        const id = descriptionId;
         const ids = (item.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
-        if (!ids.includes(id)) {
-            item.setAttribute('aria-describedby', [...ids, id].join(' '));
+        if (!ids.includes(descriptionId)) {
+            item.setAttribute('aria-describedby', [...ids, descriptionId].join(' '));
         }
 
         return () => {
-            const rest = (item.getAttribute('aria-describedby') || '').split(/\s+/).filter(v => v && v !== id);
+            const rest = (item.getAttribute('aria-describedby') || '').split(/\s+/).filter(v => v && v !== descriptionId);
             if (rest.length > 0) {
                 item.setAttribute('aria-describedby', rest.join(' '));
             } else {
