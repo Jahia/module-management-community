@@ -4,7 +4,8 @@
       "details": {
         "dependencies": {
           "modules": "Module dependencies",
-          "nodeTypes": "Node type dependencies"
+          "nodeTypes": "Node type dependencies",
+          "requires": "Requires: {{range}}"
         },
         "identity": {
           "builtAt": "Built at",
@@ -18,7 +19,12 @@
         },
         "manifest": {
           "hide": "Hide full manifest",
-          "show": "Show full manifest"
+          "show": "Show full manifest",
+          "tableLabel": "Bundle manifest",
+          "col": {
+            "key": "Key",
+            "value": "Value"
+          }
         },
         "section": {
           "dependencies": "Dependencies",
@@ -45,7 +51,8 @@
           "title": "Site actions"
         },
         "disabled": "Disabled",
-        "enabled": "Enabled"
+        "enabled": "Enabled",
+        "toggleAriaLabel": "Toggle deployment on site {{site}}"
       },
       "tab": {
         "bundleDeps": "Bundle dependencies",
@@ -53,7 +60,11 @@
         "moduleDeps": "Module dependencies",
         "sites": "Sites",
         "unresolvedReqs": "Unresolved requirements",
-        "versions": "Version history"
+        "versions": "Version history",
+        "severity": {
+          "danger": "(missing dependencies)",
+          "warning": "(wiring conflicts)"
+        }
       },
       "type": {
         "bundle": "Bundle",
@@ -77,7 +88,10 @@
           "clear": "Clear filters",
           "noResults": "No requirements match the current filters.",
           "searchReq": "Search requirement…",
-          "showing": "{{count}} of {{total}}"
+          "showing": "{{count}} of {{total}}",
+          "byType": "Filter by type",
+          "byStatus": "Filter by status",
+          "showingCount": "{{count}} of {{total}} requirements"
         },
         "ns": {
           "bundle": "Bundle",
@@ -91,7 +105,8 @@
           "conflictHint": "A bundle providing this capability exists but cannot be wired — check for version mismatch or circular dependency.",
           "missing": "Missing",
           "missingHint": "No bundle in this server exports a capability matching this requirement. Install the missing dependency."
-        }
+        },
+        "tableLabel": "Unresolved requirements"
       },
       "versions": {
         "confirm": {
@@ -112,6 +127,19 @@
         "storeSection": "Store catalogue versions",
         "upgrade": "Upgrade",
         "viewOnStore": "View on store"
+      },
+      "tabs": {
+        "label": "Bundle detail sections"
+      },
+      "result": {
+        "dismiss": "Dismiss message"
+      },
+      "graph": {
+        "default": "Dependency graph",
+        "bundleDeps": "Bundle dependency graph",
+        "moduleDeps": "Module dependency graph",
+        "edge": "{{from}} depends on {{to}}",
+        "renderError": "The dependency graph could not be drawn."
       }
     },
     "cancel": "Cancel",
@@ -134,7 +162,8 @@
       },
       "ops": {
         "title": "Cluster operations"
-      }
+      },
+      "noData": "No cluster data"
     },
     "errors": {
       "loadingModuleData": "An error occurred while loading module data",
@@ -194,7 +223,11 @@
     "noUpdatesAvailable": "No updates available",
     "pagination": {
       "itemsPerPage": "Rows per page",
-      "of": "of"
+      "of": "of",
+      "firstPage": "First page",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "lastPage": "Last page"
     },
     "refresh": "Refresh",
     "refreshBundle": "Refresh bundle",
@@ -207,7 +240,8 @@
         "severity": "Severity",
         "status": "Status",
         "title": "Probes",
-        "none": "No probe reported a status."
+        "none": "No probe reported a status.",
+        "messageRegion": "Message of the probe {{name}}"
       },
       "status": "Server status",
       "statusGreen": "All probes are running",
@@ -240,7 +274,9 @@
         "medium": "Medium and above",
         "low": "Low and above",
         "debug": "All"
-      }
+      },
+      "navHealth": "Health: {{health}}",
+      "announce": "Server status: {{health}}. Probes: {{count}}."
     },
     "showDetails": "Show details",
     "startBundle": "Start bundle",
@@ -276,9 +312,19 @@
         "state": "State",
         "type": "Type",
         "version": "Installed version",
-        "dependent": "Dependent: {{modules}}"
+        "dependent": "Dependent: {{modules}}",
+        "clusterStatePrefix": "Cluster state:"
       },
-      "title": "Installed modules"
+      "title": "Installed modules",
+      "sort": {
+        "ascending": "{{column}}, sorted ascending, activate to sort descending",
+        "descending": "{{column}}, sorted descending, activate to sort ascending",
+        "none": "{{column}}, not sorted, activate to sort ascending"
+      },
+      "status": {
+        "total": "Installed modules: {{total}}",
+        "matching": "Modules matching the filters: {{count}} of {{total}}"
+      }
     },
     "title": "Modules management",
     "uninstallBundle": "Uninstall bundle",
@@ -302,7 +348,13 @@
         "title": "Dry run — Update preview",
         "subtitle": "{{count}} module(s) would be updated",
         "downloadSh": "Download .sh",
-        "curlHint": "Replace <user>:<password> with your Jahia credentials before running."
+        "curlHint": "Replace <user>:<password> with your Jahia credentials before running.",
+        "copiedCurl": "The cURL command was copied to the clipboard.",
+        "copiedYaml": "The YAML script was copied to the clipboard.",
+        "copyCurl": "Copy cURL command",
+        "copyFailed": "Could not copy to the clipboard. Select the text in the code block and copy it by hand.",
+        "curlAriaLabel": "cURL deployment command",
+        "yamlAriaLabel": "Provisioning YAML script"
       }
     },
     "updateBundle": "Update bundle",
@@ -324,14 +376,18 @@
         },
         "preview": {
           "button": "Preview YAML",
-          "label": "Generated provisioning.yaml"
+          "label": "Generated provisioning.yaml",
+          "ariaLabel": "YAML provisioning preview",
+          "ready": "The YAML preview is ready."
         },
         "exporting": "Building archive and downloading…",
         "previewing": "Generating YAML preview…",
         "export": "Download archive",
         "error": {
-          "generic": "An unexpected error occurred during export"
-        }
+          "generic": "An unexpected error occurred during export",
+          "noPreview": "No preview data returned"
+        },
+        "downloadStarted": "Download started: {{fileName}}"
       }
     },
     "import": {
@@ -351,7 +407,8 @@
       "mode": {
         "jar": "Deploy single module (.jar / .tgz)",
         "yaml": "Apply provisioning script (.yaml / .yml)",
-        "zip": "Import snapshot archive (.zip)"
+        "zip": "Import snapshot archive (.zip)",
+        "label": "What to deploy"
       },
       "dialog": {
         "deploy": "Deploy",
@@ -368,7 +425,12 @@
         "noFile": "Please select a file",
         "notJar": "Only .jar and .tgz files are accepted"
       },
-      "module": "Upload module"
+      "module": "Upload module",
+      "dropzone": {
+        "fileSize": "{{size}} MB",
+        "selectAnother": "Select another file",
+        "selected": "Selected file: {{fileName}}, {{size}} MB"
+      }
     },
     "yaml": {
       "dialog": {
@@ -395,7 +457,8 @@
       "successNotification": "Store module installation started. The module list has been refreshed.",
       "summary": "{{selected}} of {{total}} shown selected · {{totalStore}} total uninstalled compatible modules",
       "title": "Install from store",
-      "viewOnStore": "View on Jahia Store"
+      "viewOnStore": "View on Jahia Store",
+      "viewOnStoreAriaLabel": "View {{name}} on the Jahia Store (opens in a new window)"
     },
     "generateScript": {
       "menuItem": "Generate provisioning script",
@@ -416,7 +479,9 @@
       "generating": "Generating…",
       "result": {
         "title": "Provisioning script — module set"
-      }
+      },
+      "emptyResult": "The server returned an empty script",
+      "error": "The provisioning script could not be generated: {{message}}"
     },
     "serverStatus": {
       "title": "Server status"
@@ -446,6 +511,29 @@
       "stopping": "Stopping",
       "uninstalled": "Uninstalled",
       "unknown": "Unknown"
+    },
+    "routes": {
+      "modules": "Module Management (Community)",
+      "serverStatus": "Server Status (Community)"
+    },
+    "status": {
+      "updating": "Updating modules…",
+      "running": "Operation running…"
+    },
+    "helpNewWindow": "{{label}} (opens in a new window)",
+    "uninstall": {
+      "confirm": {
+        "title": "Uninstall {{name}}?",
+        "message": "This will permanently uninstall the bundle. Are you sure?"
+      }
+    },
+    "dialogs": {
+      "selectedCount": "{{selected}} of {{total}} shown modules selected",
+      "shownCount": "{{count}} module(s) shown",
+      "status": {
+        "error": "Error",
+        "success": "Success"
+      }
     }
   },
   "help": {
