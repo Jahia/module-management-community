@@ -174,7 +174,7 @@ SummaryItem.propTypes = {
  * The Moonstone Dropdown names its listbox with the selected value and forwards no aria prop to it,
  * so the listbox gets its name here: the visible "Severity" label, then its own value.
  */
-const SeverityDropdown = ({label, ...props}) => {
+const SeverityDropdown = ({label, 'data-testid': testId, ...props}) => {
     const wrapperRef = useRef(null);
     const labelId = useStableId('server-status-severity-label');
     const listboxId = useStableId('server-status-severity');
@@ -188,7 +188,7 @@ const SeverityDropdown = ({label, ...props}) => {
     });
 
     return (
-        <div ref={wrapperRef} className={styles.severity}>
+        <div ref={wrapperRef} className={styles.severity} data-testid={testId}>
             <Typography variant="body" component="span" id={labelId}>{label}</Typography>
             <Dropdown {...props}/>
         </div>
@@ -196,7 +196,8 @@ const SeverityDropdown = ({label, ...props}) => {
 };
 
 SeverityDropdown.propTypes = {
-    label: PropTypes.string.isRequired
+    label: PropTypes.string.isRequired,
+    'data-testid': PropTypes.string
 };
 
 /** The text of a polite status region that speaks only when the text changes after the first result. */

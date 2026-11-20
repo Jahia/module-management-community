@@ -25,9 +25,15 @@ describe('Server status community', () => {
         cy.get('[data-testid="server-status-nav-icon"]', {timeout: 20000})
             .should('have.attr', 'data-health')
             .and('match', /^(GREEN|YELLOW|RED)$/);
+        // The icon stays out of the name of the tree item; the health is the description of the item.
         cy.get('[data-testid="server-status-nav-icon"]')
-            .invoke('attr', 'aria-label')
-            .should('match', /^Server status: (OK|Warning|Error)$/);
+            .should('have.attr', 'aria-hidden', 'true')
+            .closest('[role="treeitem"]')
+            .should('have.attr', 'aria-describedby')
+            .and('match', /server-status-nav-health-\d+/);
+        cy.get('[id^="server-status-nav-health-"]').first()
+            .invoke('text')
+            .should('match', /^Health: (OK|Warning|Error)$/);
     });
 
     it('names both entries of the administration tree with Community in parentheses', () => {

@@ -74,11 +74,9 @@ export const FilterChip = ({id, name, value, isOpen, onOpen, onClose, onClear, c
                       anchorEl={anchorRef}
                       role="dialog"
                       aria-label={name}
-                      data-testid="filter-editor"
-                      data-filter={id}
                       onClose={close}
                 >
-                    <div ref={editorRef}>
+                    <div ref={editorRef} data-testid="filter-editor" data-filter={id}>
                         <fieldset className={styles.fieldset}>
                             <legend className={styles.legend}>{name}</legend>
                             {children}

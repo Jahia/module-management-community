@@ -22,8 +22,9 @@ const focusItem = (items, index) => {
  * The moonstone Menu renders <menu role="list"> and forwards its other props to that element,
  * so the role and the key handler are passed through it. Its items must have tabIndex -1:
  * the moonstone MenuItem moves focus itself on keyup between the items with tabIndex 0.
+ * The test id goes on a wrapper the module owns, as the Menu props do not promise to forward it.
  */
-export const AccessibleMenu = ({isOpen, initialFocus = 'first', anchorRef, label, onClose, children, ...props}) => {
+export const AccessibleMenu = ({isOpen, initialFocus = 'first', anchorRef, label, onClose, children, 'data-testid': testId, ...props}) => {
     const menuId = useId();
     useEscapeKey(isOpen, onClose);
 
@@ -90,7 +91,9 @@ export const AccessibleMenu = ({isOpen, initialFocus = 'first', anchorRef, label
               onClose={onClose}
               {...props}
         >
-            {children}
+            <div data-testid={testId}>
+                {children}
+            </div>
         </Menu>
     );
 };
@@ -101,7 +104,8 @@ AccessibleMenu.propTypes = {
     anchorRef: PropTypes.object.isRequired,
     label: PropTypes.string.isRequired,
     onClose: PropTypes.func.isRequired,
-    children: PropTypes.node.isRequired
+    children: PropTypes.node.isRequired,
+    'data-testid': PropTypes.string
 };
 
 /** A group of menu items under a visible title. The title is hidden from the tree and names the group. */
