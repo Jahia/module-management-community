@@ -1,4 +1,5 @@
 import React, {useEffect, useRef} from 'react';
+import {createPortal} from 'react-dom';
 import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -74,7 +75,9 @@ export const ServerStatusNavIcon = ({className, size}) => {
               data-health={health}
         >
             <Icon size={size}/>
-            <span id={idRef.current} className={styles.srOnly}>{description}</span>
+            {/* Chrome adds a referenced node to the name of the tree item when it sits inside the item,
+                even under aria-hidden, so the description lives outside the tree, hidden. */}
+            {createPortal(<span hidden id={idRef.current}>{description}</span>, document.body)}
         </span>
     );
 };
