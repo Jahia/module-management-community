@@ -9,20 +9,15 @@ import styles from './ModuleManagementCommunityApp.scss';
 const ClusterDeploymentStatus = ({clusterDeployment, bundleKey}) => {
     const {t} = useTranslation('module-management-community');
     if (!clusterDeployment || clusterDeployment.length === 0) {
-        return <span className={styles.noClusterData}>No cluster data</span>;
+        return <span className={styles.noClusterData}>{t('label.cluster.noData')}</span>;
     }
 
     return (
         <div className={styles.clusterStatus}>
             {clusterDeployment.map(node => {
                 const state = node.bundles.find(b => b.key === bundleKey)?.state;
-                // A11y B-017: include state as text in label, not colour alone
                 return (
-                    <StatusDot key={node.nodeId}
-                               tone={stateTone(state)}
-                               variant="caption"
-                               aria-label={`Node ${node.nodeId} — ${bundleKey} — ${state || 'unknown'}`}
-                    >
+                    <StatusDot key={node.nodeId} tone={stateTone(state)} variant="caption">
                         <span className={styles.nodeState}>{stateLabel(t, state)}</span>
                         {node.nodeId}
                     </StatusDot>

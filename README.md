@@ -9,8 +9,6 @@ Jahia modules.
 - UI extension for Jahia administration with column filtering
 - Integration with Maven for module metadata resolution
 
-![column-filtering.png](docs/column-filtering.png)
-
 ## Technologies
 
 ### Backend
@@ -96,8 +94,6 @@ Changing the type filter resets the pagination back to page 1.
 When at least one update is available, the **Available version** column header displays a toggle switch labelled *Updates only*. Enabling it hides every module that has neither a direct update nor a dependent-module update available, making it easy to focus on what needs upgrading.
 
 > **Note:** All three filters (name, type, updates-only) are applied simultaneously, so only rows that satisfy every active filter are shown.
-
-![column-filtering.png](docs/column-filtering.png)
 
 ## GraphQL API
 
@@ -220,7 +216,6 @@ mutation {
 ```
 
 **Note:** Fields `dependenciesGraph` and `moduleDependenciesGraph` return JSON strings representing dependency relationships as Mermaid.js syntax.
-
 
 ## REST API
 

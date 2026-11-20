@@ -37,9 +37,7 @@ const AvailableCell = ({module, updates}) => {
         <div className={styles.badges}>
             {module.available && <Chip label={module.available} color="accent"/>}
             {dependents.length > 0 && (
-                <Chip label={t('label.table.cells.dependent', {modules: dependents.join(', ')})}
-                      color="accent"
-                      title={dependents.join(', ')}/>
+                <Chip label={t('label.table.cells.dependent', {modules: dependents.join(', ')})} color="accent"/>
             )}
         </div>
     );
@@ -59,14 +57,18 @@ const StateCell = ({module, isClustered}) => {
         <div className={styles.states}>
             <StatusDot tone={stateTone(module.state)}>{stateLabel(t, module.state)}</StatusDot>
             {clusterState && clusterState !== 'UNKNOWN' && clusterState !== module.state && (
-                <StatusDot tone={stateTone(clusterState)} title={t('label.table.cells.clusterstate')}>
+                <StatusDot tone={stateTone(clusterState)}>
+                    <span className={styles.srOnly}>{t('label.table.cells.clusterStatePrefix')} </span>
                     {stateLabel(t, clusterState)}
                 </StatusDot>
             )}
             {clusterState === 'UNKNOWN' && (
-                <Chip label={t('label.cluster.state.not.sync.short')}
-                      color="accent"
-                      title={t('label.cluster.state.not.sync.long')}/>
+                <>
+                    <Chip label={t('label.cluster.state.not.sync.short')}
+                          color="accent"
+                          title={t('label.cluster.state.not.sync.long')}/>
+                    <span className={styles.srOnly}>{t('label.cluster.state.not.sync.long')}</span>
+                </>
             )}
         </div>
     );
@@ -80,7 +82,8 @@ StateCell.propTypes = {
 const ClusterNodesCell = ({module}) => {
     const {bundle, loading} = useBundleRow(module);
     if (!bundle) {
-        return loading ? <Loader size="small"/> : null;
+        // The table carries aria-busy and the page has one status message, so the Loader of a cell stays silent.
+        return loading ? <Loader size="small" role="presentation" aria-hidden="true"/> : null;
     }
 
     return (
@@ -108,8 +111,7 @@ const ActionsCell = ({module, updates, onDependentUpdates, onUpdate, refreshAllM
     }
 
     if (!bundle) {
-        // A11y A-010: announce row-level loading state
-        return loading ? <span role="status" aria-label={t('label.loading')}><Loader size="small"/></span> : null;
+        return loading ? <Loader size="small" role="presentation" aria-hidden="true"/> : null;
     }
 
     return (
@@ -129,8 +131,45 @@ ActionsCell.propTypes = {
     refreshAllModules: PropTypes.func.isRequired
 };
 
+/**
+ * The label of a sortable column header: a button, as the DataTable header cell answers only a mouse click.
+ * Its name gives the column, the sort state and what a press does; the header cell carries aria-sort.
+ */
+const SortButton = ({columnKey, label, sortBy, sortDirection, onSort}) => {
+    const {t} = useTranslation('module-management-community');
+    const isActive = sortBy === columnKey;
+    const next = isActive && sortDirection === 'ascending' ? 'descending' : 'ascending';
+    const name = t(isActive ? `label.table.sort.${sortDirection}` : 'label.table.sort.none', {
+        column: label,
+        interpolation: {escapeValue: false}
+    });
+    return (
+        <button type="button"
+                className={styles.sortButton}
+                aria-label={name}
+                data-testid="sort-button"
+                data-column={columnKey}
+                onClick={event => {
+                    // The header cell would toggle the sort a second time.
+                    event.stopPropagation();
+                    onSort(columnKey, next);
+                }}
+        >
+            {label}
+        </button>
+    );
+};
+
+SortButton.propTypes = {
+    columnKey: PropTypes.string.isRequired,
+    label: PropTypes.string.isRequired,
+    sortBy: PropTypes.string.isRequired,
+    sortDirection: PropTypes.oneOf(['ascending', 'descending']).isRequired,
+    onSort: PropTypes.func.isRequired
+};
+
 /** The DataTable columns of the modules table. The Available and Cluster columns show only when they hold data. */
-export const buildModuleColumns = ({t, updates, isClustered, onDependentUpdates, onUpdate, refreshAllModules}) => [
+export const buildModuleColumns = ({t, updates, isClustered, sort, onDependentUpdates, onUpdate, refreshAllModules}) => [
     {
         key: 'name',
         label: t('label.table.cells.name'),
@@ -185,4 +224,7 @@ export const buildModuleColumns = ({t, updates, isClustered, onDependentUpdates,
                          onUpdate={onUpdate}/>
         )
     }
-].filter(Boolean);
+].filter(Boolean).map(column => (column.isSortable ? {
+    ...column,
+    label: <SortButton columnKey={column.key} label={column.label} {...sort}/>
+} : column));

@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useApolloClient, useMutation, useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -10,6 +10,8 @@ import {getComparator, resolveAllDependentModules} from '../utils/moduleUtils';
 import {buildModuleFilter, DEFAULT_FILTERS, isDefaultFilters, toStateName} from '../utils/moduleFilters';
 import {useModulePreferences} from '../hooks/useModulePreferences';
 import {BUNDLE_ROW_QUERY} from '../hooks/useBundleRow';
+import {useDataTableA11y} from '../hooks/useDataTableA11y';
+import {useAnnounce} from './StatusAnnouncer';
 import {buildModuleColumns} from './moduleColumns';
 import {ModulesActionBar} from './ModulesActionBar';
 import {ModuleFilters} from './filters/ModuleFilters';
@@ -49,6 +51,9 @@ const CLEANUP_JCR_MUTATION = gql`mutation { admin { modulesManagement { cleanupJ
 
 const ITEMS_PER_PAGE_OPTIONS = [20, 50, 100, 200];
 const DEFAULT_ITEMS_PER_PAGE = 100;
+const TABLE_HEADING_ID = 'module-management-community-table-heading';
+// The result count waits for the user to stop typing in the name filter, so it is read once.
+const COUNT_STATUS_DELAY = 750;
 
 /** Splits an entry of the form "name/version:value" into its three parts. */
 const parseEntry = entry => ({
@@ -66,7 +71,9 @@ const parseBundleTypes = entries => Object.fromEntries((entries || [])
 
 const ModuleManagementCommunityApp = () => {
     const notificationContext = useNotifications();
+    const announce = useAnnounce();
     const {t} = useTranslation('module-management-community');
+    const tableRef = useRef(null);
     const client = useApolloClient();
     const [preferences, setPreferences] = useModulePreferences();
 
@@ -156,6 +163,42 @@ const ModuleManagementCommunityApp = () => {
         }
     }, [currentPage, lastPage]);
 
+    // ── Status messages ────────────────────────────────────────────────────────
+
+    // The snackbar shows the message, and the status region reads it.
+    const notify = useCallback((message, options) => {
+        notificationContext.notify(message, options);
+        announce(message);
+    }, [notificationContext, announce]);
+
+    const totalCount = filteredModules.length;
+    const isFiltered = !isDefaultFilters(filters);
+    let countText = '';
+    if (!installedData && !installedError) {
+        countText = t('label.loading');
+    } else if (!installedError) {
+        countText = isFiltered ?
+            t('label.table.status.matching', {count: totalCount, total: modules.length}) :
+            t('label.table.status.total', {total: modules.length});
+    }
+
+    const [countStatus, setCountStatus] = useState('');
+    useEffect(() => {
+        const timer = setTimeout(() => setCountStatus(countText), COUNT_STATUS_DELAY);
+        return () => clearTimeout(timer);
+    }, [countText]);
+
+    useDataTableA11y(tableRef, {
+        rowsPerPageId: 'module-management-community-rows-per-page',
+        pagerClassName: styles.stickyPagination,
+        labels: {
+            first: t('label.pagination.firstPage'),
+            previous: t('label.pagination.previousPage'),
+            next: t('label.pagination.nextPage'),
+            last: t('label.pagination.lastPage')
+        }
+    });
+
     // ── Handlers ───────────────────────────────────────────────────────────────
 
     const changeFilter = (key, value) => {
@@ -168,11 +211,11 @@ const ModuleManagementCommunityApp = () => {
         setCurrentPage(1);
     };
 
-    const changeSort = (key, direction) => {
+    const changeSort = useCallback((key, direction) => {
         setSortBy(key);
         setSortDirection(direction);
         setCurrentPage(1);
-    };
+    }, []);
 
     const handleDependentUpdate = useCallback((moduleName, deps) => {
         setDependentUpdates(prev => (prev[moduleName]?.join() === deps.join() ? prev : {...prev, [moduleName]: deps}));
@@ -191,6 +234,7 @@ const ModuleManagementCommunityApp = () => {
     }, [refreshAllModules, refetchUpdates, refreshRows]);
 
     const handleUpdateAll = useCallback(async filterArg => {
+        announce(t('label.status.updating'));
         try {
             let expandedFilter = [];
             if (filterArg && filterArg.length > 0) {
@@ -216,7 +260,7 @@ const ModuleManagementCommunityApp = () => {
             if (preferences.dryRun && yamlScript) {
                 setDryRunResult({modules: Array.from(updatedModules), yamlScript});
             } else {
-                notificationContext.notify(
+                notify(
                     expandedFilter.length > 0 ?
                         t('label.updateAllSuccessWithFilter', {modules: expandedFilter.join(', ')}) :
                         t('label.updateAllSuccess'),
@@ -226,31 +270,32 @@ const ModuleManagementCommunityApp = () => {
             }
         } catch (e) {
             console.error('Error updating modules:', e);
-            notificationContext.notify(t('label.updateAllError'), ['closeButton', 'closeAfter5s']);
+            notify(t('label.updateAllError'), ['closeButton', 'closeAfter5s']);
         }
-    }, [dependentUpdates, updates, updateAll, preferences, notificationContext, t, refreshAll]);
+    }, [dependentUpdates, updates, updateAll, preferences, notify, announce, t, refreshAll]);
 
     const handleClusterOperation = async operation => {
         const mutations = {synchronize, push, pull};
+        announce(t('label.status.running'));
         try {
             await mutations[operation]();
-            notificationContext.notify(t(`label.${operation}BundlesSuccess`), ['closeButton', 'closeAfter5s']);
+            notify(t(`label.${operation}BundlesSuccess`), ['closeButton', 'closeAfter5s']);
             await refreshAll();
         } catch (e) {
             console.error(`Error during ${operation}:`, e);
-            notificationContext.notify(t(`label.${operation}BundlesError`), ['closeButton', 'closeAfter5s']);
+            notify(t(`label.${operation}BundlesError`), ['closeButton', 'closeAfter5s']);
         }
     };
 
     const handleCleanupJcr = async () => {
-        notificationContext.notify(t('label.cleanup.running'), ['closeButton']);
+        notify(t('label.cleanup.running'), ['closeButton']);
         try {
             const result = await cleanupJcr();
             const msg = result?.data?.admin?.modulesManagement?.cleanupJcrVersions || t('label.cleanup.success');
-            notificationContext.notify(msg, ['closeButton', 'closeAfter5s']);
+            notify(msg, ['closeButton', 'closeAfter5s']);
         } catch (e) {
             console.error('Error cleaning up JCR versions:', e);
-            notificationContext.notify(t('label.cleanup.error'), ['closeButton', 'closeAfter5s']);
+            notify(t('label.cleanup.error'), ['closeButton', 'closeAfter5s']);
         }
     };
 
@@ -258,16 +303,16 @@ const ModuleManagementCommunityApp = () => {
         t,
         updates,
         isClustered,
+        sort: {sortBy, sortDirection, onSort: changeSort},
         refreshAllModules,
         onDependentUpdates: handleDependentUpdate,
         onUpdate: handleUpdateAll
-    }), [t, updates, isClustered, refreshAllModules, handleDependentUpdate, handleUpdateAll]);
+    }), [t, updates, isClustered, sortBy, sortDirection, changeSort, refreshAllModules, handleDependentUpdate, handleUpdateAll]);
 
     // ── Render ─────────────────────────────────────────────────────────────────
 
     const error = installedError || updatesError;
     const isLoading = installedLoading || updatesLoading;
-    const isFiltered = !isDefaultFilters(filters);
 
     let content;
     if (error) {
@@ -282,7 +327,7 @@ const ModuleManagementCommunityApp = () => {
         );
     } else {
         content = (
-            <Paper hasPadding={false} className={styles.tableWrapper} aria-busy={isLoading} data-testid="modules-table">
+            <Paper ref={tableRef} hasPadding={false} className={styles.tableWrapper} aria-busy={isLoading} data-testid="modules-table">
                 <DataTable
                     enableSorting
                     enablePagination
@@ -295,9 +340,10 @@ const ModuleManagementCommunityApp = () => {
                     itemsPerPage={itemsPerPage}
                     itemsPerPageOptions={ITEMS_PER_PAGE_OPTIONS}
                     totalItems={filteredModules.length}
-                    rowProps={{className: styles.row}}
+                    // A row does nothing on its own, so it loses the tab stop that TableRow sets; its controls keep theirs.
+                    rowProps={{className: styles.row, tabIndex: undefined}}
                     paginationProps={{className: styles.stickyPagination}}
-                    aria-label={t('label.table.title')}
+                    aria-labelledby={TABLE_HEADING_ID}
                     i18n={{
                         itemsPerPage: t('label.pagination.itemsPerPage'),
                         of: t('label.pagination.of')
@@ -314,83 +360,88 @@ const ModuleManagementCommunityApp = () => {
     }
 
     return (
-        <LayoutContent
-            hasPadding
-            className={styles.layout}
-            isLoading={!installedData && !error}
-            header={
-                <Header
-                    title={t('label.title')}
-                    mainActions={
-                        /* A11y B-011: indicate new window opens */
-                        <Button variant="ghost"
-                                size="big"
-                                label={t('label.help')}
-                                icon={<Help/>}
-                                aria-label={`${t('label.help')} (opens in a new window)`}
-                                onClick={() => window.open(t('help.url'), '_blank', 'noopener,noreferrer')}/>
-                    }
-                    toolbarLeft={
-                        <ModulesActionBar
-                            isLoading={isLoading}
-                            isFiltered={isFiltered}
-                            isClustered={isClustered}
-                            hasUpdates={updates.length > 0}
-                            lastUpdate={lastUpdate}
-                            preferences={preferences}
-                            onPreferencesChange={setPreferences}
-                            onRefresh={() => {
-                                notificationContext.notify(t('label.fetchUpdates'), ['closeButton', 'closeAfter5s']);
-                                refreshAll();
-                            }}
-                            onClearFilters={clearFilters}
-                            onUpload={() => setIsUploadOpen(true)}
-                            onInstallFromStore={() => setIsInstallFromStoreOpen(true)}
-                            onUpdateAll={() => handleUpdateAll([])}
-                            onExport={() => setIsExportOpen(true)}
-                            onGenerateScript={() => setIsGenerateScriptOpen(true)}
-                            onCleanupJcr={handleCleanupJcr}
-                            onClusterOperation={handleClusterOperation}
-                        />
-                    }
-                />
-            }
-        >
-            {/* A11y CRITICAL-3: primary content wrapped in a <main> landmark */}
-            <main className={styles.tableArea}>
-                <ModuleFilters filters={filters} states={states} hasUpdates={updates.length > 0} onChange={changeFilter}/>
-                {content}
-            </main>
-
-            <UploadModuleDialog isOpen={isUploadOpen}
-                                onClose={() => setIsUploadOpen(false)}
-                                onDeploySuccess={() => {
-                                    setIsUploadOpen(false);
-                                    notificationContext.notify(t('label.upload.deploySuccess'), ['closeButton', 'closeAfter5s']);
-                                    // Re-check available updates for the newly deployed module
+        <>
+            <LayoutContent
+                hasPadding
+                className={styles.layout}
+                isLoading={!installedData && !error}
+                header={
+                    <Header
+                        title={t('label.title')}
+                        mainActions={
+                            /* A11y B-011: indicate new window opens */
+                            <Button variant="ghost"
+                                    size="big"
+                                    label={t('label.help')}
+                                    icon={<Help/>}
+                                    aria-label={t('label.helpNewWindow', {label: t('label.help'), interpolation: {escapeValue: false}})}
+                                    onClick={() => window.open(t('help.url'), '_blank', 'noopener,noreferrer')}/>
+                        }
+                        toolbarLeft={
+                            <ModulesActionBar
+                                isLoading={isLoading}
+                                isFiltered={isFiltered}
+                                isClustered={isClustered}
+                                hasUpdates={updates.length > 0}
+                                lastUpdate={lastUpdate}
+                                preferences={preferences}
+                                onPreferencesChange={setPreferences}
+                                onRefresh={() => {
+                                    notify(t('label.fetchUpdates'), ['closeButton', 'closeAfter5s']);
                                     refreshAll();
-                                }}/>
-            <ExportModulesDialog isOpen={isExportOpen} onClose={() => setIsExportOpen(false)}/>
-            <GenerateScriptDialog
-                isOpen={isGenerateScriptOpen}
-                modules={modules}
-                bundleTypes={parseBundleTypes(modulesManagement?.installedBundleTypes)}
-                onClose={() => setIsGenerateScriptOpen(false)}
-            />
-            <DryRunResultDialog isOpen={Boolean(dryRunResult)}
-                                modules={dryRunResult?.modules}
-                                yamlScript={dryRunResult?.yamlScript}
-                                onClose={() => setDryRunResult(null)}/>
-            <InstallFromStoreDialog
-                isOpen={isInstallFromStoreOpen}
-                onClose={() => setIsInstallFromStoreOpen(false)}
-                onInstallSuccess={() => {
-                    setIsInstallFromStoreOpen(false);
-                    notificationContext.notify(t('label.installFromStore.successNotification'), ['closeButton', 'closeAfter5s']);
-                    refreshAll();
-                }}
-            />
-        </LayoutContent>
+                                }}
+                                onClearFilters={clearFilters}
+                                onUpload={() => setIsUploadOpen(true)}
+                                onInstallFromStore={() => setIsInstallFromStoreOpen(true)}
+                                onUpdateAll={() => handleUpdateAll([])}
+                                onExport={() => setIsExportOpen(true)}
+                                onGenerateScript={() => setIsGenerateScriptOpen(true)}
+                                onCleanupJcr={handleCleanupJcr}
+                                onClusterOperation={handleClusterOperation}
+                            />
+                        }
+                    />
+                }
+            >
+                {/* The admin shell holds the main landmark, so the table area is a named region inside it. */}
+                <section className={styles.tableArea} aria-labelledby={TABLE_HEADING_ID}>
+                    <h2 id={TABLE_HEADING_ID} className={styles.srOnly}>{t('label.table.title')}</h2>
+                    <ModuleFilters filters={filters} states={states} hasUpdates={updates.length > 0} onChange={changeFilter}/>
+                    {content}
+                </section>
+
+                <UploadModuleDialog isOpen={isUploadOpen}
+                                    onClose={() => setIsUploadOpen(false)}
+                                    onDeploySuccess={() => {
+                                        setIsUploadOpen(false);
+                                        notify(t('label.upload.deploySuccess'), ['closeButton', 'closeAfter5s']);
+                                        // Re-check available updates for the newly deployed module
+                                        refreshAll();
+                                    }}/>
+                <ExportModulesDialog isOpen={isExportOpen} onClose={() => setIsExportOpen(false)}/>
+                <GenerateScriptDialog
+                    isOpen={isGenerateScriptOpen}
+                    modules={modules}
+                    bundleTypes={parseBundleTypes(modulesManagement?.installedBundleTypes)}
+                    onClose={() => setIsGenerateScriptOpen(false)}
+                />
+                <DryRunResultDialog isOpen={Boolean(dryRunResult)}
+                                    modules={dryRunResult?.modules}
+                                    yamlScript={dryRunResult?.yamlScript}
+                                    onClose={() => setDryRunResult(null)}/>
+                <InstallFromStoreDialog
+                    isOpen={isInstallFromStoreOpen}
+                    onClose={() => setIsInstallFromStoreOpen(false)}
+                    onInstallSuccess={() => {
+                        setIsInstallFromStoreOpen(false);
+                        notify(t('label.installFromStore.successNotification'), ['closeButton', 'closeAfter5s']);
+                        refreshAll();
+                    }}
+                />
+            </LayoutContent>
+            {/* Outside LayoutContent, which swaps its children for a Loader, so the region exists from the first render. */}
+            <div role="status" className={styles.srOnly} data-testid="modules-count-status">{countStatus}</div>
+        </>
     );
 };
 
