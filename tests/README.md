@@ -1,6 +1,10 @@
 # Tests
 Two options are available to run the tests, you can either run everything in Docker or only run Jahia in Docker and run the tests using your local node.
 
+### The Jahia image
+
+`JAHIA_IMAGE` must be Jahia 8.2.1.0 or later. The module needs a recent jcontent, as the main README states, and `assets/provisioning.yml` installs one when the image ships an older jcontent.
+
 ### Run all in Docker
 
 Once you have a built test container, the entirety of the tests, from environment provisioning to report generation, can be executed using a single command.

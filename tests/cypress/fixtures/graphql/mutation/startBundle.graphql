@@ -1,0 +1,9 @@
+mutation StartBundle($bundleId: Long!) {
+    admin {
+        modulesManagement {
+            bundle(bundleId: $bundleId) {
+                start
+            }
+        }
+    }
+}

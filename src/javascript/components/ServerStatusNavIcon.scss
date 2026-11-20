@@ -1,0 +1,31 @@
+/* The right margin keeps the icon off the label of the entry. */
+.root {
+    position: relative;
+
+    display: inline-flex;
+    margin-right: var(--moon-spacing-nano);
+}
+
+/* A11y 1.4.11: the glyph sits on a white disc in a dark token (5.6:1 or more), and the disc has a dark ring,
+   so the cue keeps 3:1 against both the dark tree (white disc, 13:1) and the blue selection (ring, 4.5:1). */
+.GREEN,
+.YELLOW,
+.RED {
+    padding: 1px;
+
+    border: 1px solid var(--moon-color-gray_dark);
+    border-radius: 50%;
+    background-color: var(--moon-color-white);
+}
+
+.GREEN {
+    color: var(--moon-color-success_dark);
+}
+
+.YELLOW {
+    color: var(--moon-color-warning_dark);
+}
+
+.RED {
+    color: var(--moon-color-danger_dark);
+}

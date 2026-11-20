@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {useTranslation} from 'react-i18next';
-import {Button, Chip, Separator, Typography, Warning} from '@jahia/moonstone';
+import {Button, ChevronDown, ChevronRight, Chip, Separator, Typography, Warning} from '@jahia/moonstone';
 import * as PropTypes from 'prop-types';
 import styles from './BundleDetails.scss';
 
@@ -27,23 +27,19 @@ const toArray = val => {
     return String(val).split(/[,\n]/).map(s => s.trim()).filter(Boolean);
 };
 
-// A11y B-006: use real heading element instead of styled Typography
+// A11y B-006: a real heading element
 const SectionTitle = ({children}) => (
-    <h3 className={styles.sectionTitle}>
+    <Typography variant="subheading" weight="semiBold" component="h3" className={styles.sectionTitle}>
         {children}
-    </h3>
+    </Typography>
 );
 
 SectionTitle.propTypes = {children: PropTypes.node};
 
-const ChipGroup = ({items, color = 'default', getTitle, isColumn = false}) => (
+const ChipGroup = ({items, color = 'default', isColumn = false}) => (
     <div className={isColumn ? styles.chipGroupColumn : styles.chipGroup}>
         {items.map(item => (
-            <Chip key={item}
-                  variant="outlined"
-                  label={item}
-                  color={color}
-                  title={getTitle ? getTitle(item) : undefined}/>
+            <Chip key={item} label={item} color={color}/>
         ))}
     </div>
 );
@@ -51,8 +47,15 @@ const ChipGroup = ({items, color = 'default', getTitle, isColumn = false}) => (
 ChipGroup.propTypes = {
     items: PropTypes.arrayOf(PropTypes.string),
     color: PropTypes.string,
-    getTitle: PropTypes.func,
     isColumn: PropTypes.bool
+};
+
+// A module dependency reads "name [range]"; the range shows as text next to the chip
+const parseModuleDependency = dependency => {
+    const index = dependency.indexOf(' [');
+    return index < 0 ?
+        {name: dependency, range: null} :
+        {name: dependency.slice(0, index), range: dependency.slice(index + 2, -1)};
 };
 
 const BundleInfo = ({bundle}) => {
@@ -176,14 +179,18 @@ const BundleInfo = ({bundle}) => {
                                 <Typography variant="caption" className={styles.columnLabel}>
                                     {t('label.bundle.details.dependencies.modules')}
                                 </Typography>
-                                <ChipGroup
-                                    items={moduleDeps.map(d => d.split(' [')[0])}
-                                    color="accent"
-                                    getTitle={item => {
-                                        const full = moduleDeps.find(d => d.split(' [')[0] === item);
-                                        return full?.includes(' [') ? `Requires: ${full.slice(full.indexOf(' [') + 2, -1)}` : undefined;
-                                    }}
-                                />
+                                <ul className={styles.moduleDepsList}>
+                                    {moduleDeps.map(parseModuleDependency).map(({name, range}) => (
+                                        <li key={name} className={styles.moduleDepsItem}>
+                                            <Chip label={name} color="accent"/>
+                                            {range && (
+                                                <Typography variant="caption" component="span" className={styles.moduleDepsRange}>
+                                                    {t('label.bundle.details.dependencies.requires', {range, interpolation: {escapeValue: false}})}
+                                                </Typography>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
                         )}
                         {nodeTypeDeps.length > 0 && (
@@ -205,8 +212,9 @@ const BundleInfo = ({bundle}) => {
                     <section className={styles.infoSection}>
                         {/* A11y B-023: aria-expanded + aria-controls on manifest toggle */}
                         <Button variant="ghost"
-                                size="small"
-                                color="default"
+                                color="accent"
+                                icon={showManifest ? <ChevronDown/> : <ChevronRight/>}
+                                className={styles.manifestToggle}
                                 aria-expanded={showManifest}
                                 aria-controls="manifest-table"
                                 label={showManifest ?
@@ -217,12 +225,12 @@ const BundleInfo = ({bundle}) => {
                         {showManifest && (
                             <table id="manifest-table"
                                    className={styles.manifestTable}
-                                   aria-label={t('label.bundle.details.manifest.tableLabel', 'Bundle manifest')}
+                                   aria-label={t('label.bundle.details.manifest.tableLabel')}
                             >
                                 <thead>
                                     <tr>
-                                        <th scope="col">{t('label.bundle.details.manifest.col.key', 'Key')}</th>
-                                        <th scope="col">{t('label.bundle.details.manifest.col.value', 'Value')}</th>
+                                        <th scope="col">{t('label.bundle.details.manifest.col.key')}</th>
+                                        <th scope="col">{t('label.bundle.details.manifest.col.value')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>

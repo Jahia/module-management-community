@@ -9,8 +9,6 @@ Jahia modules.
 - UI extension for Jahia administration with column filtering
 - Integration with Maven for module metadata resolution
 
-![column-filtering.png](docs/column-filtering.png)
-
 ## Technologies
 
 ### Backend
@@ -37,6 +35,11 @@ Jahia modules.
 - Node.js v24.14.0
 - Yarn v1.22.22
 - Maven 3.6+
+
+### Requirements on the Jahia server
+
+- Jahia 8.2.1.0 or later, which jcontent 3.7.0 needs.
+- jcontent 3.7.0 or later. The UI uses Moonstone 2.20 components, such as `DataTable`, and the administration loads the Moonstone that jcontent ships: jcontent 3.7.0 is the first release with Moonstone 2.20. The module declares `jcontent=3.7.0` in `jahia-depends`, so Jahia does not start it on an older jcontent. Some Jahia 8.2 images ship an older jcontent: install a newer one first.
 
 ## How to deploy
 Build the project using Maven:
@@ -96,8 +99,6 @@ Changing the type filter resets the pagination back to page 1.
 When at least one update is available, the **Available version** column header displays a toggle switch labelled *Updates only*. Enabling it hides every module that has neither a direct update nor a dependent-module update available, making it easy to focus on what needs upgrading.
 
 > **Note:** All three filters (name, type, updates-only) are applied simultaneously, so only rows that satisfy every active filter are shown.
-
-![column-filtering.png](docs/column-filtering.png)
 
 ## GraphQL API
 
@@ -220,7 +221,6 @@ mutation {
 ```
 
 **Note:** Fields `dependenciesGraph` and `moduleDependenciesGraph` return JSON strings representing dependency relationships as Mermaid.js syntax.
-
 
 ## REST API
 

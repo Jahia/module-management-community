@@ -126,13 +126,12 @@ const UnresolvedRequirementsTab = ({bundle}) => {
             {/* A11y B-008: all filter controls have programmatic labels with unique IDs */}
             <div className={styles.unresolvedFilterBar}>
                 <label htmlFor={`${uid}-ns-filter`} className={styles.srOnly}>
-                    {t('label.bundle.unresolvedReqs.filter.allTypes')}
+                    {t('label.bundle.unresolvedReqs.filter.byType')}
                 </label>
                 <select
                     id={`${uid}-ns-filter`}
                     className={styles.unresolvedFilterSelect}
                     value={nsFilter}
-                    aria-label={t('label.bundle.unresolvedReqs.filter.allTypes')}
                     onChange={e => setNsFilter(e.target.value)}
                 >
                     <option value="">{t('label.bundle.unresolvedReqs.filter.allTypes')}</option>
@@ -150,18 +149,16 @@ const UnresolvedRequirementsTab = ({bundle}) => {
                     className={styles.unresolvedFilterSearch}
                     placeholder={t('label.bundle.unresolvedReqs.filter.searchReq')}
                     value={reqSearch}
-                    aria-label={t('label.bundle.unresolvedReqs.filter.searchReq')}
                     onChange={e => setReqSearch(e.target.value)}
                 />
 
                 <label htmlFor={`${uid}-status-filter`} className={styles.srOnly}>
-                    {t('label.bundle.unresolvedReqs.filter.allStatuses')}
+                    {t('label.bundle.unresolvedReqs.filter.byStatus')}
                 </label>
                 <select
                     id={`${uid}-status-filter`}
                     className={styles.unresolvedFilterSelect}
                     value={statusFilter}
-                    aria-label={t('label.bundle.unresolvedReqs.filter.allStatuses')}
                     onChange={e => setStatusFilter(e.target.value)}
                 >
                     <option value="">{t('label.bundle.unresolvedReqs.filter.allStatuses')}</option>
@@ -183,8 +180,9 @@ const UnresolvedRequirementsTab = ({bundle}) => {
                     </button>
                 )}
 
-                <Typography variant="caption" className={styles.unresolvedFilterCount}>
-                    {t('label.bundle.unresolvedReqs.filter.showing', {count: reqs.length, total: allReqs.length})}
+                {/* Always rendered, so a change of the count after a filter change is announced */}
+                <Typography variant="caption" role="status" className={styles.unresolvedFilterCount}>
+                    {t('label.bundle.unresolvedReqs.filter.showingCount', {count: reqs.length, total: allReqs.length})}
                 </Typography>
             </div>
 
@@ -196,7 +194,7 @@ const UnresolvedRequirementsTab = ({bundle}) => {
             ) : (
                 /* A11y B-009: table with aria-label and scope="col" headers */
                 <table className={styles.unresolvedTable}
-                       aria-label={t('label.bundle.unresolvedReqs.tableLabel', 'Unresolved requirements')}
+                       aria-label={t('label.bundle.unresolvedReqs.tableLabel')}
                 >
                     <thead>
                         <tr>
@@ -213,27 +211,29 @@ const UnresolvedRequirementsTab = ({bundle}) => {
                             return (
                                 <tr key={rowKey} className={styles.unresolvedRow}>
                                     <td className={styles.unresolvedCellNs}>
-                                        <Chip variant="outlined"
-                                              label={nsLabel(req.namespace)}
-                                              color="default"
-                                              title={req.namespace}/>
+                                        <Chip label={nsLabel(req.namespace)} color="default"/>
+                                        <span className={styles.srOnly}>{` (${req.namespace})`}</span>
                                     </td>
                                     <td className={styles.unresolvedCellReq}>
-                                        <span className={styles.unresolvedReqName}>{name}</span>
-                                        {version && (
-                                            <span className={styles.unresolvedReqVersion}>{version}</span>
-                                        )}
-                                        <code className={styles.unresolvedFilter} title={req.filter}>{req.filter}</code>
+                                        <div className={styles.unresolvedReqContent}>
+                                            <span className={styles.unresolvedReqName}>{name}</span>
+                                            {version && (
+                                                <span className={styles.unresolvedReqVersion}>{version}</span>
+                                            )}
+                                            <code className={styles.unresolvedFilter}>{req.filter}</code>
+                                        </div>
                                     </td>
+                                    {/* The banners above the filters explain both statuses on screen */}
                                     <td className={styles.unresolvedCellStatus}>
-                                        <Chip variant="outlined"
-                                              label={req.hasProviders ?
+                                        <Chip label={req.hasProviders ?
                                                   t('label.bundle.unresolvedReqs.status.conflict') :
                                                   t('label.bundle.unresolvedReqs.status.missing')}
-                                              color={req.hasProviders ? 'warning' : 'danger'}
-                                              title={req.hasProviders ?
-                                                  t('label.bundle.unresolvedReqs.status.conflictHint') :
-                                                  t('label.bundle.unresolvedReqs.status.missingHint')}/>
+                                              color={req.hasProviders ? 'warning' : 'danger'}/>
+                                        <span className={styles.srOnly}>
+                                            {` ${req.hasProviders ?
+                                                t('label.bundle.unresolvedReqs.status.conflictHint') :
+                                                t('label.bundle.unresolvedReqs.status.missingHint')}`}
+                                        </span>
                                     </td>
                                 </tr>
                             );

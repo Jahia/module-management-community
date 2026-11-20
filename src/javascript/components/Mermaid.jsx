@@ -1,9 +1,22 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {useTranslation} from 'react-i18next';
 import mermaid from 'mermaid';
 import elkLayouts from '@mermaid-js/layout-elk';
 import PropTypes from 'prop-types';
 
 let instanceCount = 0;
+
+const srOnlyStyle = {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    margin: '-1px',
+    padding: 0,
+    border: 0,
+    overflow: 'hidden',
+    clip: 'rect(0, 0, 0, 0)',
+    whiteSpace: 'nowrap'
+};
 
 /**
  * Parse a mermaid flowchart definition into a plain-text list of edges
@@ -36,8 +49,10 @@ const parseEdges = definition => {
 };
 
 const Mermaid = ({className, children, onError, ariaLabel}) => {
+    const {t} = useTranslation('module-management-community');
     const [element, setElement] = useState();
     const [renderResult, setRenderResult] = useState();
+    const [hasFailed, setHasFailed] = useState(false);
 
     // Stable ID: assigned once on mount, never changes on re-renders.
     // Using a ref guard prevents instanceCount from incrementing on every render,
@@ -103,13 +118,31 @@ const Mermaid = ({className, children, onError, ariaLabel}) => {
         (async () => {
             try {
                 const rr = await mermaid.render(`${containerId}-svg`, diagramText);
+                setHasFailed(false);
                 setRenderResult(rr);
             } catch (e) {
+                setHasFailed(true);
                 onError?.(e);
             }
         })();
     // ContainerId is stable (ref) — safe to include; diagramText drives re-renders
     }, [containerId, diagramText, onError]);
+
+    const edgeItems = edges.map(edge => (
+        <li key={`${edge.from}->${edge.to}`}>
+            {t('label.bundle.graph.edge', {from: edge.from, to: edge.to, interpolation: {escapeValue: false}})}
+        </li>
+    ));
+
+    // A failed render leaves no picture: show a message, and keep the edge list as visible text
+    if (hasFailed) {
+        return (
+            <div className={className}>
+                <p>{t('label.bundle.graph.renderError')}</p>
+                {edges.length > 0 && <ul>{edgeItems}</ul>}
+            </div>
+        );
+    }
 
     return (
         <>
@@ -120,29 +153,10 @@ const Mermaid = ({className, children, onError, ariaLabel}) => {
                  id={containerId}
                  role="img"
                  tabIndex={0}
-                 aria-label={ariaLabel || 'Dependency graph'}
+                 aria-label={ariaLabel || t('label.bundle.graph.default')}
                  aria-describedby={edges.length > 0 ? descId : undefined}
             />
-            {edges.length > 0 && (
-                <ul
-                    id={descId}
-                    style={{
-                        position: 'absolute',
-                        width: '1px',
-                        height: '1px',
-                        margin: '-1px',
-                        padding: 0,
-                        border: 0,
-                        overflow: 'hidden',
-                        clip: 'rect(0, 0, 0, 0)',
-                        whiteSpace: 'nowrap'
-                    }}
-                >
-                    {edges.map(edge => (
-                        <li key={`${edge.from}->${edge.to}`}>{`${edge.from} depends on ${edge.to}`}</li>
-                    ))}
-                </ul>
-            )}
+            {edges.length > 0 && <ul id={descId} style={srOnlyStyle}>{edgeItems}</ul>}
         </>
     );
 };

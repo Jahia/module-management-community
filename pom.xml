@@ -60,7 +60,7 @@
 
     <properties>
         <jahia.plugin.version>6.12</jahia.plugin.version>
-        <jahia.depends>graphql-dxm-provider</jahia.depends>
+        <jahia-depends>graphql-dxm-provider,jcontent=3.7.0</jahia-depends>
         <cellar.version>4.1.3-jahia13</cellar.version>
         <yarn.arguments>build:simple</yarn.arguments>
         <export-package>org.jahia.support.modulemanagement.services</export-package>

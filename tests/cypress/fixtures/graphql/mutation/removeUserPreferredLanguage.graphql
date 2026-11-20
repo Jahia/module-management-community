@@ -1,0 +1,9 @@
+mutation RemoveUserPreferredLanguage($path: String!) {
+    jcr {
+        mutateNode(pathOrId: $path) {
+            mutateProperty(name: "preferredLanguage") {
+                delete
+            }
+        }
+    }
+}

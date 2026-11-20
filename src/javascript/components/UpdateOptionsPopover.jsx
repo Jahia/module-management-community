@@ -1,7 +1,6 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useId} from 'react';
 import * as PropTypes from 'prop-types';
-import {Information, Switch, Tune, Typography} from '@jahia/moonstone';
-import {Popover, Tooltip} from '@material-ui/core';
+import {Banner, Button, Modal, ModalBody, ModalFooter, ModalHeader, Separator, Switch, Typography} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
 import styles from './UpdateOptionsPopover.scss';
 
@@ -17,22 +16,19 @@ const PRESETS = {
     apply: {dryRun: false, autostart: true, uninstallPrevious: true, onStartup: false}
 };
 
-const isNonDefault = prefs => Object.keys(DEFAULTS).some(k => prefs[k] !== DEFAULTS[k]);
+export const isNonDefault = prefs => Object.keys(DEFAULTS).some(k => prefs[k] !== DEFAULTS[k]);
 
 const OPTION_META = [
-    {key: 'dryRun', labelKey: 'label.input.dryRun', descKey: 'label.input.dryRunDesc', danger: true},
+    {key: 'dryRun', labelKey: 'label.input.dryRun', descKey: 'label.input.dryRunDesc'},
     {key: 'autostart', labelKey: 'label.input.autostart', descKey: 'label.input.autostartDesc'},
     {key: 'uninstallPrevious', labelKey: 'label.input.uninstallPrevious', descKey: 'label.input.uninstallPreviousDesc'},
     {key: 'onStartup', labelKey: 'label.input.onStartup', descKey: 'label.input.onStartupDesc'}
 ];
 
-export const UpdateOptionsPopover = ({preferences, onPreferencesChange}) => {
+/** The update options, opened from the ⋮ menu of the action bar. */
+export const UpdateOptionsPopover = ({preferences, onPreferencesChange, isOpen, onClose}) => {
     const {t} = useTranslation('module-management-community');
-    const [anchorEl, setAnchorEl] = useState(null);
-    const nonDefault = isNonDefault(preferences);
-
-    const handleOpen = useCallback(e => setAnchorEl(e.currentTarget), []);
-    const handleClose = useCallback(() => setAnchorEl(null), []);
+    const uid = `update-options${useId()}`;
 
     const handleSwitch = useCallback((key, checked) => {
         onPreferencesChange({...preferences, [key]: checked});
@@ -43,102 +39,83 @@ export const UpdateOptionsPopover = ({preferences, onPreferencesChange}) => {
     }, [preferences, onPreferencesChange]);
 
     return (
-        <>
-            <Tooltip title={t('label.input.group.updateOptions')} placement="bottom">
-                <span>
-                    <button
-                        className={`${styles.tuneBtn} ${nonDefault ? styles.tuneBtnActive : ''}`}
-                        type="button"
-                        aria-label={t('label.input.group.updateOptions')}
-                        aria-haspopup="dialog"
-                        aria-expanded={Boolean(anchorEl)}
-                        aria-controls={anchorEl ? 'update-options-popover' : undefined}
-                        data-testid="update-options-btn"
-                        onClick={handleOpen}
-                    >
-                        <Tune aria-hidden="true"/>
-                        {nonDefault && <span className={styles.badge} aria-label={t('label.input.settings.modified')}/>}
-                    </button>
-                </span>
-            </Tooltip>
-
-            <Popover
-                open={Boolean(anchorEl)}
-                anchorEl={anchorEl}
-                anchorOrigin={{vertical: 'bottom', horizontal: 'right'}}
-                transformOrigin={{vertical: 'top', horizontal: 'right'}}
-                onClose={handleClose}
-            >
-                {/* A11y HIGH-7: dialog role + aria-modal; labelled by its heading. */}
-                <div id="update-options-popover"
-                     role="dialog"
-                     aria-modal="true"
-                     aria-labelledby="update-options-title"
-                     className={styles.popover}
-                >
-                    <Typography id="update-options-title" component="h2" variant="subheading" weight="bold" className={styles.popoverTitle}>
-                        {t('label.input.group.updateOptions')}
-                    </Typography>
-
-                    {/* Presets */}
+        <Modal isOpen={isOpen}
+               size="small"
+               id="update-options-popover"
+               aria-labelledby="update-options-title"
+               data-testid="update-options-dialog"
+               onOpenChange={open => !open && onClose()}
+        >
+            <>
+                <ModalHeader id="update-options-title" title={t('label.input.group.updateOptions')}/>
+                <ModalBody className={styles.body}>
                     <div className={styles.presets}>
-                        <Typography variant="caption" className={styles.presetsLabel}>
+                        <Typography variant="caption" id={`${uid}-presets`} className={styles.secondary}>
                             {t('label.input.presets.label')}
                         </Typography>
-                        <div className={styles.presetBtns}>
-                            <button
-                                className={`${styles.presetBtn} ${styles.presetSafe}`}
-                                type="button"
-                                title={t('label.input.presets.safeDesc')}
-                                onClick={() => applyPreset('safe')}
-                            >
-                                {t('label.input.presets.safe')}
-                            </button>
-                            <button
-                                className={`${styles.presetBtn} ${styles.presetApply}`}
-                                type="button"
-                                title={t('label.input.presets.applyDesc')}
-                                onClick={() => applyPreset('apply')}
-                            >
-                                {t('label.input.presets.apply')}
-                            </button>
+                        {/* A11y 1.3.1: each preset description is visible text, linked to its button */}
+                        <div role="group" aria-labelledby={`${uid}-presets`} className={styles.presetBtns}>
+                            <div className={styles.preset}>
+                                <Button variant="outlined"
+                                        color="accent"
+                                        label={t('label.input.presets.safe')}
+                                        aria-describedby={`${uid}-safe-desc`}
+                                        onClick={() => applyPreset('safe')}/>
+                                <Typography variant="caption" id={`${uid}-safe-desc`} className={styles.secondary}>
+                                    {t('label.input.presets.safeDesc')}
+                                </Typography>
+                            </div>
+                            <div className={styles.preset}>
+                                {/* A11y 1.4.3: the dark danger colour reaches 10:1 on white, the plain one 3.6:1 */}
+                                <Button variant="outlined"
+                                        color="danger"
+                                        className={styles.presetApply}
+                                        label={t('label.input.presets.apply')}
+                                        aria-describedby={`${uid}-apply-desc`}
+                                        onClick={() => applyPreset('apply')}/>
+                                <Typography variant="caption" id={`${uid}-apply-desc`} className={styles.secondary}>
+                                    {t('label.input.presets.applyDesc')}
+                                </Typography>
+                            </div>
                         </div>
                     </div>
 
-                    <hr className={styles.divider}/>
+                    {!preferences.dryRun && (
+                        <Banner variant="warning" title={t('label.input.dryRun')}>
+                            {t('label.updateAllLiveTooltip')}
+                        </Banner>
+                    )}
 
-                    {/* Options with descriptions */}
-                    {OPTION_META.map(({key, labelKey, descKey, danger}) => (
-                        <div key={key}
-                             className={`${styles.switchRow} ${danger && !preferences[key] ? styles.dangerRow : ''}`}
-                        >
-                            <div className={styles.switchLabelRow}>
-                                {/* A11y A-008: aria-label associates the switch with its label text */}
-                                <Switch
-                                    checked={preferences[key]}
-                                    aria-label={t(labelKey)}
-                                    onChange={(e, value, checked) => handleSwitch(key, checked)}
-                                />
-                                <Typography variant="body" weight={danger ? 'semiBold' : 'default'} aria-hidden="true">
-                                    {t(labelKey)}
-                                </Typography>
-                                <Tooltip title={t(descKey)} placement="right">
-                                    <span className={styles.infoIcon}><Information/></span>
-                                </Tooltip>
-                            </div>
-                            <Typography variant="caption" className={styles.desc}>
-                                {t(descKey)}
-                            </Typography>
+                    <Separator spacing="none"/>
+
+                    {OPTION_META.map(({key, labelKey, descKey}) => (
+                        <div key={key} className={styles.option}>
+                            {/* A11y 1.3.1, 3.3.2: the label names the switch, and the text under it describes it */}
+                            <label className={styles.switchLabelRow}>
+                                <Switch checked={preferences[key]}
+                                        aria-describedby={`${uid}-${key}-desc`}
+                                        onChange={(e, value, checked) => handleSwitch(key, checked)}/>
+                                <Typography variant="body" component="span">{t(labelKey)}</Typography>
+                            </label>
+                            <Typography variant="caption" id={`${uid}-${key}-desc`} className={styles.secondary}>{t(descKey)}</Typography>
                         </div>
                     ))}
 
-                    <hr className={styles.divider}/>
-                    <Typography variant="caption" className={styles.persistNote}>
+                    <Separator spacing="none"/>
+                    <Typography variant="caption" className={styles.secondary}>
                         {t('label.input.settings.persisted')}
                     </Typography>
-                </div>
-            </Popover>
-        </>
+                </ModalBody>
+                <ModalFooter>
+                    <Button variant="default"
+                            color="accent"
+                            size="big"
+                            label={t('label.close')}
+                            data-testid="update-options-close"
+                            onClick={onClose}/>
+                </ModalFooter>
+            </>
+        </Modal>
     );
 };
 
@@ -149,5 +126,7 @@ UpdateOptionsPopover.propTypes = {
         uninstallPrevious: PropTypes.bool,
         onStartup: PropTypes.bool
     }).isRequired,
-    onPreferencesChange: PropTypes.func.isRequired
+    onPreferencesChange: PropTypes.func.isRequired,
+    isOpen: PropTypes.bool.isRequired,
+    onClose: PropTypes.func.isRequired
 };

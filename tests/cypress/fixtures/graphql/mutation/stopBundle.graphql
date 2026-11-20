@@ -1,0 +1,9 @@
+mutation StopBundle($bundleId: Long!) {
+    admin {
+        modulesManagement {
+            bundle(bundleId: $bundleId) {
+                stop
+            }
+        }
+    }
+}
