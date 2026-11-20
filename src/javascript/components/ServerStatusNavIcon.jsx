@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
@@ -18,6 +18,19 @@ const HEALTH_ICONS = {GREEN: Check, YELLOW: Warning, RED: Cancel};
 
 let navIconCounter = 0;
 
+const isPageVisible = () => typeof document === 'undefined' || document.visibilityState !== 'hidden';
+
+/** Whether the browser tab shows the page; a hidden tab needs no poll. */
+const usePageVisible = () => {
+    const [isVisible, setIsVisible] = useState(isPageVisible);
+    useEffect(() => {
+        const update = () => setIsVisible(isPageVisible());
+        document.addEventListener('visibilitychange', update);
+        return () => document.removeEventListener('visibilitychange', update);
+    }, []);
+    return isVisible;
+};
+
 /**
  * The icon of the Server Status (Community) entry in the administration tree: the icon of the aggregated
  * server health, in its color, before the label. The server icon stands in while the health loads.
@@ -27,10 +40,13 @@ export const ServerStatusNavIcon = ({className, size}) => {
     const {t} = useTranslation('module-management-community');
     // A11y HIGH-8 (WCAG 2.2.2): only poll when the user has enabled auto-refresh; the preference is shared live
     const [preferences] = useModulePreferences();
+    const isVisible = usePageVisible();
+    // The icon mounts with the administration tree on every admin screen. cache-first runs one health check
+    // per severity for the session, not one per navigation; only the poll asks the server again.
     const {data} = useQuery(SERVER_HEALTH_QUERY, {
         variables: {severity: preferences.probeSeverity},
-        fetchPolicy: 'cache-and-network',
-        pollInterval: preferences.autoRefresh ? 60000 : 0
+        fetchPolicy: 'cache-first',
+        pollInterval: preferences.autoRefresh && isVisible ? 60000 : 0
     });
     const health = data?.admin?.jahia?.healthCheck?.status?.health;
     const description = health ? t('label.sam.navHealth', {health: t(`label.sam.health.${health.toLowerCase()}`)}) : '';
