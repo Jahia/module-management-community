@@ -2,8 +2,9 @@
  * End-to-end tests for module-management-community features that complement
  * specs 01 (page/table/details) and 02 (upload/export/generate-script):
  *
- *  - Accessibility structure (WCAG 2.2 AAA work): main landmark, h1, sortable
- *    column headers with aria-sort, dialog accessible names.
+ *  - Accessibility structure (WCAG 2.2 AAA work): one main landmark (the admin
+ *    shell's) and the named table region, h1, sortable column headers with
+ *    aria-sort, dialog accessible names.
  *  - Install-from-store dialog (store catalogue browse).
  *  - Bundle details: dependency-graph and version-history tabs.
  *  - GraphQL mutations exercised end-to-end (side-effect-free): updateModules
@@ -41,8 +42,12 @@ describe('Module Management Community — features & accessibility', () => {
     describe('Accessibility structure', () => {
         beforeEach(visitPage)
 
-        it('exposes a <main> landmark wrapping the application content', () => {
-            cy.get('main').should('exist')
+        it('leaves the only <main> landmark to the admin shell and names the table region "Installed modules"', () => {
+            // The shell also keeps the main of its error page, hidden, in the document.
+            cy.get('main:visible').should('have.length', 1).find(root).should('exist')
+            cy.get(root).find('main').should('not.exist')
+            cy.get('section[aria-labelledby="module-management-community-table-heading"]').should('exist')
+            cy.get('#module-management-community-table-heading').should('match', 'h2').and('have.text', 'Installed modules')
         })
 
         it('exposes an <h1> page heading with the application title', () => {

@@ -21,12 +21,14 @@ export const isDefaultFilters = filters =>
 /**
  * Predicate factory for the installed-modules table. An empty list of states keeps every module,
  * and an empty list of types keeps none: the user unchecked every type.
+ * Every type checked keeps every module, a type that no checkbox lists included.
  * A module with an update, or with a dependency that has one, passes the updates filter.
  */
 export const buildModuleFilter = ({filters, hasUpdate}) => {
     const needle = filters.name.trim().toLowerCase();
+    const allTypes = BUNDLE_TYPES.every(type => filters.types.includes(type));
     return module => (needle === '' || module.name.toLowerCase().includes(needle)) &&
-        filters.types.includes(module.type) &&
+        (allTypes || filters.types.includes(module.type)) &&
         (filters.states.length === 0 || filters.states.includes(module.state)) &&
         (!filters.updatesOnly || hasUpdate(module.name));
 };

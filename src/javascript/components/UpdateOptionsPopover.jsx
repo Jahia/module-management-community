@@ -1,4 +1,4 @@
-import React, {useCallback, useRef} from 'react';
+import React, {useCallback, useId} from 'react';
 import * as PropTypes from 'prop-types';
 import {Banner, Button, Modal, ModalBody, ModalFooter, ModalHeader, Separator, Switch, Typography} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
@@ -25,17 +25,10 @@ const OPTION_META = [
     {key: 'onStartup', labelKey: 'label.input.onStartup', descKey: 'label.input.onStartupDesc'}
 ];
 
-let popoverCounter = 0;
-
 /** The update options, opened from the ⋮ menu of the action bar. */
 export const UpdateOptionsPopover = ({preferences, onPreferencesChange, isOpen, onClose}) => {
     const {t} = useTranslation('module-management-community');
-    const idRef = useRef(null);
-    if (idRef.current === null) {
-        idRef.current = `update-options-${++popoverCounter}`;
-    }
-
-    const uid = idRef.current;
+    const uid = `update-options${useId()}`;
 
     const handleSwitch = useCallback((key, checked) => {
         onPreferencesChange({...preferences, [key]: checked});

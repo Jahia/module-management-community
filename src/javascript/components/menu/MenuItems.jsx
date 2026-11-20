@@ -5,10 +5,13 @@ import styles from './menus.scss';
 
 // The moonstone MenuItem renders a plain list item, so these items carry the menu role and answer Enter and Space.
 // They act on keydown, where preventDefault stops Space from scrolling the page.
+// A key held down repeats its keydown, which must not run the action again.
 const activateOnKey = onActivate => event => {
     if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        onActivate();
+        if (!event.repeat) {
+            onActivate();
+        }
     }
 };
 

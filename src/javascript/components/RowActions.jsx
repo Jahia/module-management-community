@@ -1,4 +1,4 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {useMutation} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -61,13 +61,37 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
         [menu.anchorRef]
     ));
 
+    // Start and Stop replace the pressed hover button by the other one, which drops focus to the page.
+    // pendingFocus names the action that takes focus once the row shows the new state.
+    const rootRef = useRef(null);
+    const pendingFocus = useRef(null);
+    const restoreFocus = useCallback(() => {
+        const key = pendingFocus.current;
+        const active = document.activeElement;
+        if (!key || !rootRef.current || (active && active !== document.body && active.isConnected)) {
+            return;
+        }
+
+        pendingFocus.current = null;
+        const target = rootRef.current.querySelector(`[data-testid="row-action-${key}"]`) ||
+            (menu.anchorRef.current && menu.anchorRef.current.querySelector('button'));
+        if (target) {
+            target.focus();
+        }
+    }, [menu.anchorRef]);
+    useEffect(() => {
+        restoreFocus();
+        pendingFocus.current = null;
+    }, [state, restoreFocus]);
+
     const variables = {bundleId: bundle.bundleId};
     const [stopBundle] = useMutation(STOP_MUTATION, {variables});
     const [startBundle] = useMutation(START_MUTATION, {variables});
     const [refreshBundle] = useMutation(REFRESH_MUTATION, {variables});
     const [uninstallBundle] = useMutation(UNINSTALL_MUTATION, {variables});
 
-    const run = async (mutation, successKey, errorKey, refetchRow = true) => {
+    const run = async (mutation, successKey, errorKey, {refetchRow = true, focusNext = null} = {}) => {
+        pendingFocus.current = focusNext;
         try {
             await mutation();
             notificationContext.notify(t(successKey), ['closeButton', 'closeAfter5s']);
@@ -89,6 +113,13 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
             console.error(`Error running ${successKey}:`, e);
             notificationContext.notify(t(errorKey), ['closeButton', 'closeAfter5s']);
             announce(t(errorKey));
+        } finally {
+            // The row usually shows the new state before the refresh resolves, and the effect on state moves focus.
+            // A state that did not change, or a failure, leaves the pressed button in place.
+            requestAnimationFrame(restoreFocus);
+            setTimeout(() => {
+                pendingFocus.current = null;
+            }, 2000);
         }
     };
 
@@ -110,11 +141,11 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
         {key: 'details', Icon: Information, label: t('label.showDetails'), onClick: () => openDialog(setIsDetailsOpen)},
         isNotBundleType && isInactive && {
             key: 'start', Icon: Power, label: t('label.startBundle'), color: 'accent',
-            onClick: () => run(startBundle, 'label.startBundleSuccess', 'label.startBundleError')
+            onClick: () => run(startBundle, 'label.startBundleSuccess', 'label.startBundleError', {focusNext: 'stop'})
         },
         isActive && isNotBundleType && {
             key: 'stop', Icon: Cancel, label: t('label.stopBundle'),
-            onClick: () => run(stopBundle, 'label.stopBundleSuccess', 'label.stopBundleError')
+            onClick: () => run(stopBundle, 'label.stopBundleSuccess', 'label.stopBundleError', {focusNext: 'start'})
         },
         isActive && {
             key: 'refresh', Icon: Reload, label: t('label.refreshBundle'),
@@ -131,7 +162,7 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
     ].filter(Boolean);
 
     return (
-        <div className={styles.rowActions}>
+        <div ref={rootRef} className={styles.rowActions}>
             <div className={styles.hoverActions} data-testid="row-hover-actions">
                 {actions.map(({key, Icon, label, color, onClick}) => (
                     <Button key={key}
@@ -148,18 +179,19 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
             <span ref={menu.anchorRef} className={styles.menuAnchor}>
                 <Button variant="ghost"
                         icon={<MoreVert/>}
-                        aria-label={t('label.table.actions.menu', {name: bundle.symbolicName})}
+                        aria-label={t('label.table.actions.menu', {name: bundle.symbolicName, interpolation: {escapeValue: false}})}
                         title={t('label.menu.more')}
                         aria-haspopup="menu"
                         aria-expanded={menu.isOpen}
                         data-testid="row-actions-menu-btn"
                         onKeyDown={menu.onButtonKeyDown}
+                        onKeyUp={menu.onButtonKeyUp}
                         onClick={menu.toggle}/>
             </span>
             <AccessibleMenu isOpen={menu.isOpen}
                             initialFocus={menu.initialFocus}
                             anchorRef={menu.anchorRef}
-                            label={t('label.table.actions.menu', {name: bundle.symbolicName})}
+                            label={t('label.table.actions.menu', {name: bundle.symbolicName, interpolation: {escapeValue: false}})}
                             anchorElOrigin={{horizontal: 'right', vertical: 'bottom'}}
                             transformElOrigin={{horizontal: 'right', vertical: 'top'}}
                             data-testid="row-actions-menu"
@@ -198,7 +230,7 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
             >
                 <>
                     <ModalHeader id={`uninstall-confirm-title-${bundle.bundleId}`}
-                                 title={t('label.uninstall.confirm.title', {name: bundle.symbolicName})}/>
+                                 title={t('label.uninstall.confirm.title', {name: bundle.symbolicName, interpolation: {escapeValue: false}})}/>
                     <ModalBody id={`uninstall-confirm-desc-${bundle.bundleId}`}>
                         <Typography variant="body">
                             {t('label.uninstall.confirm.message')}
@@ -216,7 +248,7 @@ const RowActions = ({bundle, state, refetch, refreshAllModules, hasUpdateAvailab
                                 label={t('label.uninstallBundle')}
                                 onClick={() => {
                                     closeDialog(setConfirmUninstall);
-                                    run(uninstallBundle, 'label.uninstallBundleSuccess', 'label.uninstallBundleError', false);
+                                    run(uninstallBundle, 'label.uninstallBundleSuccess', 'label.uninstallBundleError', {refetchRow: false});
                                 }}/>
                     </ModalFooter>
                 </>

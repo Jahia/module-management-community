@@ -172,7 +172,7 @@ export const GenerateScriptDialog = ({isOpen, onClose, modules, bundleTypes}) =>
 
             setScriptResult({modules: names, yamlScript: yaml});
         } catch (e) {
-            setGenerateError(t('label.generateScript.error', {message: e.message}));
+            setGenerateError(t('label.generateScript.error', {message: e.message, interpolation: {escapeValue: false}}));
         } finally {
             setIsGenerating(false);
         }

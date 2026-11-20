@@ -171,7 +171,8 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
             setStatusMessage('');
             setSelectionMessage(t('label.upload.dropzone.selected', {
                 fileName: file.name,
-                size: formatSize(file.size)
+                size: formatSize(file.size),
+                interpolation: {escapeValue: false}
             }));
         }
     };
@@ -234,7 +235,7 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
             }
 
             setStatus('success');
-            setStatusMessage(json.message || t('label.upload.success', {fileName: selectedFile.name}));
+            setStatusMessage(json.message || t('label.upload.success', {fileName: selectedFile.name, interpolation: {escapeValue: false}}));
         } catch (err) {
             setStatus('error');
             setStatusMessage(err.message || t('label.upload.error.generic'));
@@ -338,7 +339,7 @@ export const UploadModuleDialog = ({isOpen, onClose, onDeploySuccess}) => {
                                         {' '}{selectedFile.name}
                                     </Typography>
                                     <Typography component="span" variant="caption" className={styles.fileSize}>
-                                        {t('label.upload.dropzone.fileSize', {size: formatSize(selectedFile.size)})}
+                                        {t('label.upload.dropzone.fileSize', {size: formatSize(selectedFile.size), interpolation: {escapeValue: false}})}
                                     </Typography>
                                     <span id={SELECTED_HINT_ID} className={styles.srOnly}>
                                         {t('label.upload.dropzone.selectAnother')}

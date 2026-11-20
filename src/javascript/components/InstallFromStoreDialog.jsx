@@ -124,7 +124,7 @@ const StoreModuleList = ({modules, isLoading, hasError, search, selected, isInst
                     module={m}
                     isChecked={selected.has(m.symbolicName)}
                     isDisabled={isInstalling}
-                    viewLabel={t('label.installFromStore.viewOnStoreAriaLabel', {name: m.title || m.symbolicName})}
+                    viewLabel={t('label.installFromStore.viewOnStoreAriaLabel', {name: m.title || m.symbolicName, interpolation: {escapeValue: false}})}
                     onToggle={onToggle}
                 />
             ))}

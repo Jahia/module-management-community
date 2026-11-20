@@ -273,7 +273,7 @@ const ModuleManagementCommunityApp = () => {
             } else {
                 notify(
                     expandedFilter.length > 0 ?
-                        t('label.updateAllSuccessWithFilter', {modules: expandedFilter.join(', ')}) :
+                        t('label.updateAllSuccessWithFilter', {modules: expandedFilter.join(', '), interpolation: {escapeValue: false}}) :
                         t('label.updateAllSuccess'),
                     ['closeButton', 'closeAfter5s']
                 );

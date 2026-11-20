@@ -37,7 +37,7 @@ const AvailableCell = ({module, updates}) => {
         <div className={styles.badges}>
             {module.available && <Chip label={module.available} color="accent"/>}
             {dependents.length > 0 && (
-                <Chip label={t('label.table.cells.dependent', {modules: dependents.join(', ')})} color="accent"/>
+                <Chip label={t('label.table.cells.dependent', {modules: dependents.join(', '), interpolation: {escapeValue: false}})} color="accent"/>
             )}
         </div>
     );

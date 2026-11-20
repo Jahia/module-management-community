@@ -57,8 +57,12 @@ const subscribe = listener => {
 
     return () => {
         listeners.delete(listener);
-        if (listeners.size === 0 && typeof window !== 'undefined') {
-            window.removeEventListener('storage', onStorage);
+        if (listeners.size === 0) {
+            // With no listener, a change from another tab is missed, so the next mount reads localStorage again.
+            current = null;
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('storage', onStorage);
+            }
         }
     };
 };

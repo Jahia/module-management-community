@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useId, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
@@ -15,8 +15,6 @@ const SERVER_HEALTH_QUERY = gql`
     }`;
 
 const HEALTH_ICONS = {GREEN: Check, YELLOW: Warning, RED: Cancel};
-
-let navIconCounter = 0;
 
 const isPageVisible = () => typeof document === 'undefined' || document.visibilityState !== 'hidden';
 
@@ -49,14 +47,11 @@ export const ServerStatusNavIcon = ({className, size}) => {
         pollInterval: preferences.autoRefresh && isVisible ? 60000 : 0
     });
     const health = data?.admin?.jahia?.healthCheck?.status?.health;
-    const description = health ? t('label.sam.navHealth', {health: t(`label.sam.health.${health.toLowerCase()}`)}) : '';
+    const description = health ? t('label.sam.navHealth', {health: t(`label.sam.health.${health.toLowerCase()}`), interpolation: {escapeValue: false}}) : '';
     const Icon = HEALTH_ICONS[health] || Server;
 
     const rootRef = useRef(null);
-    const idRef = useRef(null);
-    if (idRef.current === null) {
-        idRef.current = `server-status-nav-health-${++navIconCounter}`;
-    }
+    const descriptionId = `server-status-nav-health${useId()}`;
 
     // The tree item takes its name from its whole content, so the icon is hidden from that name and the
     // health becomes the description of the tree item, which the tree component does not let us set.
@@ -66,7 +61,7 @@ export const ServerStatusNavIcon = ({className, size}) => {
             return undefined;
         }
 
-        const id = idRef.current;
+        const id = descriptionId;
         const ids = (item.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
         if (!ids.includes(id)) {
             item.setAttribute('aria-describedby', [...ids, id].join(' '));
@@ -93,7 +88,7 @@ export const ServerStatusNavIcon = ({className, size}) => {
             <Icon size={size}/>
             {/* Chrome adds a referenced node to the name of the tree item when it sits inside the item,
                 even under aria-hidden, so the description lives outside the tree, hidden. */}
-            {createPortal(<span hidden id={idRef.current}>{description}</span>, document.body)}
+            {createPortal(<span hidden id={descriptionId}>{description}</span>, document.body)}
         </span>
     );
 };

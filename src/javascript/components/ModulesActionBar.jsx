@@ -67,7 +67,7 @@ export const ModulesActionBar = ({
     };
 
     const updateMode = preferences.dryRun ? t('label.updateAllBadgeDry') : t('label.updateAllBadgeLive');
-    const lastUpdateText = lastUpdate ? t('label.lastUpdate', {date: lastUpdate}) : undefined;
+    const lastUpdateText = lastUpdate ? t('label.lastUpdate', {date: lastUpdate, interpolation: {escapeValue: false}}) : undefined;
 
     return (
         <>
@@ -105,6 +105,7 @@ export const ModulesActionBar = ({
                         aria-expanded={menu.isOpen}
                         data-testid="more-actions-btn"
                         onKeyDown={menu.onButtonKeyDown}
+                        onKeyUp={menu.onButtonKeyUp}
                         onClick={menu.toggle}/>
             </span>
             <AccessibleMenu isOpen={menu.isOpen}

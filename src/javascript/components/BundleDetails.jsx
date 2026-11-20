@@ -395,7 +395,7 @@ const BundleDetails = ({bundle: initialBundle, close, refetch}) => {
                                               color={site.deployed ? 'success' : 'default'}/>
                                         <Switch checked={site.deployed}
                                                 value={site.siteKey}
-                                                aria-label={t('label.bundle.sites.toggleAriaLabel', {site: site.siteKey})}
+                                                aria-label={t('label.bundle.sites.toggleAriaLabel', {site: site.siteKey, interpolation: {escapeValue: false}})}
                                                 onChange={handleSiteDeployment}/>
                                     </div>
                                 </li>

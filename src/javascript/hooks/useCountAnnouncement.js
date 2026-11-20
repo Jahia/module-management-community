@@ -12,6 +12,9 @@ import {useEffect, useRef, useState} from 'react';
 export const useCountAnnouncement = (count, isOpen, format, delay = 600) => {
     const [message, setMessage] = useState('');
     const isFirstCount = useRef(true);
+    // The callers pass a new format function on each render; the timer reads the latest one.
+    const formatRef = useRef(format);
+    formatRef.current = format;
 
     useEffect(() => {
         if (!isOpen) {
@@ -25,9 +28,9 @@ export const useCountAnnouncement = (count, isOpen, format, delay = 600) => {
             return undefined;
         }
 
-        const timer = setTimeout(() => setMessage(format(count)), delay);
+        const timer = setTimeout(() => setMessage(formatRef.current(count)), delay);
         return () => clearTimeout(timer);
-    }, [count, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [count, isOpen, delay]);
 
     return [message, setMessage];
 };

@@ -154,7 +154,7 @@ export const ExportModulesDialog = ({isOpen, onClose}) => {
 
             // A11y B-027: notify screen readers the download has started
             notificationContext.notify(
-                t('label.export.dialog.downloadStarted', {fileName}),
+                t('label.export.dialog.downloadStarted', {fileName, interpolation: {escapeValue: false}}),
                 ['closeButton', 'closeAfter5s']
             );
 

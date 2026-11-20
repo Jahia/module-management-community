@@ -36,14 +36,28 @@ export const useMenuButton = () => {
     }, [isOpen, open, close]);
 
     // ArrowDown and ArrowUp on the button open the menu on its first or last item.
+    // Space toggles the menu on keydown, like Enter, instead of the native click on keyup.
     const onButtonKeyDown = useCallback(event => {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
             open(event.key === 'ArrowDown' ? 'first' : 'last');
+        } else if (event.key === ' ') {
+            event.preventDefault();
+            if (!event.repeat) {
+                toggle();
+            }
         }
-    }, [open]);
+    }, [open, toggle]);
 
-    return {isOpen, initialFocus, anchorRef, open, close, toggle, focusButton, onButtonKeyDown};
+    // A menu item acts on the Space keydown and gives focus back to this button, so the keyup lands here;
+    // Firefox would then click the button and open the menu again.
+    const onButtonKeyUp = useCallback(event => {
+        if (event.key === ' ') {
+            event.preventDefault();
+        }
+    }, []);
+
+    return {isOpen, initialFocus, anchorRef, open, close, toggle, focusButton, onButtonKeyDown, onButtonKeyUp};
 };
 
 /**

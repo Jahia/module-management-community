@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -67,16 +67,6 @@ HealthChip.propTypes = {
     health: PropTypes.string
 };
 
-let idCounter = 0;
-const useStableId = prefix => {
-    const ref = useRef(null);
-    if (ref.current === null) {
-        ref.current = `${prefix}-${++idCounter}`;
-    }
-
-    return ref.current;
-};
-
 /**
  * A JSON message is shown pretty-printed, and a text message is cut after 50 words.
  * A11y 2.1.1: when the message box scrolls, it is a named region that takes focus, so the keyboard can scroll it.
@@ -106,7 +96,7 @@ const ProbeMessage = ({message, probeName}) => {
              {...(isScrollable ? {
                  role: 'region',
                  tabIndex: 0,
-                 'aria-label': t('label.sam.probes.messageRegion', {name: probeName})
+                 'aria-label': t('label.sam.probes.messageRegion', {name: probeName, interpolation: {escapeValue: false}})
              } : {})}
         >
             <Typography variant="caption" className={styles.probeMessageText}>{text}</Typography>
@@ -176,8 +166,9 @@ SummaryItem.propTypes = {
  */
 const SeverityDropdown = ({label, 'data-testid': testId, ...props}) => {
     const wrapperRef = useRef(null);
-    const labelId = useStableId('server-status-severity-label');
-    const listboxId = useStableId('server-status-severity');
+    const id = useId();
+    const labelId = `server-status-severity-label${id}`;
+    const listboxId = `server-status-severity${id}`;
 
     useEffect(() => {
         const listbox = wrapperRef.current?.querySelector('[role="listbox"]');
@@ -253,7 +244,8 @@ export const ServerStatusApp = () => {
     const health = jahia?.healthCheck?.status?.health;
     const announcement = useAnnouncement(health ? t('label.sam.announce', {
         health: t((HEALTH_CHIP[health] || HEALTH_CHIP.RED).labelKey),
-        count: probes.length
+        count: probes.length,
+        interpolation: {escapeValue: false}
     }) : '');
 
     // A11y 2.4.3: the button stays enabled while loading, so focus stays on it; a click then does nothing.
