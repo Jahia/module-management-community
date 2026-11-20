@@ -3,7 +3,7 @@ Two options are available to run the tests, you can either run everything in Doc
 
 ### The Jahia image
 
-`JAHIA_IMAGE` must be Jahia 8.2.1.0 or later. The module needs jcontent 3.7.0 or later, and the provisioning installs jcontent 3.8.1 when the image ships an older one, as `jahia/jahia-ee:8.2.3.2` does.
+`JAHIA_IMAGE` must be Jahia 8.2.1.0 or later. The module needs a recent jcontent, as the main README states, and `assets/provisioning.yml` installs one when the image ships an older jcontent.
 
 ### Run all in Docker
 
