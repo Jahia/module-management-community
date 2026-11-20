@@ -20,6 +20,7 @@ import {ExportModulesDialog} from './ExportModulesDialog';
 import {DryRunResultDialog} from './DryRunResultDialog';
 import {GenerateScriptDialog} from './GenerateScriptDialog';
 import {InstallFromStoreDialog} from './InstallFromStoreDialog';
+import {TABLE_HEADING_ID} from './ids';
 
 // ── GraphQL documents ────────────────────────────────────────────────────────
 
@@ -51,7 +52,6 @@ const CLEANUP_JCR_MUTATION = gql`mutation { admin { modulesManagement { cleanupJ
 
 const ITEMS_PER_PAGE_OPTIONS = [20, 50, 100, 200];
 const DEFAULT_ITEMS_PER_PAGE = 100;
-const TABLE_HEADING_ID = 'module-management-community-table-heading';
 // The result count waits for the user to stop typing in the name filter, so it is read once.
 const COUNT_STATUS_DELAY = 750;
 

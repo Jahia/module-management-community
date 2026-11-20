@@ -25,6 +25,8 @@ import BundleDetailsDialog from './BundleDetailsDialog';
 import styles from './ModuleManagementCommunityApp.scss';
 import menuStyles from './menu/menus.scss';
 import {useMenuButton, useReturnFocus} from '../hooks/useMenuButton';
+import {useAnnounce} from './StatusAnnouncer';
+import {TABLE_HEADING_ID} from './ids';
 
 const STOP_MUTATION = gql`mutation ($bundleId: Long!) {
     admin { modulesManagement { bundle(bundleId: $bundleId) { stop } } }
@@ -46,6 +48,7 @@ const UNINSTALL_MUTATION = gql`mutation ($bundleId: Long!) {
 const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onUpdate}) => {
     const {t} = useTranslation('module-management-community');
     const notificationContext = useNotifications();
+    const announce = useAnnounce();
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const menu = useMenuButton();
     // A11y B-003: uninstall confirmation state
@@ -66,14 +69,24 @@ const RowActions = ({bundle, refetch, refreshAllModules, hasUpdateAvailable, onU
         try {
             await mutation();
             notificationContext.notify(t(successKey), ['closeButton', 'closeAfter5s']);
+            announce(t(successKey));
             if (refetchRow) {
                 await refetch();
             }
 
             await refreshAllModules();
+            if (!refetchRow) {
+                // The row of an uninstalled bundle unmounts with its buttons, so focus moves to the table heading.
+                const heading = document.getElementById(TABLE_HEADING_ID);
+                if (heading) {
+                    heading.setAttribute('tabindex', '-1');
+                    heading.focus();
+                }
+            }
         } catch (e) {
             console.error(`Error running ${successKey}:`, e);
             notificationContext.notify(t(errorKey), ['closeButton', 'closeAfter5s']);
+            announce(t(errorKey));
         }
     };
 
