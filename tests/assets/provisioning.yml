@@ -1,5 +1,14 @@
 - karafCommand: "log:log 'START - provisioning'"
 
+# The module needs jcontent 3.7.0 or later, which brings Moonstone 2.20. Jahia skips this install when the image
+# already ships a more recent jcontent.
+- karafCommand: "log:log 'START - Install jcontent'"
+- installBundle:
+      - 'mvn:org.jahia.modules/jcontent/3.8.1'
+  autoStart: true
+  uninstallPreviousVersion: true
+- karafCommand: "log:log 'END - Install jcontent'"
+
 - karafCommand: "log:log 'START - Install Digitall bundles'"
 - installBundle:
       - 'mvn:org.jahia.modules/bookmarks/3.1.0'

@@ -36,6 +36,11 @@ Jahia modules.
 - Yarn v1.22.22
 - Maven 3.6+
 
+### Requirements on the Jahia server
+
+- Jahia 8.2.1.0 or later, which jcontent 3.7.0 needs.
+- jcontent 3.7.0 or later. The UI uses Moonstone 2.20 components, such as `DataTable`, and the administration loads the Moonstone that jcontent ships: jcontent 3.7.0 is the first release with Moonstone 2.20. The module declares `jcontent=3.7.0` in `jahia-depends`, so Jahia does not start it on an older jcontent. Some Jahia 8.2 images ship an older jcontent: install a newer one first.
+
 ## How to deploy
 Build the project using Maven:
 
