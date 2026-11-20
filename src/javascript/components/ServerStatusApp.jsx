@@ -1,4 +1,4 @@
-import React, {useMemo} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -15,6 +15,7 @@ import {
     LayoutContent,
     Paper,
     Reload,
+    Switch,
     Typography,
     Warning
 } from '@jahia/moonstone';
@@ -66,8 +67,24 @@ HealthChip.propTypes = {
     health: PropTypes.string
 };
 
-/** A JSON message is shown pretty-printed, and a text message is cut after 50 words. */
-const ProbeMessage = ({message}) => {
+let idCounter = 0;
+const useStableId = prefix => {
+    const ref = useRef(null);
+    if (ref.current === null) {
+        ref.current = `${prefix}-${++idCounter}`;
+    }
+
+    return ref.current;
+};
+
+/**
+ * A JSON message is shown pretty-printed, and a text message is cut after 50 words.
+ * A11y 2.1.1: when the message box scrolls, it is a named region that takes focus, so the keyboard can scroll it.
+ */
+const ProbeMessage = ({message, probeName}) => {
+    const {t} = useTranslation('module-management-community');
+    const boxRef = useRef(null);
+    const [isScrollable, setScrollable] = useState(false);
     let text;
     try {
         text = JSON.stringify(JSON.parse(message), null, 2);
@@ -76,11 +93,30 @@ const ProbeMessage = ({message}) => {
         text = words.length > 50 ? words.slice(0, 50).join(' ') + '...' : message;
     }
 
-    return <Typography variant="caption" className={styles.probeMessage}>{text}</Typography>;
+    useLayoutEffect(() => {
+        const box = boxRef.current;
+        if (box) {
+            setScrollable(box.scrollHeight > box.clientHeight);
+        }
+    }, [text]);
+
+    return (
+        <div ref={boxRef}
+             className={styles.probeMessage}
+             {...(isScrollable ? {
+                 role: 'region',
+                 tabIndex: 0,
+                 'aria-label': t('label.sam.probes.messageRegion', {name: probeName})
+             } : {})}
+        >
+            <Typography variant="caption" className={styles.probeMessageText}>{text}</Typography>
+        </div>
+    );
 };
 
 ProbeMessage.propTypes = {
-    message: PropTypes.string.isRequired
+    message: PropTypes.string.isRequired,
+    probeName: PropTypes.string.isRequired
 };
 
 const buildProbeColumns = t => [
@@ -97,7 +133,7 @@ const buildProbeColumns = t => [
         render: ({data}) => (
             <div className={styles.probeInfo}>
                 <Typography variant="body">{data.description || t('label.sam.probes.noDescription')}</Typography>
-                {data.message && <ProbeMessage message={data.message}/>}
+                {data.message && <ProbeMessage message={data.message} probeName={data.name}/>}
             </div>
         )
     },
@@ -121,16 +157,66 @@ const buildProbeColumns = t => [
     }
 ];
 
+// A11y 1.3.1: the summary is a description list, so each value is tied to its label.
 const SummaryItem = ({label, children}) => (
     <div className={styles.summaryItem}>
-        <Typography variant="caption" className={styles.summaryLabel}>{label}</Typography>
-        {children}
+        <Typography variant="caption" component="dt" className={styles.summaryLabel}>{label}</Typography>
+        <dd className={styles.summaryValue}>{children}</dd>
     </div>
 );
 
 SummaryItem.propTypes = {
     label: PropTypes.string.isRequired,
     children: PropTypes.node
+};
+
+/**
+ * The Moonstone Dropdown names its listbox with the selected value and forwards no aria prop to it,
+ * so the listbox gets its name here: the visible "Severity" label, then its own value.
+ */
+const SeverityDropdown = ({label, ...props}) => {
+    const wrapperRef = useRef(null);
+    const labelId = useStableId('server-status-severity-label');
+    const listboxId = useStableId('server-status-severity');
+
+    useEffect(() => {
+        const listbox = wrapperRef.current?.querySelector('[role="listbox"]');
+        if (listbox) {
+            listbox.id = listboxId;
+            listbox.setAttribute('aria-labelledby', `${labelId} ${listboxId}`);
+        }
+    });
+
+    return (
+        <div ref={wrapperRef} className={styles.severity}>
+            <Typography variant="body" component="span" id={labelId}>{label}</Typography>
+            <Dropdown {...props}/>
+        </div>
+    );
+};
+
+SeverityDropdown.propTypes = {
+    label: PropTypes.string.isRequired
+};
+
+/** The text of a polite status region that speaks only when the text changes after the first result. */
+const useAnnouncement = text => {
+    const [announcement, setAnnouncement] = useState('');
+    const lastRef = useRef(null);
+
+    useEffect(() => {
+        if (!text) {
+            return;
+        }
+
+        if (lastRef.current !== null && lastRef.current !== text) {
+            setAnnouncement(text);
+        }
+
+        lastRef.current = text;
+    }, [text]);
+
+    return announcement;
 };
 
 export const ServerStatusApp = () => {
@@ -163,6 +249,18 @@ export const ServerStatusApp = () => {
         }))
         .sort(compareProbes), [jahia]);
     const columns = useMemo(() => buildProbeColumns(t), [t]);
+    const health = jahia?.healthCheck?.status?.health;
+    const announcement = useAnnouncement(health ? t('label.sam.announce', {
+        health: t((HEALTH_CHIP[health] || HEALTH_CHIP.RED).labelKey),
+        count: probes.length
+    }) : '');
+
+    // A11y 2.4.3: the button stays enabled while loading, so focus stays on it; a click then does nothing.
+    const handleRefresh = useCallback(() => {
+        if (!loading) {
+            refetch().catch(() => undefined);
+        }
+    }, [loading, refetch]);
 
     let content;
     if (error) {
@@ -174,33 +272,35 @@ export const ServerStatusApp = () => {
     } else if (jahia) {
         content = (
             <>
-                <Paper className={styles.summary} data-testid="server-status-summary">
-                    <SummaryItem label={t('label.sam.status')}>
-                        <HealthChip health={jahia.healthCheck?.status?.health}/>
-                    </SummaryItem>
-                    <SummaryItem label={t('label.sam.versionLabel')}>
-                        <Typography variant="body">{version?.release}</Typography>
-                    </SummaryItem>
-                    {version?.buildDate && (
-                        <SummaryItem label={t('label.sam.buildDateLabel')}>
-                            <Typography variant="body">{dayjs(version.buildDate).format('YYYY-MM-DD')}</Typography>
+                <Paper hasPadding={false} data-testid="server-status-summary">
+                    <dl className={styles.summary}>
+                        <SummaryItem label={t('label.sam.status')}>
+                            <HealthChip health={jahia.healthCheck?.status?.health}/>
                         </SummaryItem>
-                    )}
-                    <SummaryItem label={t('label.sam.buildNumberLabel')}>
-                        <Typography variant="body">{version?.build}</Typography>
-                    </SummaryItem>
+                        <SummaryItem label={t('label.sam.versionLabel')}>
+                            <Typography variant="body">{version?.release}</Typography>
+                        </SummaryItem>
+                        {version?.buildDate && (
+                            <SummaryItem label={t('label.sam.buildDateLabel')}>
+                                <Typography variant="body">{dayjs(version.buildDate).format('YYYY-MM-DD')}</Typography>
+                            </SummaryItem>
+                        )}
+                        <SummaryItem label={t('label.sam.buildNumberLabel')}>
+                            <Typography variant="body">{version?.build}</Typography>
+                        </SummaryItem>
+                    </dl>
                 </Paper>
                 <Typography variant="heading" component="h2" className={styles.sectionTitle}>
                     {t('label.sam.probes.title')}
                 </Typography>
                 <Paper hasPadding={false} className={styles.tableWrapper} data-testid="server-status-probes">
                     <div className={styles.filters}>
-                        <Typography variant="body">{t('label.sam.severityFilter.label')}</Typography>
-                        <Dropdown variant="outlined"
-                                  data={severityOptions}
-                                  value={severity}
-                                  data-testid="server-status-severity"
-                                  onChange={(event, item) => setPreferences({...preferences, probeSeverity: item.value})}/>
+                        <SeverityDropdown label={t('label.sam.severityFilter.label')}
+                                          variant="outlined"
+                                          data={severityOptions}
+                                          value={severity}
+                                          data-testid="server-status-severity"
+                                          onChange={(event, item) => setPreferences({...preferences, probeSeverity: item.value})}/>
                     </div>
                     {probes.length === 0 ? (
                         <EmptyData message={t('label.sam.probes.none')}/>
@@ -227,17 +327,29 @@ export const ServerStatusApp = () => {
                 <Header
                     title={t('label.serverStatus.title')}
                     toolbarLeft={
-                        <Button variant="ghost"
-                                icon={<Reload/>}
-                                label={t('label.refresh')}
-                                isDisabled={loading}
-                                data-testid="server-status-refresh"
-                                onClick={() => refetch().catch(() => undefined)}/>
+                        <div className={styles.toolbar}>
+                            <Button variant="ghost"
+                                    icon={<Reload/>}
+                                    label={t('label.refresh')}
+                                    aria-busy={loading}
+                                    data-testid="server-status-refresh"
+                                    onClick={handleRefresh}/>
+                            {/* A11y 2.2.2: the auto-refresh preference, shared with the Modules screen and the nav icon */}
+                            <label className={styles.autoRefresh}>
+                                <Switch checked={Boolean(preferences.autoRefresh)}
+                                        data-testid="server-status-auto-refresh"
+                                        onChange={(e, value, checked) => setPreferences({...preferences, autoRefresh: checked})}/>
+                                <Typography variant="body" component="span">{t('label.autoRefresh.menu')}</Typography>
+                            </label>
+                        </div>
                     }
                 />
             }
         >
-            <main className={styles.content}>{content}</main>
+            <div className={styles.content}>
+                <div role="status" className={styles.srOnly} data-testid="server-status-announcement">{announcement}</div>
+                {content}
+            </div>
         </LayoutContent>
     );
 };

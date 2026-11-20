@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useRef} from 'react';
 import {useQuery} from '@apollo/client';
 import gql from 'graphql-tag';
 import {useTranslation} from 'react-i18next';
@@ -7,13 +7,15 @@ import * as PropTypes from 'prop-types';
 import {useModulePreferences} from '../hooks/useModulePreferences';
 import styles from './ServerStatusNavIcon.scss';
 
-// The same healthCheck field as the server status screen, so a refresh there updates the icon.
+// The same healthCheck field and severity as the server status screen, so a refresh there updates the icon.
 const SERVER_HEALTH_QUERY = gql`
-    query ServerHealth {
-        admin { jahia { healthCheck(severity: HIGH) { status { health } } } }
+    query ServerHealth($severity: GqlProbeSeverity) {
+        admin { jahia { healthCheck(severity: $severity) { status { health } } } }
     }`;
 
 const HEALTH_ICONS = {GREEN: Check, YELLOW: Warning, RED: Cancel};
+
+let navIconCounter = 0;
 
 /**
  * The icon of the Server Status (Community) entry in the administration tree: the icon of the aggregated
@@ -22,25 +24,57 @@ const HEALTH_ICONS = {GREEN: Check, YELLOW: Warning, RED: Cancel};
  */
 export const ServerStatusNavIcon = ({className, size}) => {
     const {t} = useTranslation('module-management-community');
-    // A11y HIGH-8 (WCAG 2.2.4): only poll when the user has enabled auto-refresh
+    // A11y HIGH-8 (WCAG 2.2.2): only poll when the user has enabled auto-refresh; the preference is shared live
     const [preferences] = useModulePreferences();
     const {data} = useQuery(SERVER_HEALTH_QUERY, {
+        variables: {severity: preferences.probeSeverity},
         fetchPolicy: 'cache-and-network',
         pollInterval: preferences.autoRefresh ? 60000 : 0
     });
     const health = data?.admin?.jahia?.healthCheck?.status?.health;
-    const label = health ? t(`label.sam.navStatus.${health.toLowerCase()}`) : t('label.sam.status');
+    const description = health ? t('label.sam.navHealth', {health: t(`label.sam.health.${health.toLowerCase()}`)}) : '';
     const Icon = HEALTH_ICONS[health] || Server;
 
+    const rootRef = useRef(null);
+    const idRef = useRef(null);
+    if (idRef.current === null) {
+        idRef.current = `server-status-nav-health-${++navIconCounter}`;
+    }
+
+    // The tree item takes its name from its whole content, so the icon is hidden from that name and the
+    // health becomes the description of the tree item, which the tree component does not let us set.
+    useEffect(() => {
+        const item = rootRef.current?.closest('[role="treeitem"]');
+        if (!item) {
+            return undefined;
+        }
+
+        const id = idRef.current;
+        const ids = (item.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+        if (!ids.includes(id)) {
+            item.setAttribute('aria-describedby', [...ids, id].join(' '));
+        }
+
+        return () => {
+            const rest = (item.getAttribute('aria-describedby') || '').split(/\s+/).filter(v => v && v !== id);
+            if (rest.length > 0) {
+                item.setAttribute('aria-describedby', rest.join(' '));
+            } else {
+                item.removeAttribute('aria-describedby');
+            }
+        };
+    });
+
     return (
-        <span className={`${styles.root} ${styles[health] || ''} ${className || ''}`}
-              role="img"
-              aria-label={label}
-              title={label}
+        <span ref={rootRef}
+              className={`${styles.root} ${styles[health] || ''} ${className || ''}`}
+              aria-hidden="true"
+              title={description || undefined}
               data-testid="server-status-nav-icon"
               data-health={health}
         >
             <Icon size={size}/>
+            <span id={idRef.current} className={styles.srOnly}>{description}</span>
         </span>
     );
 };
