@@ -29,11 +29,13 @@ describe('Server status community', () => {
         cy.get('[data-testid="server-status-nav-icon"]')
             .should('have.attr', 'aria-hidden', 'true')
             .closest('[role="treeitem"]')
-            .should('have.attr', 'aria-describedby')
-            .and('match', /server-status-nav-health-\d+/);
-        cy.get('[id^="server-status-nav-health-"]').first()
-            .invoke('text')
-            .should('match', /^Health: (OK|Warning|Error)$/);
+            .should(item => {
+                // The description is the node that the tree item references, whatever form its id takes,
+                // and it fills once the health query answers.
+                const ids = (item.attr('aria-describedby') || '').split(/\s+/).filter(Boolean);
+                const texts = ids.map(id => Cypress.$(item[0].ownerDocument.getElementById(id)).text());
+                expect(texts).to.satisfy(list => list.some(text => /^Health: (OK|Warning|Error)$/.test(text)));
+            });
     });
 
     it('names both entries of the administration tree with Community in parentheses', () => {

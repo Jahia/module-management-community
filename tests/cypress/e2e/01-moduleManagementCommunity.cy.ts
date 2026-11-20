@@ -539,7 +539,8 @@ describe('Module Management Community', () => {
 
         it('popover shows "Settings are saved automatically" notice', () => {
             openUpdateOptions();
-            cy.contains('Settings are saved automatically').should('be.visible');
+            // The preset descriptions are visible text, so the dialog body can scroll on a 768 px high screen.
+            cy.contains('Settings are saved automatically').scrollIntoView().should('be.visible');
         });
 
         it('the Update all item shows "(DRY)" by default', () => {
