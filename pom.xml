@@ -54,7 +54,7 @@
     <groupId>org.jahia.support.modules</groupId>
     <artifactId>module-management-community</artifactId>
     <name>module-management-community</name>
-    <version>1.0.2</version>
+    <version>1.0.3-SNAPSHOT</version>
     <packaging>bundle</packaging>
     <description>This is the custom module (module-management-community) for running on a Jahia server.</description>
 
