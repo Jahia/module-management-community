@@ -37,14 +37,19 @@ describe('Upload / Download module functionality', () => {
         cy.get(root, {timeout: 10000}).should('be.visible');
     };
 
-    /** Open the ⋮ more-actions menu */
+    /** Open the ⋮ more-actions menu of the action bar */
     const openMoreActionsMenu = () => {
         cy.get('[data-testid="more-actions-btn"]').click();
     };
 
+    /** Type a name in the name filter, which is always open in the filter row */
+    const filterByName = (name: string) => {
+        cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).clear();
+        cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).type(name);
+    };
+
     const openUploadDialog = () => {
-        openMoreActionsMenu();
-        cy.contains('Deploy module').click();
+        cy.get('[data-testid="upload-module-btn"]').click();
         cy.get('[data-testid="upload-module-dialog"]').should('be.visible');
     };
 
@@ -82,12 +87,11 @@ describe('Upload / Download module functionality', () => {
     describe('Deploy Module dialog — UI structure', () => {
         beforeEach(visitPage);
 
-        it('renders "Deploy module" option in the more-actions menu', () => {
-            openMoreActionsMenu();
-            cy.contains('Deploy module').should('be.visible');
+        it('renders the "Upload module" button in the action bar', () => {
+            cy.get('[role="toolbar"]').contains('button', 'Upload module').should('be.visible');
         });
 
-        it('opens the "Deploy / Import module" dialog via the more-actions menu', () => {
+        it('opens the "Deploy / Import module" dialog via the action bar', () => {
             openUploadDialog();
             cy.get('[data-testid="upload-module-dialog"]').within(() => {
                 cy.contains('Deploy / Import module').should('be.visible');
@@ -226,7 +230,7 @@ describe('Upload / Download module functionality', () => {
                 }
 
                 visitPage();
-                cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).clear().type(STORE_MODULE);
+                filterByName(STORE_MODULE);
                 cy.contains('tr', STORE_MODULE, {timeout: 15000}).should('be.visible');
                 cy.get('tbody').should('contain.text', STORE_VERSION_1);
             });
@@ -278,7 +282,7 @@ describe('Upload / Download module functionality', () => {
                 }
 
                 visitPage();
-                cy.get(`input[placeholder="${nameFilterPlaceholder}"]`).clear().type(STORE_MODULE);
+                filterByName(STORE_MODULE);
                 cy.get('tbody', {timeout: 15000}).should('contain.text', STORE_VERSION_1);
                 cy.get('tbody').should('contain.text', STORE_VERSION_2);
             });
@@ -355,7 +359,8 @@ describe('Upload / Download module functionality', () => {
             cy.get('[data-testid="export-modules-dialog"]').within(() => {
                 cy.contains('label', 'Modules').click();
                 cy.contains('label', 'System modules').click();
-                cy.contains('label', 'Template sets').click();
+                // The last checked type is disabled, and moonstone sets pointer-events: none on it
+                cy.contains('label', 'Template sets').click({force: true});
                 cy.contains('label', 'Template sets').find('input[type="checkbox"]').should('be.checked');
             });
         });

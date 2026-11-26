@@ -1,9 +1,10 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import * as PropTypes from 'prop-types';
-import {Button, Typography} from '@jahia/moonstone';
-import {Dialog, DialogActions, DialogContent, DialogTitle} from '@material-ui/core';
+import {Button, ButtonToggle, Chip, Modal, ModalBody, ModalFooter, ModalHeader, Typography} from '@jahia/moonstone';
 import {useTranslation} from 'react-i18next';
 import styles from './DryRunResultDialog.scss';
+
+const SUBTITLE_ID = 'dryrun-result-dialog-subtitle';
 
 const buildCurlCommand = yamlScript => {
     const host = window.location.origin;
@@ -14,23 +15,49 @@ const buildCurlCommand = yamlScript => {
   --data-binary @- <<'YAML'\n${yamlScript || ''}YAML`;
 };
 
+const writeToClipboard = text => {
+    if (!navigator.clipboard?.writeText) {
+        return Promise.reject(new Error('Clipboard API unavailable'));
+    }
+
+    return navigator.clipboard.writeText(text);
+};
+
 export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript, title}) => {
     const {t} = useTranslation('module-management-community');
     const [viewMode, setViewMode] = useState('yaml'); // 'yaml' | 'curl'
-    const [copied, setCopied] = useState(false);
+    const [copyMessage, setCopyMessage] = useState('');
+    const copyTimer = useRef(null);
 
     const curlCommand = useMemo(() => buildCurlCommand(yamlScript), [yamlScript]);
-    const activeContent = viewMode === 'yaml' ? yamlScript : curlCommand;
+    const isYaml = viewMode === 'yaml';
+    const activeContent = isYaml ? yamlScript : curlCommand;
+
+    const clearCopyTimer = () => {
+        if (copyTimer.current) {
+            clearTimeout(copyTimer.current);
+            copyTimer.current = null;
+        }
+    };
+
+    useEffect(() => clearCopyTimer, []);
 
     const handleCopy = useCallback(() => {
-        navigator.clipboard.writeText(activeContent).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        });
-    }, [activeContent]);
+        const successMessage = isYaml ? t('label.dryRun.dialog.copiedYaml') : t('label.dryRun.dialog.copiedCurl');
+        const showMessage = message => {
+            // Empty the region first, so a second identical message is announced again
+            clearCopyTimer();
+            setCopyMessage('');
+            copyTimer.current = setTimeout(() => setCopyMessage(message), 100);
+        };
+
+        writeToClipboard(activeContent).then(
+            () => showMessage(successMessage),
+            () => showMessage(t('label.dryRun.dialog.copyFailed'))
+        );
+    }, [activeContent, isYaml, t]);
 
     const handleDownload = useCallback(() => {
-        const isYaml = viewMode === 'yaml';
         const blob = new Blob([activeContent], {type: isYaml ? 'text/yaml' : 'text/x-sh'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -38,108 +65,114 @@ export const DryRunResultDialog = ({isOpen, onClose, modules, yamlScript, title}
         a.download = isYaml ? 'provisioning.yaml' : 'deploy.sh';
         a.click();
         URL.revokeObjectURL(url);
-    }, [activeContent, viewMode]);
+    }, [activeContent, isYaml]);
 
-    // Reset to yaml view each time the dialog opens
-    const handleEnter = useCallback(() => {
-        setViewMode('yaml');
-        setCopied(false);
-    }, []);
+    const handleViewChange = mode => {
+        setViewMode(mode);
+        clearCopyTimer();
+        setCopyMessage('');
+    };
+
+    // Reset to yaml view each time the dialog opens, before it paints
+    useLayoutEffect(() => {
+        if (isOpen) {
+            setViewMode('yaml');
+            clearCopyTimer();
+            setCopyMessage('');
+        }
+    }, [isOpen]);
 
     return (
-        <Dialog fullWidth
-                open={isOpen}
-                maxWidth="md"
-                data-testid="dryrun-result-dialog"
-                PaperProps={{'aria-modal': 'true'}}
-                onClose={onClose}
-                onEnter={handleEnter}
+        <Modal isOpen={isOpen}
+               size="full"
+               className={styles.modal}
+               aria-labelledby={undefined}
+               aria-label={title || t('label.dryRun.dialog.title')}
+               aria-describedby={SUBTITLE_ID}
+               data-testid="dryrun-result-dialog"
+               onOpenChange={open => !open && onClose()}
         >
-            <DialogTitle disableTypography>
-                <Typography variant="title">{title || t('label.dryRun.dialog.title')}</Typography>
-                <Typography variant="body" className={styles.subtitle}>
-                    {t('label.dryRun.dialog.subtitle', {count: modules?.length ?? 0})}
-                </Typography>
-            </DialogTitle>
+            <>
+                {/* The header wraps the title and the subtitle: the dialog takes the title as name, the subtitle as description */}
+                <ModalHeader title={title || t('label.dryRun.dialog.title')}>
+                    <span id={SUBTITLE_ID}>{t('label.dryRun.dialog.subtitle', {count: modules?.length ?? 0})}</span>
+                </ModalHeader>
 
-            <DialogContent className={styles.content}>
-                {(!modules || modules.length === 0) ? (
-                    <Typography variant="body">{t('label.dryRun.dialog.noUpdates')}</Typography>
-                ) : (
-                    <>
-                        {/* Module chips */}
-                        <div className={styles.moduleList}>
-                            {modules.map(m => (
-                                <Typography key={m} variant="caption" className={styles.moduleChip}>{m}</Typography>
-                            ))}
-                        </div>
-
-                        {/* Header: view toggle + actions */}
-                        <div className={styles.yamlHeader}>
-                            {/* A11y A-015: aria-pressed communicates toggle state */}
-                            <div className={styles.viewToggle}>
-                                <button
-                                    type="button"
-                                    aria-pressed={viewMode === 'yaml'}
-                                    className={`${styles.toggleBtn} ${viewMode === 'yaml' ? styles.toggleBtnActive : ''}`}
-                                    onClick={() => setViewMode('yaml')}
-                                >
-                                    YAML
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-pressed={viewMode === 'curl'}
-                                    className={`${styles.toggleBtn} ${viewMode === 'curl' ? styles.toggleBtnActive : ''}`}
-                                    onClick={() => setViewMode('curl')}
-                                >
-                                    cURL
-                                </button>
+                <ModalBody>
+                    {(!modules || modules.length === 0) ? (
+                        <Typography variant="body">{t('label.dryRun.dialog.noUpdates')}</Typography>
+                    ) : (
+                        <>
+                            {/* Module chips */}
+                            <div className={styles.moduleList}>
+                                {modules.map(m => (
+                                    <Chip key={m} label={m} color="default"/>
+                                ))}
                             </div>
 
-                            {/* Action buttons */}
-                            <div className={styles.yamlActions}>
-                                <Button
-                                    variant="ghost"
-                                    size="small"
-                                    label={copied ? t('label.dryRun.dialog.copied') : t('label.dryRun.dialog.copy')}
-                                    onClick={handleCopy}
-                                />
-                                <Button
-                                    variant="ghost"
-                                    size="small"
-                                    label={viewMode === 'yaml' ?
-                                        t('label.dryRun.dialog.download') :
-                                        t('label.dryRun.dialog.downloadSh')}
-                                    onClick={handleDownload}
-                                />
+                            {/* Header: view toggle + actions */}
+                            <div className={styles.yamlHeader}>
+                                {/* A11y A-015: each ButtonToggle communicates its state with aria-pressed */}
+                                <div className={styles.viewToggle}>
+                                    <ButtonToggle label="YAML"
+                                                  isPressed={isYaml}
+                                                  onClick={() => handleViewChange('yaml')}/>
+                                    <ButtonToggle label="cURL"
+                                                  isPressed={!isYaml}
+                                                  onClick={() => handleViewChange('curl')}/>
+                                </div>
+
+                                {/* Action buttons: the copy label names what it copies */}
+                                <div className={styles.yamlActions}>
+                                    <Button
+                                        variant="ghost"
+                                        size="small"
+                                        label={isYaml ? t('label.dryRun.dialog.copy') : t('label.dryRun.dialog.copyCurl')}
+                                        onClick={handleCopy}
+                                    />
+                                    <Button
+                                        variant="ghost"
+                                        size="small"
+                                        label={isYaml ?
+                                            t('label.dryRun.dialog.download') :
+                                            t('label.dryRun.dialog.downloadSh')}
+                                        onClick={handleDownload}
+                                    />
+                                </div>
                             </div>
-                        </div>
 
-                        {/* cURL hint */}
-                        {viewMode === 'curl' && (
-                            <Typography variant="caption" className={styles.curlHint}>
-                                {t('label.dryRun.dialog.curlHint')}
-                            </Typography>
-                        )}
+                            {/* Copy result: visible, and announced politely */}
+                            <div role="status" className={styles.copyStatus}>
+                                {copyMessage}
+                            </div>
 
-                        {/* A11y A-028: labelled, keyboard-scrollable code block */}
-                        <pre className={styles.yaml}
-                             tabIndex={0}
-                             aria-label={viewMode === 'yaml' ? t('label.dryRun.dialog.yamlAriaLabel', 'Provisioning YAML script') : t('label.dryRun.dialog.curlAriaLabel', 'cURL deployment command')}
-                        >{activeContent}
-                        </pre>
-                    </>
-                )}
-            </DialogContent>
+                            {/* cURL hint */}
+                            {!isYaml && (
+                                <Typography isItalic variant="caption" className={styles.curlHint}>
+                                    {t('label.dryRun.dialog.curlHint')}
+                                </Typography>
+                            )}
 
-            <DialogActions className={styles.actions}>
-                <Button variant="outlined"
-                        size="big"
-                        color="accent"
-                        label={t('label.close')}
-                        onClick={onClose}/>
-            </DialogActions>
-        </Dialog>
+                            {/* A11y A-028: labelled, keyboard-scrollable code block */}
+                            <pre className={styles.yaml}
+                                 role="region"
+                                 tabIndex={0}
+                                 aria-label={isYaml ? t('label.dryRun.dialog.yamlAriaLabel') : t('label.dryRun.dialog.curlAriaLabel')}
+                            >{activeContent}
+                            </pre>
+                        </>
+                    )}
+                </ModalBody>
+
+                <ModalFooter>
+                    <Button variant="outlined"
+                            size="big"
+                            color="accent"
+                            label={t('label.close')}
+                            onClick={onClose}/>
+                </ModalFooter>
+            </>
+        </Modal>
     );
 };
 

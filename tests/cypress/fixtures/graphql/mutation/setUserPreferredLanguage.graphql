@@ -1,0 +1,9 @@
+mutation SetUserPreferredLanguage($path: String!, $language: String!) {
+    jcr {
+        mutateNode(pathOrId: $path) {
+            mutateProperty(name: "preferredLanguage") {
+                setValue(value: $language)
+            }
+        }
+    }
+}
